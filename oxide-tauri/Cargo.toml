@@ -1,0 +1,19 @@
+[package]
+name = "oxide-tauri"
+version = "0.1.0"
+edition = "2021"
+description = "Aplicación Tauri - Frontend y orquestador de agentes"
+
+[build-dependencies]
+tauri-build = { workspace = true }
+
+[dependencies]
+oxide-core = { path = "../oxide-core" }
+oxide-guardian = { path = "../oxide-guardian" }
+oxide-copilot = { path = "../oxide-copilot" }
+tauri = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
