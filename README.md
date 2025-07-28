@@ -9,6 +9,15 @@
 
 ---
 
+## 📋 Documentación del Proyecto
+
+Para obtener información detallada sobre el proyecto, consulte los siguientes documentos:
+
+- [TASK.md](TASK.md) - Gestión de tareas y progreso actual
+- [PLANNING.md](PLANNING.md) - Planificación estratégica y técnica
+
+---
+
 ## 🎯 Visión del Proyecto
 
 **Oxide Pilot** representa la evolución de los asistentes de sistema tradicionales hacia una nueva era de **inteligencia agéntica**. Combinamos la potencia y seguridad de Rust con la inteligencia artificial conversacional más avanzada para crear un asistente que no solo monitorea tu sistema, sino que **entiende, aprende y actúa** de forma proactiva.
@@ -136,25 +145,12 @@ Oxide: "Detecté que Visual Studio está esperando una operación de Git
 
 ---
 
-## 🎯 Roadmap de Desarrollo
+## 📊 Estado del Proyecto
 
-### 🏁 Fase 1: MVP Core (En Desarrollo)
-- [ ] Motor de monitoreo base en Rust
-- [ ] Interfaz Tauri básica
-- [ ] Integración con APIs del sistema
-- [ ] Detección básica de amenazas
+**Estado Actual**: 🟢 Casi Completado (95%)
+**Fase**: Finalización y Optimización
 
-### 🚀 Fase 2: Capacidades Agénticas
-- [ ] Integración con Vertex AI
-- [ ] Sistema de memoria con Cognee
-- [ ] Control RPA básico
-- [ ] Interfaz conversacional
-
-### 🌟 Fase 3: Inteligencia Avanzada
-- [ ] Análisis multimodal completo
-- [ ] Automatización compleja
-- [ ] Aprendizaje personalizado
-- [ ] Ecosistema de plugins
+El proyecto está prácticamente completo con todas las funcionalidades principales implementadas. Para obtener información detallada sobre el progreso actual, consulte [TASK.md](TASK.md).
 
 ---
 
