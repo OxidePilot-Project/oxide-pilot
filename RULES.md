@@ -1,3 +1,7 @@
+---
+trigger: always_on
+---
+
 # 📋 Oxide Pilot - Project Rules & Guidelines
 
 ## 🎯 Project Overview
