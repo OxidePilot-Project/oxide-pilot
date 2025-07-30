@@ -1,19 +1,29 @@
+use crate::errors::CopilotError;
+use crate::functions::FunctionRegistry;
+use crate::gemini_api::{
+    Content, FunctionCall, FunctionDeclaration, FunctionResponse, GenerateContentRequest,
+    GenerateContentResponse, InlineData, Part, Tool,
+};
 use async_trait::async_trait;
-use oxide_core::config::{AIProvidersConfig, GoogleConfig, OpenAIConfig, AnthropicConfig, AzureOpenAIConfig, OllamaConfig};
-use oxide_core::types::{Interaction, AgentAction};
-use log::{info, error};
-use std::sync::{Arc, Mutex};
+use log::{error, info};
+use oxide_core::config::{
+    AIProvidersConfig, AnthropicConfig, AzureOpenAIConfig, GoogleConfig, OllamaConfig, OpenAIConfig,
+};
+use oxide_core::google_auth::{authenticate_google, get_access_token};
+use oxide_core::types::{AgentAction, Interaction};
 use reqwest::Client;
 use serde_json::json;
-use oxide_core::google_auth::{get_access_token, authenticate_google};
-use crate::gemini_api::{GenerateContentRequest, Content, Part, Tool, FunctionDeclaration, GenerateContentResponse, FunctionCall, FunctionResponse};
-use crate::functions::FunctionRegistry;
-use crate::errors::CopilotError;
+use std::sync::{Arc, Mutex};
 
 #[async_trait]
 pub trait AIProvider {
     fn name(&self) -> &str;
-    async fn generate_response(&self, prompt: &str, history: &[Interaction], function_registry: Option<&FunctionRegistry>) -> Result<String, CopilotError>;
+    async fn generate_response(
+        &self,
+        prompt: &str,
+        history: &[Interaction],
+        function_registry: Option<&FunctionRegistry>,
+    ) -> Result<String, CopilotError>;
     async fn call_function(&self, action: &AgentAction) -> Result<serde_json::Value, CopilotError>;
 }
 
@@ -24,19 +34,24 @@ pub struct GoogleAIProvider {
 
 impl GoogleAIProvider {
     pub fn new(config: GoogleConfig) -> Self {
-        Self { 
+        Self {
             config,
             http_client: Client::new(),
         }
     }
 
     async fn get_valid_access_token(&self) -> Result<String, CopilotError> {
-        if let Some(token) = get_access_token().await.map_err(|e| CopilotError::Authentication(e.to_string()))? {
+        if let Some(token) = get_access_token()
+            .await
+            .map_err(|e| CopilotError::Authentication(e.to_string()))?
+        {
             info!("Using existing Google access token.");
             Ok(token)
         } else {
             info!("No existing Google access token found. Initiating new authentication flow.");
-            authenticate_google().await.map_err(|e| CopilotError::Authentication(e.to_string()))
+            authenticate_google()
+                .await
+                .map_err(|e| CopilotError::Authentication(e.to_string()))
         }
     }
 }
@@ -47,7 +62,12 @@ impl AIProvider for GoogleAIProvider {
         "Google AI"
     }
 
-    async fn generate_response(&self, prompt: &str, history: &[Interaction], function_registry: Option<&FunctionRegistry>) -> Result<String, CopilotError> {
+    async fn generate_response(
+        &self,
+        prompt: &str,
+        history: &[Interaction],
+        function_registry: Option<&FunctionRegistry>,
+    ) -> Result<String, CopilotError> {
         info!("Google AI: Generating response for prompt: {}", prompt);
         let access_token = self.get_valid_access_token().await?;
 
@@ -57,34 +77,52 @@ impl AIProvider for GoogleAIProvider {
             // User input part
             contents.push(Content {
                 role: "user".to_string(),
-                parts: vec![Part { text: Some(interaction.user_input.clone()), function_call: None, function_response: None }],
+                parts: vec![Part {
+                    text: Some(interaction.user_input.clone()),
+                    function_call: None,
+                    function_response: None,
+                }],
             });
 
             // Agent response part (can be text, function call, or function response)
             if !interaction.agent_response.is_empty() {
                 if interaction.agent_response.starts_with("FUNCTION_CALL:") {
-                    let call_str = interaction.agent_response.trim_start_matches("FUNCTION_CALL:").trim();
+                    let call_str = interaction
+                        .agent_response
+                        .trim_start_matches("FUNCTION_CALL:")
+                        .trim();
                     match serde_json::from_str::<FunctionCall>(call_str) {
                         Ok(function_call) => {
                             contents.push(Content {
                                 role: "model".to_string(),
-                                parts: vec![Part { text: None, function_call: Some(function_call), function_response: None }],
+                                parts: vec![Part {
+                                    text: None,
+                                    function_call: Some(function_call),
+                                    function_response: None,
+                                }],
                             });
-                        },
+                        }
                         Err(e) => {
                             error!("Failed to parse stored function call: {}", e);
                             return Err(CopilotError::Serialization(e));
                         }
                     }
                 } else if interaction.agent_response.starts_with("FUNCTION_RESPONSE:") {
-                    let response_str = interaction.agent_response.trim_start_matches("FUNCTION_RESPONSE:").trim();
+                    let response_str = interaction
+                        .agent_response
+                        .trim_start_matches("FUNCTION_RESPONSE:")
+                        .trim();
                     match serde_json::from_str::<FunctionResponse>(response_str) {
                         Ok(function_response) => {
                             contents.push(Content {
                                 role: "function".to_string(), // Role for function response is 'function'
-                                parts: vec![Part { text: None, function_call: None, function_response: Some(function_response) }],
+                                parts: vec![Part {
+                                    text: None,
+                                    function_call: None,
+                                    function_response: Some(function_response),
+                                }],
                             });
-                        },
+                        }
                         Err(e) => {
                             error!("Failed to parse stored function response: {}", e);
                             return Err(CopilotError::Serialization(e));
@@ -93,7 +131,11 @@ impl AIProvider for GoogleAIProvider {
                 } else {
                     contents.push(Content {
                         role: "model".to_string(),
-                        parts: vec![Part { text: Some(interaction.agent_response.clone()), function_call: None, function_response: None }],
+                        parts: vec![Part {
+                            text: Some(interaction.agent_response.clone()),
+                            function_call: None,
+                            function_response: None,
+                        }],
                     });
                 }
             }
@@ -102,7 +144,11 @@ impl AIProvider for GoogleAIProvider {
         // Add the current prompt
         contents.push(Content {
             role: "user".to_string(),
-            parts: vec![Part { text: Some(prompt.to_string()), function_call: None, function_response: None }],
+            parts: vec![Part {
+                text: Some(prompt.to_string()),
+                function_call: None,
+                function_response: None,
+            }],
         });
 
         let mut request_body = GenerateContentRequest {
@@ -111,20 +157,38 @@ impl AIProvider for GoogleAIProvider {
         };
 
         if let Some(registry) = function_registry {
-            let function_declarations: Vec<FunctionDeclaration> = registry.get_all_function_schemas().into_iter().map(|schema| {
-                FunctionDeclaration {
+            let function_declarations: Vec<FunctionDeclaration> = registry
+                .get_all_function_schemas()
+                .into_iter()
+                .map(|schema| FunctionDeclaration {
                     name: schema["name"].as_str().unwrap_or("").to_string(),
                     description: schema["description"].as_str().map(|s| s.to_string()),
                     parameters: Some(schema["parameters"].clone()),
-                }
-            }).collect();
+                })
+                .collect();
 
             if !function_declarations.is_empty() {
-                request_body.tools = Some(vec![Tool { function_declarations }]);
+                request_body.tools = Some(vec![Tool {
+                    function_declarations,
+                }]);
             }
         }
 
-        let response = self.http_client.post("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent")
+        // Use gemini-pro-vision if there are images in the request
+        let has_images = request_body
+            .contents
+            .iter()
+            .any(|content| content.parts.iter().any(|part| part.inline_data.is_some()));
+
+        let model_endpoint = if has_images {
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent"
+        } else {
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent"
+        };
+
+        let response = self
+            .http_client
+            .post(model_endpoint)
             .bearer_auth(&access_token)
             .json(&request_body)
             .send()
@@ -135,10 +199,14 @@ impl AIProvider for GoogleAIProvider {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
             error!("Gemini API error: Status: {}, Body: {}", status, error_text);
-            return Err(CopilotError::APIRequest(format!("Gemini API returned non-success status: {} - {}", status, error_text)));
+            return Err(CopilotError::APIRequest(format!(
+                "Gemini API returned non-success status: {} - {}",
+                status, error_text
+            )));
         }
 
-        let api_response = response.json::<GenerateContentResponse>()
+        let api_response = response
+            .json::<GenerateContentResponse>()
             .await
             .map_err(|e| CopilotError::APIResponseParse(e.to_string()))?;
 
@@ -147,7 +215,10 @@ impl AIProvider for GoogleAIProvider {
         if let Some(prompt_feedback) = api_response.prompt_feedback {
             if let Some(safety_ratings) = prompt_feedback.safety_ratings {
                 for rating in safety_ratings {
-                    warn!("Gemini API Safety Rating: Category: {}, Probability: {}", rating.category, rating.probability);
+                    warn!(
+                        "Gemini API Safety Rating: Category: {}, Probability: {}",
+                        rating.category, rating.probability
+                    );
                 }
             }
         }
@@ -157,7 +228,10 @@ impl AIProvider for GoogleAIProvider {
                 if let Some(text) = part.text {
                     Ok(text)
                 } else if let Some(function_call) = part.function_call {
-                    Ok(format!("FUNCTION_CALL: {}", serde_json::to_string(&function_call).unwrap_or_default()))
+                    Ok(format!(
+                        "FUNCTION_CALL: {}",
+                        serde_json::to_string(&function_call).unwrap_or_default()
+                    ))
                 } else {
                     Err(CopilotError::NoAIResponseContent)
                 }
@@ -195,7 +269,12 @@ impl AIProvider for OpenAIProvider {
         "OpenAI"
     }
 
-    async fn generate_response(&self, prompt: &str, history: &[Interaction], function_registry: Option<&FunctionRegistry>) -> Result<String, CopilotError> {
+    async fn generate_response(
+        &self,
+        prompt: &str,
+        history: &[Interaction],
+        function_registry: Option<&FunctionRegistry>,
+    ) -> Result<String, CopilotError> {
         info!("OpenAI: Generating response for prompt: {}", prompt);
         // Placeholder for actual OpenAI API call
         Ok(format!("OpenAI response to: {}", prompt))
@@ -224,7 +303,12 @@ impl AIProvider for AnthropicProvider {
         "Anthropic"
     }
 
-    async fn generate_response(&self, prompt: &str, history: &[Interaction], function_registry: Option<&FunctionRegistry>) -> Result<String, CopilotError> {
+    async fn generate_response(
+        &self,
+        prompt: &str,
+        history: &[Interaction],
+        function_registry: Option<&FunctionRegistry>,
+    ) -> Result<String, CopilotError> {
         info!("Anthropic: Generating response for prompt: {}", prompt);
         // Placeholder for actual Anthropic API call
         Ok(format!("Anthropic response to: {}", prompt))
@@ -253,7 +337,12 @@ impl AIProvider for AzureOpenAIProvider {
         "Azure OpenAI"
     }
 
-    async fn generate_response(&self, prompt: &str, history: &[Interaction], function_registry: Option<&FunctionRegistry>) -> Result<String, CopilotError> {
+    async fn generate_response(
+        &self,
+        prompt: &str,
+        history: &[Interaction],
+        function_registry: Option<&FunctionRegistry>,
+    ) -> Result<String, CopilotError> {
         info!("Azure OpenAI: Generating response for prompt: {}", prompt);
         // Placeholder for actual Azure OpenAI API call
         Ok(format!("Azure OpenAI response to: {}", prompt))
@@ -282,7 +371,12 @@ impl AIProvider for OllamaProvider {
         "Ollama"
     }
 
-    async fn generate_response(&self, prompt: &str, history: &[Interaction], function_registry: Option<&FunctionRegistry>) -> Result<String, CopilotError> {
+    async fn generate_response(
+        &self,
+        prompt: &str,
+        history: &[Interaction],
+        function_registry: Option<&FunctionRegistry>,
+    ) -> Result<String, CopilotError> {
         info!("Ollama: Generating response for prompt: {}", prompt);
         // Placeholder for actual Ollama API call
         Ok(format!("Ollama response to: {}", prompt))
@@ -326,40 +420,67 @@ impl AIOrchestrator {
         }
     }
 
-    pub async fn generate_response(&self, prompt: &str, history: &[Interaction], function_registry: Option<&FunctionRegistry>) -> Result<String, CopilotError> {
+    pub async fn generate_response(
+        &self,
+        prompt: &str,
+        history: &[Interaction],
+        function_registry: Option<&FunctionRegistry>,
+    ) -> Result<String, CopilotError> {
         let mut current_index = self.current_provider_index.lock().unwrap();
         let initial_index = *current_index;
 
         loop {
             let provider = &self.providers[*current_index];
-            info!("Attempting to generate response with {} provider.", provider.name());
-            match provider.generate_response(prompt, history, function_registry).await {
+            info!(
+                "Attempting to generate response with {} provider.",
+                provider.name()
+            );
+            match provider
+                .generate_response(prompt, history, function_registry)
+                .await
+            {
                 Ok(response) => return Ok(response),
                 Err(e) => {
                     error!("Provider {} failed: {}", provider.name(), e);
                     *current_index = (*current_index + 1) % self.providers.len();
                     if *current_index == initial_index {
-                        return Err(CopilotError::AIProvider(format!("All AI providers failed to generate a response: {}", e)));
+                        return Err(CopilotError::AIProvider(format!(
+                            "All AI providers failed to generate a response: {}",
+                            e
+                        )));
                     }
                 }
             }
         }
     }
 
-    pub async fn call_function(&self, action: &AgentAction) -> Result<serde_json::Value, CopilotError> {
+    pub async fn call_function(
+        &self,
+        action: &AgentAction,
+    ) -> Result<serde_json::Value, CopilotError> {
         let mut current_index = self.current_provider_index.lock().unwrap();
         let initial_index = *current_index;
 
         loop {
             let provider = &self.providers[*current_index];
-            info!("Attempting to call function with {} provider.", provider.name());
+            info!(
+                "Attempting to call function with {} provider.",
+                provider.name()
+            );
             match provider.call_function(action).await {
                 Ok(response) => return Ok(response),
                 Err(e) => {
-                    error!("Provider {} failed to call function: {}", provider.name(), e);
+                    error!(
+                        "Provider {} failed to call function: {}",
+                        provider.name(),
+                        e
+                    );
                     *current_index = (*current_index + 1) % self.providers.len();
                     if *current_index == initial_index {
-                        return Err(CopilotError::AIProvider(format!("All AI providers failed to call the function: {}", e)));
+                        return Err(CopilotError::AIProvider(format!(
+                            "All AI providers failed to call the function: {}",
+                            e
+                        )));
                     }
                 }
             }

@@ -17,6 +17,11 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.3", features = ["v4", "serde"] }
 sysinfo = "0.29"
 oxide-core = { path = "../oxide-core" }
+oxide-guardian = { path = "../oxide-guardian" }
+oxide-copilot = { path = "../oxide-copilot" }
+oxide-memory = { path = "../oxide-memory" }
+oxide-voice = { path = "../oxide-voice" }
+oxide-rpa = { path = "../oxide-rpa" }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.48", features = ["Win32_System_ProcessStatus"] }

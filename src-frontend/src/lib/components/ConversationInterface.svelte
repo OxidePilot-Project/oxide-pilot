@@ -1,60 +1,83 @@
 <script lang="ts">
-  import { writable } from 'svelte/store';
-  import { invoke } from '@tauri-apps/api/tauri';
+import { invoke } from "@tauri-apps/api/tauri";
+import { writable } from "svelte/store";
 
-  interface Message {
-    id: string;
-    sender: 'user' | 'agent' | 'status';
-    text: string;
-    timestamp: Date;
-  }
+interface Message {
+  id: string;
+  sender: "user" | "agent" | "status";
+  text: string;
+  timestamp: Date;
+}
 
-  const messages = writable<Message[]>([]);
-  let newMessage = '';
-  let isProcessing = false;
+const messages = writable<Message[]>([]);
+let newMessage = "";
+let isProcessing = false;
 
-  async function sendMessage() {
-    if (newMessage.trim() && !isProcessing) {
-      isProcessing = true;
-      const userText = newMessage;
-      newMessage = '';
+async function _sendMessage() {
+  if (newMessage.trim() && !isProcessing) {
+    isProcessing = true;
+    const userText = newMessage;
+    newMessage = "";
 
-      messages.update(msgs => [
-        ...msgs,
-        { id: Date.now().toString(), sender: 'user', text: userText, timestamp: new Date() }
-      ]);
+    messages.update((msgs) => [
+      ...msgs,
+      {
+        id: Date.now().toString(),
+        sender: "user",
+        text: userText,
+        timestamp: new Date(),
+      },
+    ]);
 
-      messages.update(msgs => [
-        ...msgs,
-        { id: 'status-' + Date.now().toString(), sender: 'status', text: 'Agent is thinking...', timestamp: new Date() }
-      ]);
+    messages.update((msgs) => [
+      ...msgs,
+      {
+        id: `status-${Date.now().toString()}`,
+        sender: "status",
+        text: "Agent is thinking...",
+        timestamp: new Date(),
+      },
+    ]);
 
-      try {
-        // Call the Tauri command to handle user input
-        // This command will eventually call CopilotAgent::handle_user_input
-        const agentResponse = await invoke('handle_user_input_command', { userInput: userText, context: {} });
+    try {
+      // Call the Tauri command to handle user input
+      // This command will eventually call CopilotAgent::handle_user_input
+      const agentResponse = await invoke("handle_user_input_command", {
+        userInput: userText,
+        context: {},
+      });
 
-        messages.update(msgs => {
-          const newMsgs = msgs.filter(msg => msg.sender !== 'status'); // Remove thinking status
-          return [
-            ...newMsgs,
-            { id: Date.now().toString(), sender: 'agent', text: agentResponse as string, timestamp: new Date() }
-          ];
-        });
-      } catch (error) {
-        console.error('Error handling user input:', error);
-        messages.update(msgs => {
-          const newMsgs = msgs.filter(msg => msg.sender !== 'status'); // Remove thinking status
-          return [
-            ...newMsgs,
-            { id: Date.now().toString(), sender: 'status', text: `Error: ${error}`, timestamp: new Date() }
-          ];
-        });
-      } finally {
-        isProcessing = false;
-      }
+      messages.update((msgs) => {
+        const newMsgs = msgs.filter((msg) => msg.sender !== "status"); // Remove thinking status
+        return [
+          ...newMsgs,
+          {
+            id: Date.now().toString(),
+            sender: "agent",
+            text: agentResponse as string,
+            timestamp: new Date(),
+          },
+        ];
+      });
+    } catch (error) {
+      console.error("Error handling user input:", error);
+      messages.update((msgs) => {
+        const newMsgs = msgs.filter((msg) => msg.sender !== "status"); // Remove thinking status
+        return [
+          ...newMsgs,
+          {
+            id: Date.now().toString(),
+            sender: "status",
+            text: `Error: ${error}`,
+            timestamp: new Date(),
+          },
+        ];
+      });
+    } finally {
+      isProcessing = false;
     }
   }
+}
 </script>
 
 <div class="conversation-container">

@@ -91,10 +91,10 @@ impl GuardianAgent {
 ```
 
 **Key Features**:
-- Monitoreo de procesos en tiempo real usando `sysinfo` y `windows-rs`
-- Detección de amenazas con `yara-rust` y heurísticas personalizadas
-- Optimización automática de recursos del sistema
-- Registro de eventos en memoria contextual
+- Monitoreo de procesos en tiempo real usando `sysinfo` y `windows-rs` (Básico implementado con `sysinfo`)
+- Detección de amenazas con `yara-rust` y heurísticas personalizadas (Integración básica de YARA)
+- Optimización automática de recursos del sistema (Estructura básica implementada)
+- Registro de eventos en memoria contextual (Placeholder)
 
 ### 2. Copilot Agent (Rust Core)
 
@@ -118,10 +118,10 @@ impl CopilotAgent {
 ```
 
 **Key Features**:
-- Wake word detection con `picovoice`
-- Procesamiento de voz con múltiples proveedores
-- Control RPA usando `rdev` para mouse/keyboard
-- Análisis visual con capturas de pantalla
+- Wake word detection con `picovoice` (Placeholder)
+- Procesamiento de voz con múltiples proveedores (Placeholders)
+- Control RPA usando `rdev` para mouse/keyboard (Básico implementado)
+- Análisis visual con capturas de pantalla (Básico implementado)
 
 ### 3. AI Orchestrator (Multi-Provider Support)
 
@@ -149,11 +149,11 @@ impl AIOrchestrator {
 ```
 
 **Supported Providers**:
-- **Google Vertex AI**: Gemini 1.5 Pro con multimodalidad
-- **OpenAI**: GPT-4 y modelos especializados
-- **Anthropic**: Claude con análisis profundo
-- **Azure OpenAI**: Integración empresarial
-- **Local Models**: Ollama, LM Studio, GGML
+- **Google Vertex AI**: Gemini 1.5 Pro con multimodalidad (Integración avanzada con autenticación OAuth2, refresco de tokens, llamadas a `generateContent` y bucle de llamada a funciones. **Progreso: 80%**)
+- **OpenAI**: GPT-4 y modelos especializados (Placeholder)
+- **Anthropic**: Claude con análisis profundo (Placeholder)
+- **Azure OpenAI**: Integración empresarial (Placeholder)
+- **Local Models**: Ollama, LM Studio, GGML (Placeholder para Ollama)
 
 ### 4. Memory Manager (Cognee Integration)
 
@@ -176,10 +176,10 @@ impl MemoryManager {
 ```
 
 **Key Features**:
-- Integración completa con Cognee para arquitectura cognitiva
-- Almacenamiento de interacciones, eventos del sistema, y patrones de uso
-- RAG (Retrieval-Augmented Generation) para respuestas contextualizadas
-- Grafo de conocimiento para relaciones complejas
+- Integración completa con Cognee para arquitectura cognitiva (Placeholder)
+- Almacenamiento de interacciones, eventos del sistema, y patrones de uso (Estructuras definidas, almacenamiento básico en HashMap)
+- RAG (Retrieval-Augmented Generation) para respuestas contextualizadas (Pendiente)
+- Grafo de conocimiento para relaciones complejas (Pendiente)
 
 ### 5. RPA Controller (System Automation)
 
@@ -204,10 +204,10 @@ impl RPAController {
 ```
 
 **Key Features**:
-- Control preciso de mouse y teclado usando `rdev`
-- Captura de pantalla multiplataforma con `screenshots`
-- Reconocimiento de elementos visuales para automatización inteligente
-- Sistema de permisos granular para acciones críticas
+- Control preciso de mouse y teclado usando `rdev` (Básico implementado)
+- Captura de pantalla multiplataforma con `screenshots` (Básico implementado)
+- Reconocimiento de elementos visuales para automatización inteligente (Pendiente)
+- Sistema de permisos granular para acciones críticas (Placeholder)
 
 ### 6. Voice Processing System
 
@@ -230,9 +230,9 @@ impl VoiceProcessor {
 ```
 
 **Supported Services**:
-- **Cloud**: Google Speech-to-Text/TTS, Azure Cognitive Services, AWS Polly
-- **Local**: Whisper local, Piper TTS, Festival
-- **Wake Word**: Picovoice Porcupine para detección local
+- **Cloud**: Google Speech-to-Text/TTS, Azure Cognitive Services, AWS Polly (Placeholders)
+- **Local**: Whisper local, Piper TTS, Festival (Placeholders)
+- **Wake Word**: Picovoice Porcupine para detección local (Placeholder)
 
 ## Data Models
 
@@ -387,8 +387,8 @@ mod tests {
 
 1. **Permission Validation**: Verificación de permisos antes de acciones críticas
 2. **Data Encryption**: Validación de encriptación end-to-end
-3. **API Key Security**: Protección de credenciales de proveedores
-4. **Input Sanitization**: Prevención de inyección de comandos
+3. **API Key Management**: Almacenamiento seguro usando OS keychain/credential manager
+4. **Memory Protection**: Limpieza segura de datos sensibles en memoria
 
 ## Deployment Architecture
 

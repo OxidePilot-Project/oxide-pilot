@@ -1,8 +1,22 @@
-use rdev::{simulate, EventType, Key, Button, simulate_event};
-use std::time::Duration;
-use log::{info, error};
-use screenshots::Screen;
 use image::{ImageBuffer, Rgba};
+use log::{error, info};
+use rdev::{simulate, Button, EventType, Key};
+use screenshots::Screen;
+use std::time::Duration;
+use thiserror::Error;
+use tokio::time::sleep;
+
+#[derive(Error, Debug)]
+pub enum RPAError {
+    #[error("Mouse operation failed: {0}")]
+    Mouse(String),
+    #[error("Keyboard operation failed: {0}")]
+    Keyboard(String),
+    #[error("Screen capture failed: {0}")]
+    ScreenCapture(String),
+    #[error("Simulation error: {0}")]
+    Simulation(String),
+}
 
 pub struct MouseController;
 
@@ -13,7 +27,11 @@ impl MouseController {
 
     pub fn move_to(&self, x: i32, y: i32) {
         info!("Moving mouse to ({}, {})", x, y);
-        simulate(&EventType::MouseMove { x: x as f64, y: y as f64 }).unwrap();
+        simulate(&EventType::MouseMove {
+            x: x as f64,
+            y: y as f64,
+        })
+        .unwrap();
     }
 
     pub fn click(&self, button: Button) {
@@ -146,11 +164,22 @@ impl ScreenCapture {
         }
     }
 
-    pub async fn capture_area(&self, x: u32, y: u32, width: u32, height: u32) -> Result<ImageBuffer<Rgba<u8>, Vec<u8>>, String> {
-        info!("Capturing screen area: x={}, y={}, width={}, height={}", x, y, width, height);
+    pub async fn capture_area(
+        &self,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+    ) -> Result<ImageBuffer<Rgba<u8>, Vec<u8>>, String> {
+        info!(
+            "Capturing screen area: x={}, y={}, width={}, height={}",
+            x, y, width, height
+        );
         let screens = Screen::all().map_err(|e| e.to_string())?;
         if let Some(screen) = screens.first() {
-            let image = screen.capture_area(x, y, width, height).map_err(|e| e.to_string())?;
+            let image = screen
+                .capture_area(x, y, width, height)
+                .map_err(|e| e.to_string())?;
             Ok(image)
         } else {
             Err("No screens found.".to_string())
@@ -159,7 +188,11 @@ impl ScreenCapture {
 
     // Placeholder for image analysis (e.g., template matching, OCR)
     pub fn analyze_image(&self, image: &ImageBuffer<Rgba<u8>, Vec<u8>>) {
-        info!("Analyzing image of size {}x{}", image.width(), image.height());
+        info!(
+            "Analyzing image of size {}x{}",
+            image.width(),
+            image.height()
+        );
         // This is where image processing and analysis logic would go.
         // For example, using image processing libraries to find UI elements.
     }

@@ -1,26 +1,29 @@
-
 #![cfg_attr(
-  all(not(debug_assertions), target_os = "windows"),
-  windows_subsystem = "windows"
+    all(not(debug_assertions), target_os = "windows"),
+    windows_subsystem = "windows"
 )]
 
-use oxide_core::google_auth;
+mod oxide_system;
+
 use log::{error, info};
-use tauri::State;
+use oxide_core::config::OxidePilotConfig;
+use oxide_core::google_auth;
+use oxide_guardian::guardian::{SystemStatus, ThreatEvent};
+use oxide_memory::memory::MemoryStats;
+use oxide_system::OxideSystem;
 use std::sync::{Arc, Mutex};
-use oxide_copilot::copilot::CopilotAgent;
-use oxide_copilot::ai::AIOrchestrator;
-use oxide_copilot::functions::FunctionRegistry;
-use oxide_core::config::{OxidePilotConfig, CopilotConfig, AIProvidersConfig, GuardianConfig};
-use oxide_core::types::Context;
+use tauri::State;
 
 // Define a struct to hold the application state
 pub struct AppState {
-    copilot_agent: Arc<CopilotAgent>,
+    oxide_system: Arc<Mutex<Option<OxideSystem>>>,
 }
 
 #[tauri::command]
-async fn set_google_client_credentials(client_id: String, client_secret: String) -> Result<(), String> {
+async fn set_google_client_credentials(
+    client_id: String,
+    client_secret: String,
+) -> Result<(), String> {
     google_auth::store_client_credentials(&client_id, &client_secret)
         .await
         .map_err(|e| {
@@ -31,60 +34,227 @@ async fn set_google_client_credentials(client_id: String, client_secret: String)
 
 #[tauri::command]
 async fn authenticate_google_command() -> Result<String, String> {
-    google_auth::authenticate_google()
-        .await
-        .map_err(|e| {
-            error!("Google authentication failed: {}", e);
-            e.to_string()
-        })
+    google_auth::authenticate_google().await.map_err(|e| {
+        error!("Google authentication failed: {}", e);
+        e.to_string()
+    })
 }
 
 #[tauri::command]
-async fn handle_user_input_command(user_input: String, context: Context, state: State<'_, AppState>) -> Result<String, String> {
-    let copilot_agent = &state.copilot_agent;
-    copilot_agent.handle_user_input(user_input, context)
-        .await
-        .map_err(|e| {
-            error!("Error handling user input: {}", e);
-            e.to_string()
-        })
+async fn initialize_system(
+    config: OxidePilotConfig,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    info!("Initializing Oxide System...");
+
+    let system = OxideSystem::new(config).await?;
+    system.start().await?;
+
+    let mut system_lock = state.oxide_system.lock().unwrap();
+    *system_lock = Some(system);
+
+    info!("Oxide System initialized and started");
+    Ok(())
+}
+
+#[tauri::command]
+async fn handle_user_input_command(
+    user_input: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let system_lock = state.oxide_system.lock().unwrap();
+    if let Some(system) = system_lock.as_ref() {
+        system.handle_text_input(user_input).await
+    } else {
+        Err("System not initialized".to_string())
+    }
+}
+
+#[tauri::command]
+async fn get_system_status(state: State<'_, AppState>) -> Result<SystemStatus, String> {
+    let system_lock = state.oxide_system.lock().unwrap();
+    if let Some(system) = system_lock.as_ref() {
+        Ok(system.get_system_status())
+    } else {
+        Err("System not initialized".to_string())
+    }
+}
+
+#[tauri::command]
+async fn get_threat_history(state: State<'_, AppState>) -> Result<Vec<ThreatEvent>, String> {
+    let system_lock = state.oxide_system.lock().unwrap();
+    if let Some(system) = system_lock.as_ref() {
+        Ok(system.get_threat_history())
+    } else {
+        Err("System not initialized".to_string())
+    }
+}
+
+#[tauri::command]
+async fn get_memory_stats(state: State<'_, AppState>) -> Result<MemoryStats, String> {
+    let system_lock = state.oxide_system.lock().unwrap();
+    if let Some(system) = system_lock.as_ref() {
+        Ok(system.get_memory_stats())
+    } else {
+        Err("System not initialized".to_string())
+    }
+}
+
+#[tauri::command]
+async fn update_system_config(
+    config: OxidePilotConfig,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let system_lock = state.oxide_system.lock().unwrap();
+    if let Some(system) = system_lock.as_ref() {
+        system.update_config(config).await
+    } else {
+        Err("System not initialized".to_string())
+    }
+}
+
+#[tauri::command]
+async fn get_system_config(state: State<'_, AppState>) -> Result<OxidePilotConfig, String> {
+    let system_lock = state.oxide_system.lock().unwrap();
+    if let Some(system) = system_lock.as_ref() {
+        Ok(system.get_config())
+    } else {
+        Err("System not initialized".to_string())
+    }
+}
+
+#[tauri::command]
+async fn record_audio(duration_secs: f32, state: State<'_, AppState>) -> Result<Vec<u8>, String> {
+    let system_lock = state.oxide_system.lock().unwrap();
+    if let Some(system) = system_lock.as_ref() {
+        system.record_audio(duration_secs).await
+    } else {
+        Err("System not initialized".to_string())
+    }
+}
+
+#[tauri::command]
+async fn play_audio(audio_data: Vec<u8>, state: State<'_, AppState>) -> Result<(), String> {
+    let system_lock = state.oxide_system.lock().unwrap();
+    if let Some(system) = system_lock.as_ref() {
+        system.play_audio(&audio_data).await
+    } else {
+        Err("System not initialized".to_string())
+    }
+}
+
+#[tauri::command]
+async fn get_audio_devices(
+    state: State<'_, AppState>,
+) -> Result<(Vec<String>, Vec<String>), String> {
+    let system_lock = state.oxide_system.lock().unwrap();
+    if let Some(system) = system_lock.as_ref() {
+        Ok(system.get_audio_devices())
+    } else {
+        Err("System not initialized".to_string())
+    }
+}
+
+#[tauri::command]
+async fn get_input_volume(state: State<'_, AppState>) -> Result<f32, String> {
+    let system_lock = state.oxide_system.lock().unwrap();
+    if let Some(system) = system_lock.as_ref() {
+        system.get_input_volume()
+    } else {
+        Err("System not initialized".to_string())
+    }
+}
+
+#[tauri::command]
+async fn get_performance_metrics(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let system_lock = state.oxide_system.lock().unwrap();
+    if let Some(system) = system_lock.as_ref() {
+        let metrics = system.get_performance_metrics();
+        serde_json::to_value(metrics).map_err(|e| e.to_string())
+    } else {
+        Err("System not initialized".to_string())
+    }
+}
+
+#[tauri::command]
+async fn get_performance_score(state: State<'_, AppState>) -> Result<f32, String> {
+    let system_lock = state.oxide_system.lock().unwrap();
+    if let Some(system) = system_lock.as_ref() {
+        Ok(system.get_performance_score())
+    } else {
+        Err("System not initialized".to_string())
+    }
+}
+
+#[tauri::command]
+async fn optimize_performance(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    let system_lock = state.oxide_system.lock().unwrap();
+    if let Some(system) = system_lock.as_ref() {
+        Ok(system.optimize_performance().await)
+    } else {
+        Err("System not initialized".to_string())
+    }
+}
+
+#[tauri::command]
+async fn get_performance_metrics(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let system_lock = state.oxide_system.lock().unwrap();
+    if let Some(system) = system_lock.as_ref() {
+        let metrics = system.get_performance_metrics();
+        serde_json::to_value(metrics).map_err(|e| e.to_string())
+    } else {
+        Err("System not initialized".to_string())
+    }
+}
+
+#[tauri::command]
+async fn get_performance_score(state: State<'_, AppState>) -> Result<f32, String> {
+    let system_lock = state.oxide_system.lock().unwrap();
+    if let Some(system) = system_lock.as_ref() {
+        Ok(system.get_performance_score())
+    } else {
+        Err("System not initialized".to_string())
+    }
+}
+
+#[tauri::command]
+async fn optimize_performance(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    let system_lock = state.oxide_system.lock().unwrap();
+    if let Some(system) = system_lock.as_ref() {
+        Ok(system.optimize_performance())
+    } else {
+        Err("System not initialized".to_string())
+    }
 }
 
 fn main() {
     // Initialize logging
     env_logger::init();
 
-    // Load configuration (placeholder for now, will be from file later)
-    let config = OxidePilotConfig {
-        guardian: GuardianConfig { enabled: false, monitor_interval_secs: 0 },
-        copilot: CopilotConfig { enabled: true, wake_word: "Hey Oxide".to_string() },
-        ai_providers: AIProvidersConfig {
-            google: Some(oxide_core::config::GoogleConfig { api_key: "dummy_key".to_string() }),
-            openai: None,
-            anthropic: None,
-            azure_openai: None,
-            ollama: None,
-        },
-    };
-
-    // Initialize AI Orchestrator and Function Registry
-    let ai_orchestrator = Arc::new(AIOrchestrator::new(config.ai_providers));
-    let function_registry = Arc::new(FunctionRegistry::new());
-
-    // Initialize Copilot Agent
-    let copilot_agent = Arc::new(CopilotAgent::new(
-        config.copilot,
-        ai_orchestrator,
-        function_registry,
-    ));
+    info!("Starting Oxide Pilot Application");
 
     tauri::Builder::default()
-        .manage(AppState { copilot_agent })
+        .manage(AppState {
+            oxide_system: Arc::new(Mutex::new(None)),
+        })
         .invoke_handler(tauri::generate_handler![
             send_notification,
             set_google_client_credentials,
             authenticate_google_command,
-            handle_user_input_command
+            initialize_system,
+            handle_user_input_command,
+            get_system_status,
+            get_threat_history,
+            get_memory_stats,
+            update_system_config,
+            get_system_config,
+            record_audio,
+            play_audio,
+            get_audio_devices,
+            get_input_volume,
+            get_performance_metrics,
+            get_performance_score,
+            optimize_performance
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -95,5 +265,6 @@ fn send_notification(title: String, body: String) {
     tauri::api::notification::Notification::new("com.tauri.dev")
         .title(title)
         .body(body)
-        .show().unwrap();
+        .show()
+        .unwrap();
 }

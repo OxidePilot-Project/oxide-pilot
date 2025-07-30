@@ -1,48 +1,110 @@
-
 {
   "build": {
-    "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": "cd src-frontend && npm run dev",
+    "beforeBuildCommand": "cd src-frontend && npm run build",
     "devPath": "http://localhost:5173",
-    "distDir": "../src-frontend/dist"
+    "distDir": "../src-frontend/dist",
+    "withGlobalTauri": false
   },
   "package": {
-    "productName": "oxide-pilot",
-    "version": "0.1.0"
+    "productName": "Oxide Pilot",
+    "version": "1.0.0"
   },
   "tauri": {
     "allowlist": {
       "all": false,
+      "shell": {
+        "all": false,
+        "open": true
+      },
+      "dialog": {
+        "all": false,
+        "open": true,
+        "save": true
+      },
+      "fs": {
+        "all": true,
+        "scope": ["$APPDATA", "$APPDATA/**", "$LOCALDATA", "$LOCALDATA/**"]
+      },
       "notification": {
         "all": true
       },
-      "systemTray": {
+      "path": {
         "all": true
+      },
+      "process": {
+        "all": false,
+        "relaunch": true,
+        "exit": true
+      },
+      "window": {
+        "all": false,
+        "close": true,
+        "hide": true,
+        "show": true,
+        "maximize": true,
+        "minimize": true,
+        "unmaximize": true,
+        "unminimize": true,
+        "startDragging": true
       }
     },
     "bundle": {
       "active": true,
       "targets": "all",
-      "identifier": "com.tauri.dev",
+      "identifier": "com.oxidepilot.app",
       "icon": [
         "icons/32x32.png",
         "icons/128x128.png",
         "icons/128x128@2x.png",
         "icons/icon.icns",
         "icons/icon.ico"
-      ]
+      ],
+      "resources": [],
+      "externalBin": [],
+      "copyright": "Copyright © 2024 Oxide Pilot Team",
+      "category": "Utility",
+      "shortDescription": "AI-Powered System Guardian & Assistant",
+      "longDescription": "Oxide Pilot is a revolutionary agentic system that combines advanced system monitoring, EDR security capabilities, and conversational AI assistance. Built with Rust for maximum performance and security, it features a dual-agent architecture that provides both continuous protection and on-demand assistance.",
+      "deb": {
+        "depends": ["libasound2-dev", "libssl-dev"]
+      },
+      "macOS": {
+        "frameworks": [],
+        "minimumSystemVersion": "10.15",
+        "exceptionDomain": ""
+      },
+      "windows": {
+        "certificateThumbprint": null,
+        "digestAlgorithm": "sha256",
+        "timestampUrl": ""
+      }
     },
     "security": {
       "csp": null
     },
+    "updater": {
+      "active": false
+    },
     "windows": [
       {
         "fullscreen": false,
-        "height": 600,
         "resizable": true,
         "title": "Oxide Pilot",
-        "width": 800
+        "width": 1200,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 600,
+        "center": true,
+        "decorations": true,
+        "alwaysOnTop": false,
+        "skipTaskbar": false
       }
-    ]
+    ],
+    "systemTray": {
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": true,
+      "menuOnLeftClick": false
+    }
   }
 }

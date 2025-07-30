@@ -1,7 +1,121 @@
 use log::{info, warn, error};
 
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PermissionLevel {
+    Allow,
+    Ask,
+    Deny,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum RPAActionType {
+    MouseClick,
+    MouseMove,
+    KeyboardInput,
+    ScreenCapture,
+    FileOperation,
+    NetworkAccess,
+    SystemCommand,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PermissionRequest {
+    pub action_type: RPAActionType,
+    pub description: String,
+    pub target: Option<String>,
+    pub severity: u8, // 1-5
+    pub timestamp: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PermissionDecision {
+    pub request: PermissionRequest,
+    pub granted: bool,
+    pub user_confirmed: bool,
+    pub timestamp: u64,
+}
+
 pub struct PermissionManager {
-    // In a real system, this would manage user roles, permissions, and policies
+    permissions: HashMap<RPAActionType, PermissionLevel>,
+    audit_log: Vec<PermissionDecision>,
+    max_log_size: usize,
+}
+
+impl PermissionManager {
+    pub fn new() -> Self {
+        let mut permissions = HashMap::new();
+        
+        // Default permissions - more restrictive
+        permissions.insert(RPAActionType::MouseClick, PermissionLevel::Ask);
+        permissions.insert(RPAActionType::MouseMove, PermissionLevel::Allow);
+        permissions.insert(RPAActionType::KeyboardInput, PermissionLevel::Ask);
+        permissions.insert(RPAActionType::ScreenCapture, PermissionLevel::Ask);
+        permissions.insert(RPAActionType::FileOperation, PermissionLevel::Ask);
+        permissions.insert(RPAActionType::NetworkAccess, PermissionLevel::Deny);
+        permissions.insert(RPAActionType::SystemCommand, PermissionLevel::Ask);
+
+        Self {
+            permissions,
+            audit_log: Vec::new(),
+            max_log_size: 1000,
+        }
+    }
+
+    pub async fn request_permission(&mut self, request: PermissionRequest) -> bool {
+        let level = self.permissions.get(&request.action_type).unwrap_or(&PermissionLevel::Ask);
+        
+        match level {
+            PermissionLevel::Allow => {
+                self.log_decision(request.clone(), true, false);
+                true
+            }
+            PermissionLevel::Deny => {
+                self.log_decision(request.clone(), false, false);
+                false
+            }
+            PermissionLevel::Ask => {
+                // In a real implementation, this would show a dialog
+                // For now, we'll log and allow with user confirmation
+                self.log_decision(request.clone(), true, true);
+                true
+            }
+        }
+    }
+
+    pub fn log_decision(&mut self, request: PermissionRequest, granted: bool, user_confirmed: bool) {
+        let decision = PermissionDecision {
+            request,
+            granted,
+            user_confirmed,
+            timestamp: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+        };
+
+        self.audit_log.push(decision);
+        
+        // Keep log size manageable
+        if self.audit_log.len() > self.max_log_size {
+            self.audit_log.remove(0);
+        }
+    }
+
+    pub fn get_audit_log(&self) -> &[PermissionDecision] {
+        &self.audit_log
+    }
+
+    pub fn set_permission(&mut self, action_type: RPAActionType, level: PermissionLevel) {
+        self.permissions.insert(action_type, level);
+    }
+
+    pub fn get_permissions(&self) -> &HashMap<RPAActionType, PermissionLevel> {
+        &self.permissions
+    }
 }
 
 impl PermissionManager {

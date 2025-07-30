@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<policyDefinitions xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" revision="1.0" schemaVersion="1.0" xmlns="http://schemas.microsoft.com/GroupPolicy/2006/07/PolicyDefinitions">
+  <policyNamespaces>
+    <target prefix="oxidepilot" namespace="Microsoft.Policies.OxidePilot" />
+    <using prefix="windows" namespace="Microsoft.Policies.Windows" />
+  </policyNamespaces>
+  <resources minRequiredRevision="1.0" />
+  <categories>
+    <category name="OxidePilot" displayName="$(string.OxidePilot)" explainText="$(string.OxidePilot_Help)" />
+    <category name="OxidePilotSecurity" displayName="$(string.OxidePilotSecurity)" parentCategoryRef="OxidePilot" />
+    <category name="OxidePilotAI" displayName="$(string.OxidePilotAI)" parentCategoryRef="OxidePilot" />
+    <category name="OxidePilotMonitoring" displayName="$(string.OxidePilotMonitoring)" parentCategoryRef="OxidePilot" />
+  </categories>
+  
+  <policies>
+    <!-- Security Policies -->
+    <policy name="EnableRPA" class="Machine" displayName="$(string.EnableRPA)" explainText="$(string.EnableRPA_Help)" key="Software\Policies\OxidePilot\Security" valueName="EnableRPA">
+      <parentCategory ref="OxidePilotSecurity" />
+      <supportedOn ref="windows:SUPPORTED_Windows7" />
+      <enabledValue>
+        <decimal value="1" />
+      </enabledValue>
+      <disabledValue>
+        <decimal value="0" />
+      </disabledValue>
+    </policy>
+    
+    <policy name="RequireAdminApproval" class="Machine" displayName="$(string.RequireAdminApproval)" explainText="$(string.RequireAdminApproval_Help)" key="Software\Policies\OxidePilot\Security" valueName="RequireAdminApproval">
+      <parentCategory ref="OxidePilotSecurity" />
+      <supportedOn ref="windows:SUPPORTED_Windows7" />
+      <enabledValue>
+        <decimal value="1" />
+      </enabledValue>
+      <disabledValue>
+        <decimal value="0" />
+      </disabledValue>
+    </policy>
+    
+    <!-- AI Configuration -->
+    <policy name="GoogleAPIKey" class="Machine" displayName="$(string.GoogleAPIKey)" explainText="$(string.GoogleAPIKey_Help)" key="Software\Policies\OxidePilot\AI" valueName="GoogleAPIKey">
+      <parentCategory ref="OxidePilotAI" />
+      <supportedOn ref="windows:SUPPORTED_Windows7" />
+      <elements>
+        <text id="GoogleAPIKeyValue" valueName="GoogleAPIKey" required="true" />
+      </elements>
+    </policy>
+    
+    <policy name="MaxTokens" class="Machine" displayName="$(string.MaxTokens)" explainText="$(string.MaxTokens_Help)" key="Software\Policies\OxidePilot\AI" valueName="MaxTokens">
+      <parentCategory ref="OxidePilotAI" />
+      <supportedOn ref="windows:SUPPORTED_Windows7" />
+      <elements>
+        <decimal id="MaxTokensValue" valueName="MaxTokens" minValue="512" maxValue="8192" />
+      </elements>
+    </policy>
+    
+    <!-- Monitoring Configuration -->
+    <policy name="EnableSystemMonitoring" class="Machine" displayName="$(string.EnableSystemMonitoring)" explainText="$(string.EnableSystemMonitoring_Help)" key="Software\Policies\OxidePilot\Monitoring" valueName="EnableSystemMonitoring">
+      <parentCategory ref="OxidePilotMonitoring" />
+      <supportedOn ref="windows:SUPPORTED_Windows7" />
+      <enabledValue>
+        <decimal value="1" />
+      </enabledValue>
+      <disabledValue>
+        <decimal value="0" />
+      </disabledValue>
+    </policy>
+    
+    <policy name="MonitoringInterval" class="Machine" displayName="$(string.MonitoringInterval)" explainText="$(string.MonitoringInterval_Help)" key="Software\Policies\OxidePilot\Monitoring" valueName="MonitoringInterval">
+      <parentCategory ref="OxidePilotMonitoring" />
+      <supportedOn ref="windows:SUPPORTED_Windows7" />
+      <elements>
+        <decimal id="MonitoringIntervalValue" valueName="MonitoringInterval" minValue="1000" maxValue="60000" />
+      </elements>
+    </policy>
+  </policies>
+</policyDefinitions>

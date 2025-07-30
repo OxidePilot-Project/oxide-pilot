@@ -128,6 +128,15 @@ pub async fn get_access_token() -> Result<Option<String>, AuthError> {
     }
 }
 
+pub async fn get_refresh_token() -> Result<Option<String>, AuthError> {
+    let refresh_token_entry = Entry::new(GOOGLE_AUTH_SERVICE_ID, GOOGLE_REFRESH_TOKEN_KEY)?;
+    match refresh_token_entry.get_password() {
+        Ok(token) => Ok(Some(token)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(e) => Err(e.into()),
+    }
+}
+
 pub async fn refresh_access_token() -> Result<String, AuthError> {
     let (client_id_str, client_secret_str) = get_client_credentials().await?;
     let refresh_token_str = get_refresh_token().await?.ok_or(AuthError::RefreshTokenNotFound)?;
@@ -226,7 +235,7 @@ async fn handle_redirect(
         .ok_or(AuthError::MissingAuthCode)?;
     let state = url
         .query_pairs()
-        .find_map(|(key, value)| if key == "state" { Some(value) } else { None } })
+        .find_map(|(key, value)| if key == "state" { Some(value) } else { None })
         .ok_or(AuthError::MissingState)?;
 
     if state.secret() != csrf_state.secret() {
@@ -243,7 +252,7 @@ async fn handle_redirect(
     let refresh_token = token_response.refresh_token().map(|t| t.secret().to_string());
     let expires_in_secs = token_response.expires_in().map(|d| d.as_secs());
 
-    store_tokens(&access_token, new_refresh_token.as_deref(), expires_in_secs).await?;
+    store_tokens(&access_token, refresh_token.as_deref(), expires_in_secs).await?;
 
     let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<html><body><h1>Authentication successful! You can close this tab.</h1></body></html>";
     stream.write_all(response.as_bytes()).await?;

@@ -1,0 +1,9 @@
+.kiro
+target
+src-frontend/node_modules
+src-tauri/target
+src-tauri/tauri.conf.json
+src-tauri/tauri-bundler
+src-tauri/tauri-bundler/dist
+src-tauri/tauri-bundler/src
+

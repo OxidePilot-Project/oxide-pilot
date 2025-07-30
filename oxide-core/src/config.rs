@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-'''pub struct OxidePilotConfig {
+pub struct OxidePilotConfig {
     pub guardian: GuardianConfig,
     pub copilot: CopilotConfig,
     pub ai_providers: AIProvidersConfig,
@@ -14,10 +14,10 @@ impl OxidePilotConfig {
         self.ai_providers.validate(self.copilot.enabled)?;
         Ok(())
     }
-}''
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-'''pub struct GuardianConfig {
+pub struct GuardianConfig {
     pub enabled: bool,
     pub monitor_interval_secs: u64,
 }
@@ -29,10 +29,10 @@ impl GuardianConfig {
         }
         Ok(())
     }
-}''
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-'''pub struct CopilotConfig {
+pub struct CopilotConfig {
     pub enabled: bool,
     pub wake_word: String,
 }
@@ -44,10 +44,10 @@ impl CopilotConfig {
         }
         Ok(())
     }
-}''
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-'''pub struct AIProvidersConfig {
+pub struct AIProvidersConfig {
     pub google: Option<GoogleConfig>,
     pub openai: Option<OpenAIConfig>,
     pub anthropic: Option<AnthropicConfig>,
@@ -85,7 +85,7 @@ impl AIProvidersConfig {
         }
         Ok(())
     }
-}''
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct GoogleConfig {

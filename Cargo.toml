@@ -1,9 +1,10 @@
 [workspace]
+resolver = "2"
 members = [
     "oxide-core",
     "oxide-guardian", 
     "oxide-copilot",
-    "oxide-tauri"
+    "src-tauri"
 ]
 
 [workspace.dependencies]
