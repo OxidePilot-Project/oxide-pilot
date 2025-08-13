@@ -1,58 +1,75 @@
 <script lang="ts">
-import { invoke } from "@tauri-apps/api/tauri";
-import { onMount } from "svelte";
-import { systemConfig } from "$lib/stores/systemConfig";
+ import { onMount } from "svelte";
+ import { systemConfig } from "$lib/stores/systemConfig";
+ import { isTauri } from "$lib/utils/env";
 
-const googleApiKey = "";
-let _isLoading = false;
-let _error = "";
-let _showSetup = false;
+ // Lazy-load Tauri invoke to avoid SSR importing '@tauri-apps/api/tauri'
+ type InvokeFn = <T = any>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
+ let invokeFn: InvokeFn | null = null;
+ async function tauriInvoke<T = any>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+   if (!isTauri) throw new Error("Not running in Tauri context");
+   if (!invokeFn) {
+     const mod = await import("@tauri-apps/api/tauri");
+     invokeFn = mod.invoke as InvokeFn;
+   }
+   return invokeFn<T>(cmd, args);
+ }
 
-onMount(async () => {
-  try {
-    const config = await invoke("get_system_config");
-    if (!config.ai_providers?.google?.api_key) {
-      _showSetup = true;
-    }
-  } catch (err) {
-    console.error("Error checking config:", err);
-    _showSetup = true;
-  }
-});
+ let googleApiKey = "";
+ let isLoading = false;
+ let error = "";
+ let showSetup = false;
 
-async function _saveGoogleApiKey() {
-  if (!googleApiKey.trim()) {
-    _error = "Por favor ingresa tu clave API de Google Gemini";
-    return;
-  }
+ onMount(async () => {
+   if (!isTauri) {
+     // In browser/SSR, show setup UI but skip invoking backend
+     showSetup = true;
+     return;
+   }
+   try {
+     const config = await tauriInvoke<any>("get_system_config");
+     if (!config.ai_providers?.google?.api_key) {
+       showSetup = true;
+     }
+   } catch (err) {
+     console.error("Error checking config:", err);
+     showSetup = true;
+   }
+ });
 
-  _isLoading = true;
-  _error = "";
+ async function saveGoogleApiKey() {
+   if (!googleApiKey.trim()) {
+     error = "Por favor ingresa tu clave API de Google Gemini";
+     return;
+   }
 
-  try {
-    const currentConfig = await invoke("get_system_config");
-    const updatedConfig = {
-      ...currentConfig,
-      ai_providers: {
-        ...currentConfig.ai_providers,
-        google: {
-          api_key: googleApiKey.trim(),
-          model: "gemini-1.5-pro",
-          max_tokens: 8192,
-          temperature: 0.7,
-        },
-      },
-    };
+   isLoading = true;
+   error = "";
 
-    await invoke("update_system_config", { config: updatedConfig });
-    systemConfig.set(updatedConfig);
-    _showSetup = false;
-  } catch (err) {
-    _error = `Error al guardar la configuración: ${err}`;
-  } finally {
-    _isLoading = false;
-  }
-}
+   try {
+     const currentConfig = await tauriInvoke<any>("get_system_config");
+     const updatedConfig = {
+       ...currentConfig,
+       ai_providers: {
+         ...currentConfig.ai_providers,
+         google: {
+           api_key: googleApiKey.trim(),
+           model: "gemini-1.5-pro",
+           max_tokens: 8192,
+           temperature: 0.7,
+         },
+       },
+     };
+
+     await tauriInvoke("update_system_config", { config: updatedConfig });
+     systemConfig.set(updatedConfig);
+     showSetup = false;
+   } catch (err) {
+     error = `Error al guardar la configuración: ${err}`;
+   } finally {
+     isLoading = false;
+   }
+ }
 </script>
 
 {#if showSetup}

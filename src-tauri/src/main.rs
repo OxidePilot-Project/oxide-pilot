@@ -12,6 +12,7 @@ use log::{error, info};
 use serde_json::json;
 use oxide_core::config::OxidePilotConfig;
 use oxide_core::google_auth;
+use oxide_core::qwen_auth::{QwenAuth, DeviceAuthStart, PollResult};
 use oxide_guardian::guardian::{SystemStatus, ThreatEvent};
 use oxide_memory::memory::MemoryStats;
 use oxide_system::OxideSystem;
@@ -482,6 +483,13 @@ async fn get_available_models() -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
+async fn clear_google_auth() -> Result<(), String> {
+    use oxide_core::gemini_auth::GeminiAuth;
+    let auth = GeminiAuth::new();
+    auth.clear_auth().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn send_message_to_gemini(message: String, model: Option<String>) -> Result<String, String> {
     use oxide_core::gemini_auth::GeminiAuth;
     let auth = GeminiAuth::new();
@@ -528,7 +536,29 @@ async fn startup_check(state: State<'_, AppState>) -> Result<String, String> {
     auth.get_auth_status().await.map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn qwen_start_device_auth() -> Result<DeviceAuthStart, String> {
+    let auth = QwenAuth::new();
+    auth.start_device_auth().await.map_err(|e| e.to_string())
+}
 
+#[tauri::command]
+async fn qwen_poll_device_auth(device_code: String) -> Result<PollResult, String> {
+    let auth = QwenAuth::new();
+    auth.poll_device_once(&device_code).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn qwen_get_auth_status() -> Result<String, String> {
+    let auth = QwenAuth::new();
+    auth.get_auth_status().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn qwen_clear_auth() -> Result<(), String> {
+    let auth = QwenAuth::new();
+    auth.clear_auth().await.map_err(|e| e.to_string())
+}
 
 fn main() {
     // Load environment variables from .env file
@@ -583,7 +613,12 @@ fn main() {
             get_auth_token,
             get_auth_status,
             clear_auth,
-            startup_check
+            clear_google_auth,
+            startup_check,
+            qwen_start_device_auth,
+            qwen_poll_device_auth,
+            qwen_get_auth_status,
+            qwen_clear_auth
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -31,12 +31,26 @@
       <p style="opacity:0.8;">Puedes configurar <code>src-tauri/.env</code> y relanzar.</p>
     </div>
     <script type="module">
-      import { invoke } from "@tauri-apps/api/tauri";
+      const isTauri = Boolean(window.__TAURI__ || window.__TAURI_INTERNALS__ || (navigator.userAgent || '').toLowerCase().includes('tauri'));
+      let invokeFn = null;
+      async function tauriInvoke(cmd, args) {
+        if (!isTauri) throw new Error('Not running in Tauri context');
+        if (!invokeFn) {
+          const mod = await import('@tauri-apps/api/tauri');
+          invokeFn = mod.invoke;
+        }
+        return invokeFn(cmd, args);
+      }
+
       const el = (id)=>document.getElementById(id);
       async function refresh() {
         el('auth').textContent = 'checking...';
+        if (!isTauri) {
+          el('auth').innerHTML = `<span class="warn">browser mode</span>`;
+          return;
+        }
         try {
-          const status = await invoke('startup_check');
+          const status = await tauriInvoke('startup_check');
           el('auth').innerHTML = `<span class="ok">${status}</span>`;
         } catch (e) {
           el('auth').innerHTML = `<span class="warn">${e}</span>`;
@@ -44,8 +58,12 @@
       }
       async function testSend(){
         el('out').textContent='';
+        if (!isTauri) {
+          el('out').textContent = 'Mock: Gemini unavailable in browser mode';
+          return;
+        }
         try {
-          const res = await invoke('send_message_to_gemini', { message: 'Hello from UI', model: null });
+          const res = await tauriInvoke('send_message_to_gemini', { message: 'Hello from UI', model: null });
           el('out').textContent = `Gemini: ${res}`;
         } catch(e) {
           el('out').textContent = `Error: ${e}`;

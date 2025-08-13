@@ -148,7 +148,55 @@ The memory system now supports a pluggable backend via `oxide-memory/src/backend
 - Memory: `cargo check -p oxide-memory`
 - App (w/ feature): ensure `src-tauri/Cargo.toml` enables `oxide-memory` with `features=["cognee"]`, then `cargo check -p oxide-pilot`
 
-Note: If you encounter Windows file lock issues (os error 32) during build, simply re-run. If workspace dependency errors arise for other crates, pin their dependencies (avoid workspace-only manifests) or add a top-level Cargo workspace.
+## 🔐 Autenticación (Qwen + Gemini) – Plan y Tareas Profesionales
+
+### Alcance
+Implementar una experiencia de autenticación robusta con:
+- Qwen OAuth2 Device Code Flow (backend ya integrado vía comandos Tauri).
+- Gemini: clave API (disponible) y OAuth2 cuando esté listo; fallback a API Key documentado.
+- UI unificada con selección de proveedor, estado de sesión, manejo de errores y cierre de sesión.
+
+### Tareas
+- [ ] Frontend (Svelte): `QwenAuthSetup.svelte` para Device Code Flow
+  - Renderizar `user_code` y abrir `verification_uri`.
+  - Polling con backoff para `pending`/`slow_down`, timeout por `expires_in`.
+  - Manejo de errores y estado visible (éxito/error/esperando).
+- [ ] Frontend (Svelte): Integrar flujo Qwen en pantalla de login/index
+  - Selector de proveedor (Qwen/Gemini).
+  - Estado de sesión y botón “Cerrar sesión” (usa `qwen_clear_auth`).
+- [ ] Frontend (Svelte): Gemini
+  - Soporte API Key (entrada y validación mínima en UI).
+  - Preparar hooks para OAuth2 si/cuando esté disponible; fallback claro a API Key.
+- [ ] Backend/Ergonomía
+  - Mensajes de error consistentes, logs útiles (sin exponer secretos).
+  - Telemetría básica (eventos de inicio/éxito/fallo de auth) respetando privacidad.
+- [ ] Documentación
+  - Actualizar `OAUTH_SETUP.md` (Qwen ya documentado) y enlazar desde `README.md`.
+  - Mantener `src-tauri/.env.example` (ya extendido con Qwen/Gemini).
+- [ ] QA
+  - Casos de prueba manuales: éxito, `pending` prolongado, `slow_down`, timeout, error.
+  - Pruebas de regresión: asegurar que el resto de la app sigue operativa.
+
+### Criterios de Aceptación
+- Usuario puede autenticarse con Qwen vía device code desde la UI y ver estado hasta éxito/error.
+- Se puede cerrar sesión y el estado vuelve a “no autenticado”.
+- Para Gemini, si no hay OAuth disponible, API Key funciona y está claramente señalizado.
+- Errores comprensibles, sin filtración de secretos. Sin cuelgues en polling o timeouts.
+
+### Riesgos y Mitigaciones
+- Endpoints Qwen mal configurados → Validar envs y mostrar guía contextual.
+- Polling agresivo → Backoff en `slow_down`, límites de reintentos, timeout por `expires_in`.
+- UX confusa entre proveedores → Selector claro, descripciones breves, estados visibles.
+
+### Entregables
+- Componentes Svelte (`QwenAuthSetup.svelte` + integración en login/index).
+- Documentación actualizada (`OAUTH_SETUP.md`, `README.md`).
+- `.env.example` con variables Qwen/Gemini (ya actualizado).
+
+### Timeline sugerido (orientativo)
+- Día 1: UI Qwen (componente + integración, manejo de estados/errores).
+- Día 2: UX de proveedor unificado + Gemini API Key + QA básico.
+- Día 3: Pulido, documentación y validación cruzada en Windows.
 
 ---
 *This document is automatically updated based on git status and implementation progress.*

@@ -1,6 +1,18 @@
 <script lang="ts">
-import { invoke } from "@tauri-apps/api/tauri";
 import { writable } from "svelte/store";
+import { isTauri } from "$lib/utils/env";
+
+// Lazy-load Tauri invoke to avoid SSR importing '@tauri-apps/api/tauri'
+type InvokeFn = <T = any>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
+let invokeFn: InvokeFn | null = null;
+async function tauriInvoke<T = any>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  if (!isTauri) throw new Error("Not running in Tauri context");
+  if (!invokeFn) {
+    const mod = await import("@tauri-apps/api/tauri");
+    invokeFn = mod.invoke as InvokeFn;
+  }
+  return invokeFn<T>(cmd, args);
+}
 
 interface Message {
   id: string;
@@ -33,9 +45,15 @@ async function sendMessage() {
   isProcessing = true;
 
   try {
-    const response = await invoke("handle_user_input_command", {
-      userInput: currentInput
-    });
+    let response: string;
+    if (isTauri) {
+      response = await tauriInvoke<string>("handle_user_input_command", {
+        user_input: currentInput
+      });
+    } else {
+      // Browser/SSR fallback to avoid crashes during web preview/E2E
+      response = `Web preview: I received your message: "${currentInput}"`;
+    }
 
     // Update user message status
     messages.update(msgs => {

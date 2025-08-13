@@ -2,25 +2,62 @@
 import { onMount } from "svelte";
 import { writable } from "svelte/store";
 import GoogleAuthSetup from "./GoogleAuthSetup.svelte";
+import QwenAuthSetup from "./QwenAuthSetup.svelte";
 import SystemDashboard from "./SystemDashboard.svelte";
 import AdvancedSettings from "./AdvancedSettings.svelte";
 import ConversationInterface from "./ConversationInterface.svelte";
 import PatternDashboard from "./PatternDashboard.svelte";
+import { isTauri } from "$lib/utils/env";
 
 type ActiveTab = "dashboard" | "conversation" | "settings" | "advanced";
 
 const activeTab = writable<ActiveTab>("dashboard");
 let isAuthSetupComplete = false;
+let selectedProvider: "gemini" | "qwen" = "gemini";
+
+// Persist and restore provider selection
+const PROVIDER_KEY = "oxide.provider";
+
+// Lazy-load Tauri invoke to avoid SSR importing '@tauri-apps/api/tauri'
+type InvokeFn = <T = any>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
+let invokeFn: InvokeFn | null = null;
+async function tauriInvoke<T = any>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  if (!isTauri) throw new Error("Not running in Tauri context");
+  if (!invokeFn) {
+    const mod = await import("@tauri-apps/api/tauri");
+    invokeFn = mod.invoke as InvokeFn;
+  }
+  return invokeFn<T>(cmd, args);
+}
 
 onMount(async () => {
-  // Check if Google authentication is set up
-  checkAuthStatus();
+  try {
+    const saved = typeof localStorage !== 'undefined' ? localStorage.getItem(PROVIDER_KEY) : null;
+    if (saved === 'gemini' || saved === 'qwen') {
+      selectedProvider = saved;
+    }
+  } catch {}
+  await checkAuthStatus();
 });
 
 async function checkAuthStatus() {
-  // This would check if Google credentials are configured
-  // For now, we'll assume they need to be set up
-  isAuthSetupComplete = false;
+  // If running under Tauri, check both providers; mark complete if either is authenticated
+  if (!isTauri) {
+    isAuthSetupComplete = false;
+    return;
+  }
+  try {
+    const [geminiStatus, qwenStatus] = await Promise.allSettled([
+      tauriInvoke<string>("get_auth_status"),
+      tauriInvoke<string>("qwen_get_auth_status"),
+    ]);
+
+    const geminiOk = geminiStatus.status === 'fulfilled' && /auth/i.test(geminiStatus.value) && !/not\s+auth/i.test(geminiStatus.value);
+    const qwenOk = qwenStatus.status === 'fulfilled' && /auth/i.test(qwenStatus.value) && !/not\s+auth/i.test(qwenStatus.value);
+    isAuthSetupComplete = !!(geminiOk || qwenOk);
+  } catch (_) {
+    isAuthSetupComplete = false;
+  }
 }
 
 function setActiveTab(tab: ActiveTab) {
@@ -31,6 +68,13 @@ function onAuthComplete() {
   isAuthSetupComplete = true;
   activeTab.set("dashboard");
 }
+
+// Write provider changes to localStorage
+$: try {
+  if (typeof localStorage !== 'undefined' && (selectedProvider === 'gemini' || selectedProvider === 'qwen')) {
+    localStorage.setItem(PROVIDER_KEY, selectedProvider);
+  }
+} catch {}
 </script>
 
 <div class="app-container">
@@ -78,8 +122,20 @@ function onAuthComplete() {
     {#if !isAuthSetupComplete}
       <div class="setup-container">
         <h2>🔐 Setup Required</h2>
-        <p>Please configure your Google API credentials to get started with Oxide Pilot.</p>
-        <GoogleAuthSetup on:authComplete={onAuthComplete} />
+        <p>Please configure your AI provider to get started. Choose between Google Gemini or Qwen.</p>
+        <div class="provider-selector">
+          <button class="prov-btn" class:active={selectedProvider === 'gemini'} on:click={() => selectedProvider = 'gemini'}>
+            🌟 Google Gemini
+          </button>
+          <button class="prov-btn" class:active={selectedProvider === 'qwen'} on:click={() => selectedProvider = 'qwen'}>
+            🤖 Qwen (Device Code)
+          </button>
+        </div>
+        {#if selectedProvider === 'gemini'}
+          <GoogleAuthSetup on:authComplete={onAuthComplete} />
+        {:else}
+          <QwenAuthSetup on:authComplete={onAuthComplete} />
+        {/if}
       </div>
     {:else}
       {#if $activeTab === 'dashboard'}
@@ -93,7 +149,16 @@ function onAuthComplete() {
           <h2>⚙️ Settings</h2>
           <div class="settings-panel">
             <h3>Authentication</h3>
-            <GoogleAuthSetup on:authComplete={() => {}} />
+            <div class="auth-grid">
+              <div>
+                <h4>Google Gemini</h4>
+                <GoogleAuthSetup on:authComplete={() => {}} />
+              </div>
+              <div>
+                <h4>Qwen</h4>
+                <QwenAuthSetup on:authComplete={() => {}} />
+              </div>
+            </div>
 
             <h3>System Configuration</h3>
             <p>Advanced system configuration options will be available here.</p>
@@ -142,14 +207,14 @@ function onAuthComplete() {
     flex-direction: column;
     height: 100vh;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: var(--color-bg);
   }
 
   .app-header {
-    background: rgba(255, 255, 255, 0.95);
+    background: var(--color-surface);
     backdrop-filter: blur(10px);
-    padding: 20px;
-    box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
+    padding: var(--space-5);
+    box-shadow: var(--shadow-md);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -158,14 +223,14 @@ function onAuthComplete() {
 
   .logo h1 {
     margin: 0;
-    color: #2c3e50;
+    color: var(--color-text);
     font-size: 28px;
     font-weight: 700;
   }
 
   .logo p {
     margin: 5px 0 0 0;
-    color: #7f8c8d;
+    color: var(--color-muted);
     font-size: 14px;
   }
 
@@ -176,10 +241,10 @@ function onAuthComplete() {
 
   .tab-button {
     padding: 12px 20px;
-    border: none;
-    border-radius: 25px;
-    background: #ecf0f1;
-    color: #2c3e50;
+    border: 1px solid rgba(0,0,0,0.06);
+    border-radius: var(--radius-pill);
+    background: var(--color-surface);
+    color: var(--color-text);
     cursor: pointer;
     font-weight: 500;
     transition: all 0.3s ease;
@@ -192,18 +257,18 @@ function onAuthComplete() {
   }
 
   .tab-button.active {
-    background: #3498db;
+    background: var(--color-primary);
     color: white;
-    box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
+    box-shadow: 0 4px 15px rgba(79, 70, 229, 0.35);
   }
 
   .app-main {
     flex: 1;
     overflow-y: auto;
-    background: rgba(255, 255, 255, 0.9);
+    background: var(--color-surface);
     margin: 20px;
     border-radius: 15px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-lg);
     backdrop-filter: blur(10px);
   }
 
@@ -215,16 +280,39 @@ function onAuthComplete() {
   }
 
   .setup-container h2 {
-    color: #2c3e50;
+    color: var(--color-text);
     margin-bottom: 20px;
     font-size: 32px;
   }
 
   .setup-container p {
-    color: #7f8c8d;
+    color: var(--color-muted);
     font-size: 16px;
     line-height: 1.6;
     margin-bottom: 40px;
+  }
+
+  .provider-selector {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-bottom: 20px;
+  }
+
+  .prov-btn {
+    padding: 10px 16px;
+    border-radius: var(--radius-pill);
+    border: 1px solid rgba(0,0,0,0.08);
+    background: var(--color-surface);
+    color: var(--color-text);
+    cursor: pointer;
+  }
+
+  .prov-btn.active {
+    background: var(--color-primary);
+    color: #fff;
+    border-color: var(--color-primary);
+    box-shadow: 0 4px 12px rgba(79,70,229,0.25);
   }
 
   .conversation-container {
@@ -239,23 +327,35 @@ function onAuthComplete() {
   }
 
   .settings-container h2 {
-    color: #2c3e50;
+    color: var(--color-text);
     margin-bottom: 30px;
     font-size: 28px;
   }
 
   .settings-panel {
-    background: white;
-    border-radius: 10px;
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
     padding: 25px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-md);
+  }
+
+  .auth-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 20px;
+  }
+
+  .auth-grid h4 {
+    margin: 10px 0;
+    color: var(--color-text);
   }
 
   .settings-panel h3 {
-    color: #34495e;
+    color: var(--color-text);
     margin: 0 0 20px 0;
     font-size: 20px;
-    border-bottom: 2px solid #ecf0f1;
+    border-bottom: 1px solid rgba(0,0,0,0.08);
     padding-bottom: 10px;
   }
 
@@ -268,23 +368,25 @@ function onAuthComplete() {
 
   .setting-item label {
     font-weight: 500;
-    color: #2c3e50;
+    color: var(--color-text);
     min-width: 150px;
   }
 
   .setting-item input[type="text"],
   .setting-item input[type="number"] {
     padding: 8px 12px;
-    border: 2px solid #ecf0f1;
-    border-radius: 6px;
+    border: 2px solid rgba(0,0,0,0.08);
+    border-radius: var(--radius-sm);
     font-size: 14px;
     transition: border-color 0.3s ease;
+    background: var(--color-surface);
+    color: var(--color-text);
   }
 
   .setting-item input[type="text"]:focus,
   .setting-item input[type="number"]:focus {
     outline: none;
-    border-color: #3498db;
+    border-color: var(--color-primary);
   }
 
   .setting-item input[type="checkbox"] {
@@ -293,13 +395,14 @@ function onAuthComplete() {
   }
 
   .app-footer {
-    background: rgba(44, 62, 80, 0.9);
-    color: white;
+    background: var(--color-surface);
+    color: var(--color-text);
     padding: 15px 20px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     font-size: 14px;
+    box-shadow: var(--shadow-sm);
   }
 
   .status-indicator {

@@ -1,17 +1,21 @@
 <script lang="ts">
-import { invoke } from "@tauri-apps/api/tauri";
 import { createEventDispatcher } from "svelte";
 import { writable } from "svelte/store";
-
-// Check if running in Tauri context - multiple detection methods
-const isTauri = typeof window !== 'undefined' && (
-  '__TAURI__' in window ||
-  '__TAURI_IPC__' in window ||
-  window.location.protocol === 'tauri:' ||
-  (window as any).__TAURI_METADATA__ !== undefined
-);
+import { isTauri } from "$lib/utils/env";
 
 const dispatch = createEventDispatcher();
+
+// Lazy-load Tauri invoke to avoid SSR/browser issues when not in Tauri
+type InvokeFn = <T = any>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
+let invokeFn: InvokeFn | null = null;
+async function tauriInvoke<T = any>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  if (!isTauri) throw new Error("Not running in Tauri context");
+  if (!invokeFn) {
+    const mod = await import("@tauri-apps/api/tauri");
+    invokeFn = mod.invoke as InvokeFn;
+  }
+  return invokeFn<T>(cmd, args);
+}
 
 type AuthMethod = "api_key" | "oauth";
 
@@ -26,6 +30,16 @@ const authStatus = writable<{
 let isAuthenticating = false;
 let showInstructions = false;
 let availableModels: string[] = [];
+
+async function clearGoogleSession() {
+  if (!isTauri) return;
+  try {
+    await tauriInvoke("clear_google_auth");
+    authStatus.set({ message: "Google session cleared.", type: "info" });
+  } catch (e) {
+    authStatus.set({ message: `Failed to clear session: ${e}`, type: "error" });
+  }
+}
 
 async function saveApiKey() {
   if (!apiKey.trim()) {
@@ -49,8 +63,8 @@ async function saveApiKey() {
 
   try {
     // For API key method, use the correct function
-    await invoke("set_google_api_key", {
-      apiKey: apiKey
+    await tauriInvoke("set_google_api_key", {
+      api_key: apiKey
     });
     authStatus.set({
       message: "API key saved successfully!",
@@ -92,7 +106,7 @@ async function saveClientCredentials() {
   }
 
   try {
-    await invoke("set_google_client_credentials", { clientId, clientSecret });
+    await tauriInvoke("set_google_client_credentials", { client_id: clientId, client_secret: clientSecret });
     authStatus.set({
       message:
         "Client credentials saved successfully! You can now authenticate.",
@@ -133,7 +147,7 @@ async function startGoogleAuth() {
   }
 
   try {
-    const result = await invoke("authenticate_google_command");
+    const result = await tauriInvoke("authenticate_google_command");
     authStatus.set({
       message: `Authentication flow started: ${result}`,
       type: "info",
@@ -166,9 +180,12 @@ function switchAuthMethod(method: AuthMethod) {
         <div class="logo-icon">🔐</div>
         <h2>Google Gemini API Configuration</h2>
       </div>
-      <button class="help-button" on:click={toggleInstructions} aria-label={showInstructions ? 'Hide help' : 'Show help'}>
-        {showInstructions ? '✕' : '❓'}
-      </button>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <button class="help-button" on:click={toggleInstructions} aria-label={showInstructions ? 'Hide help' : 'Show help'}>
+          {showInstructions ? '✕' : '❓'}
+        </button>
+        <button class="clear-btn" on:click={clearGoogleSession} title="Clear saved Google/Gemini session" aria-label="Clear saved Google session">Clear Session</button>
+      </div>
     </div>
     <p class="header-subtitle">Connect Oxide Pilot to Google's powerful AI models</p>
   </div>
@@ -306,6 +323,7 @@ function switchAuthMethod(method: AuthMethod) {
           class="auth-button primary"
           on:click={saveApiKey}
           disabled={!apiKey.trim() || isAuthenticating}
+          aria-busy={isAuthenticating}
         >
           {#if isAuthenticating}
             <div class="button-content">
@@ -366,6 +384,7 @@ function switchAuthMethod(method: AuthMethod) {
           class="auth-button"
           on:click={saveClientCredentials}
           disabled={!clientId.trim() || !clientSecret.trim() || isAuthenticating}
+          aria-busy={isAuthenticating}
         >
           <div class="button-content">
             <span>💾 Save Credentials</span>
@@ -376,6 +395,7 @@ function switchAuthMethod(method: AuthMethod) {
           class="auth-button primary"
           on:click={startGoogleAuth}
           disabled={isAuthenticating || !clientId.trim() || !clientSecret.trim()}
+          aria-busy={isAuthenticating}
         >
           {#if isAuthenticating}
             <div class="button-content">
@@ -407,7 +427,7 @@ function switchAuthMethod(method: AuthMethod) {
   {/if}
 
   {#if $authStatus.message}
-    <div class="auth-status {$authStatus.type}">
+    <div class="auth-status {$authStatus.type}" role="status" aria-live="polite" aria-atomic="true">
       <div class="status-icon">
         {#if $authStatus.type === 'success'}
           ✅
@@ -920,5 +940,16 @@ function switchAuthMethod(method: AuthMethod) {
     .step-number {
       align-self: flex-start;
     }
+  }
+  
+  .clear-btn {
+    background: #ffffff;
+    border: 1px solid #dadce0;
+    border-radius: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+  }
+  .clear-btn:hover {
+    background: #f8f9fa;
   }
 </style>

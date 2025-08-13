@@ -1,5 +1,4 @@
 <script lang="ts">
-import { invoke } from "@tauri-apps/api/tauri";
 import { onMount } from "svelte";
 import { writable } from "svelte/store";
 

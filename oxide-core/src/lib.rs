@@ -8,5 +8,6 @@ pub mod auth;
 pub mod metrics;
 pub mod google_auth;
 pub mod gemini_auth;
+pub mod qwen_auth;
 pub mod performance;
 pub mod encryption;

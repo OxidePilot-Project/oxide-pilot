@@ -1,7 +1,19 @@
 <script lang="ts">
-import { invoke } from "@tauri-apps/api/tauri";
 import { onDestroy, onMount } from "svelte";
 import { writable } from "svelte/store";
+import { isTauri } from "$lib/utils/env";
+
+// Lazy-load Tauri invoke to avoid SSR importing '@tauri-apps/api/tauri'
+type InvokeFn = <T = any>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
+let invokeFn: InvokeFn | null = null;
+async function tauriInvoke<T = any>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  if (!isTauri) throw new Error("Not running in Tauri context");
+  if (!invokeFn) {
+    const mod = await import("@tauri-apps/api/tauri");
+    invokeFn = mod.invoke as InvokeFn;
+  }
+  return invokeFn<T>(cmd, args);
+}
 
 const isRecording = writable(false);
 const inputVolume = writable(0);
@@ -15,6 +27,10 @@ let volumeInterval: number;
 const recordingDuration = 3.0;
 
 onMount(async () => {
+  if (!isTauri) {
+    // In web/SSR, don't attempt to access Tauri audio APIs
+    return;
+  }
   await loadAudioDevices();
   startVolumeMonitoring();
 });
@@ -27,7 +43,7 @@ onDestroy(() => {
 
 async function loadAudioDevices() {
   try {
-    const devices = (await invoke("get_audio_devices")) as [string[], string[]];
+    const devices = (await tauriInvoke("get_audio_devices")) as [string[], string[]];
     audioDevices.set({
       input: devices[0],
       output: devices[1],
@@ -40,7 +56,7 @@ async function loadAudioDevices() {
 function startVolumeMonitoring() {
   volumeInterval = setInterval(async () => {
     try {
-      const volume = (await invoke("get_input_volume")) as number;
+      const volume = (await tauriInvoke("get_input_volume")) as number;
       inputVolume.set(volume);
     } catch (_error) {
       // Silently handle errors to avoid spam
@@ -48,13 +64,13 @@ function startVolumeMonitoring() {
   }, 100);
 }
 
-async function _startRecording() {
+async function startRecording() {
   try {
     isRecording.set(true);
     console.log(`Recording for ${recordingDuration} seconds...`);
 
-    const audioData = (await invoke("record_audio", {
-      durationSecs: recordingDuration,
+    const audioData = (await tauriInvoke("record_audio", {
+      duration_secs: recordingDuration,
     })) as number[];
 
     recordedAudio.set(new Uint8Array(audioData));
@@ -67,7 +83,7 @@ async function _startRecording() {
   }
 }
 
-async function _playRecording() {
+async function playRecording() {
   const audio = $recordedAudio;
   if (!audio) {
     alert("No recording to play");
@@ -75,7 +91,7 @@ async function _playRecording() {
   }
 
   try {
-    await invoke("play_audio", { audioData: Array.from(audio) });
+    await tauriInvoke("play_audio", { audio_data: Array.from(audio) });
     console.log("Audio playback completed");
   } catch (error) {
     console.error("Playback failed:", error);
@@ -83,15 +99,15 @@ async function _playRecording() {
   }
 }
 
-function _clearRecording() {
+function clearRecording() {
   recordedAudio.set(null);
 }
 
-function _getVolumeBarWidth(volume: number): number {
+function getVolumeBarWidth(volume: number): number {
   return Math.min(volume * 1000, 100); // Scale and cap at 100%
 }
 
-function _getVolumeColor(volume: number): string {
+function getVolumeColor(volume: number): string {
   if (volume > 0.1) return "#e74c3c"; // Red for loud
   if (volume > 0.05) return "#f39c12"; // Orange for medium
   if (volume > 0.01) return "#27ae60"; // Green for quiet

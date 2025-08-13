@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { invoke } from "@tauri-apps/api/tauri";
   import { writable } from "svelte/store";
 
   interface SystemMetric {

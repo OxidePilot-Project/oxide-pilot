@@ -128,6 +128,108 @@ cargo run --bin test_oauth
 
 ---
 
+## Qwen OAuth 2.0 Device Code Flow
+
+This project supports Qwen (or any OAuth2-compliant provider) via the Device Authorization Grant.
+
+### Environment Variables
+Set these in `src-tauri/.env` (see `src-tauri/.env.example`):
+- `QWEN_DEVICE_AUTH_URL` — Device Authorization endpoint (POST)
+- `QWEN_DEVICE_TOKEN_URL` — Token endpoint for device grant polling (POST)
+- `QWEN_CLIENT_ID` — OAuth client ID
+- `QWEN_CLIENT_SECRET` — Optional client secret
+- `QWEN_SCOPE` — Optional scopes (default: `openid profile email`)
+
+### Flow Overview
+1. Call backend command `qwen_start_device_auth()`
+   - Returns: `device_code`, `user_code`, `verification_uri`, `expires_in`, `interval`
+2. Show `user_code` and open `verification_uri` for the user to authorize.
+3. Poll `qwen_poll_device_auth(device_code)` every `interval` seconds:
+   - `{"status":"pending"}` — keep polling
+   - `{"status":"slow_down"}` — increase delay between polls
+   - `{"status":"success"}` — tokens stored securely (OS keyring)
+   - `{"status":"error","message":"..."}` — stop and display message
+4. Check status with `qwen_get_auth_status()` or clear tokens via `qwen_clear_auth()`.
+
+### Frontend usage (Svelte + Tauri)
+```ts
+import { invoke } from '@tauri-apps/api/tauri';
+
+// 1) Start device auth
+const start = await invoke('qwen_start_device_auth');
+// start: { device_code, user_code, verification_uri, expires_in, interval }
+
+// 2) Direct user to verify
+window.open(start.verification_uri, '_blank');
+
+// 3) Poll until success/error
+const delay = (ms:number) => new Promise(r => setTimeout(r, ms));
+let intervalMs = (start.interval ?? 5) * 1000;
+let done = false;
+while (!done) {
+  const res = await invoke('qwen_poll_device_auth', { device_code: start.device_code });
+  // res: { status: 'pending' | 'slow_down' | 'success' | 'error', message?: string }
+  if (res.status === 'pending') {
+    await delay(intervalMs);
+  } else if (res.status === 'slow_down') {
+    intervalMs += 2000; // back off a bit
+    await delay(intervalMs);
+  } else if (res.status === 'success') {
+    done = true;
+  } else {
+    throw new Error(res.message ?? 'Qwen auth error');
+  }
+}
+
+// 4) Verify status
+const status = await invoke('qwen_get_auth_status');
+console.log('Qwen auth status:', status);
+```
+
+### Notes
+- Tokens are stored via OS keyring under service `oxide_pilot_qwen`.
+- Ensure the Device and Token endpoints are correct for your provider.
+- Handle `expires_in` on the UI to time out the flow gracefully.
+
+#### Frontend UI components
+- The Svelte UI for Qwen Device Code is implemented in `src-frontend/src/lib/components/QwenAuthSetup.svelte`.
+- Provider selection (Gemini vs Qwen) is available in `src-frontend/src/lib/components/AppLayout.svelte` within the initial setup and Settings sections.
+  
+### Gemini Clear Session (Tauri Backend + UI)
+
+Oxide Pilot incluye un comando Tauri para limpiar la sesión de Google/Gemini:
+
+```ts
+// Rust command name
+invoke('clear_google_auth');
+```
+
+UI: En `src-frontend/src/lib/components/GoogleAuthSetup.svelte` hay un botón “Clear Session” que invoca este comando para eliminar credenciales almacenadas de forma segura.
+
+### Provider persistence y Dark Mode
+
+- La selección de proveedor (Gemini/Qwen) se persiste en `localStorage` bajo la clave `oxide.provider` desde `AppLayout.svelte`.
+- El tema utiliza tokens de diseño y soporta dark mode mediante `prefers-color-scheme` definidos en `src-frontend/src/app.html`.
+
+### E2E Tests (Playwright)
+
+Se han añadido pruebas E2E de frontend con Playwright en `src-frontend/`.
+
+Comandos:
+
+```powershell
+cd src-frontend
+npm install
+npx playwright install
+npm run test:e2e
+```
+
+Detalles:
+- Configuración: `src-frontend/playwright.config.ts` (levanta `vite dev` en el puerto 5173 y ejecuta pruebas en Chromium/Firefox/WebKit).
+- Prueba de humo: `src-frontend/tests/smoke.spec.ts` valida carga de la app, encabezado y estado “Setup Required” o “System Ready”.
+
+---
+
 ## Security Considerations
 
 ### API Key

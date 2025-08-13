@@ -32,6 +32,27 @@ Notas:
 cargo test --workspace
 ```
 
+### Pruebas E2E (Frontend - Playwright)
+
+En `src-frontend/` se han añadido pruebas E2E con Playwright.
+
+```powershell
+cd src-frontend
+npm install
+npx playwright install
+npm run test:e2e
+```
+
+Notas:
+- Configuración: `src-frontend/playwright.config.ts` (levanta Vite dev y prueba en Chromium/Firefox/WebKit).
+- Prueba de humo: `src-frontend/tests/smoke.spec.ts`.
+
+## Autenticación (Gemini y Qwen)
+
+- Configure Google Gemini (API Key u OAuth) desde la UI en `Settings` o en el asistente inicial.
+- Configure Qwen mediante el flujo Device Code desde el asistente inicial o `Settings`.
+- Guía completa en `OAUTH_SETUP.md`.
+
 ## Build de instalador Windows
 PowerShell:
 

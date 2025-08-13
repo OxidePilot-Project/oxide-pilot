@@ -1,7 +1,19 @@
 <script lang="ts">
-import { invoke } from "@tauri-apps/api/tauri";
 import { onDestroy, onMount } from "svelte";
 import { writable } from "svelte/store";
+import { isTauri } from "$lib/utils/env";
+
+// Lazy-load Tauri invoke to avoid SSR/browser issues when not in Tauri
+type InvokeFn = <T = any>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
+let invokeFn: InvokeFn | null = null;
+async function tauriInvoke<T = any>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  if (!isTauri) throw new Error("Not running in Tauri context");
+  if (!invokeFn) {
+    const mod = await import("@tauri-apps/api/tauri");
+    invokeFn = mod.invoke as InvokeFn;
+  }
+  return invokeFn<T>(cmd, args);
+}
 
 interface SystemStatus {
   cpu_usage: number;
@@ -52,7 +64,7 @@ onDestroy(() => {
 
 async function checkSystemStatus() {
   try {
-    const status = await invoke("get_system_status");
+    const status = await tauriInvoke("get_system_status");
     systemStatus.set(status as SystemStatus);
     isSystemInitialized.set(true);
     await updateDashboard();
@@ -65,9 +77,9 @@ async function checkSystemStatus() {
 async function updateDashboard() {
   try {
     const [status, threatHistory, memory] = await Promise.all([
-      invoke("get_system_status"),
-      invoke("get_threat_history"),
-      invoke("get_memory_stats"),
+      tauriInvoke("get_system_status"),
+      tauriInvoke("get_threat_history"),
+      tauriInvoke("get_memory_stats"),
     ]);
 
     systemStatus.set(status as SystemStatus);
@@ -78,7 +90,7 @@ async function updateDashboard() {
   }
 }
 
-async function _initializeSystem() {
+async function initializeSystem() {
   try {
     const defaultConfig = {
       guardian: {
@@ -100,7 +112,7 @@ async function _initializeSystem() {
       },
     };
 
-    await invoke("initialize_system", { config: defaultConfig });
+    await tauriInvoke("initialize_system", { config: defaultConfig });
     isSystemInitialized.set(true);
     await updateDashboard();
   } catch (error) {
@@ -109,14 +121,14 @@ async function _initializeSystem() {
   }
 }
 
-function _formatBytes(bytes: number): string {
+function formatBytes(bytes: number): string {
   const sizes = ["Bytes", "KB", "MB", "GB"];
   if (bytes === 0) return "0 Bytes";
   const i = Math.floor(Math.log(bytes) / Math.log(1024));
   return `${Math.round((bytes / 1024 ** i) * 100) / 100} ${sizes[i]}`;
 }
 
-function _getSeverityColor(severity: string): string {
+function getSeverityColor(severity: string): string {
   switch (severity.toLowerCase()) {
     case "critical":
       return "#dc3545";
