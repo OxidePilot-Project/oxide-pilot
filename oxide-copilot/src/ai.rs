@@ -2,10 +2,10 @@ use crate::errors::CopilotError;
 use crate::functions::FunctionRegistry;
 use crate::gemini_api::{
     Content, FunctionCall, FunctionDeclaration, FunctionResponse, GenerateContentRequest,
-    GenerateContentResponse, InlineData, Part, Tool,
+    GenerateContentResponse, Part, Tool,
 };
 use async_trait::async_trait;
-use log::{error, info};
+use log::{error, info, warn};
 use oxide_core::config::{
     AIProvidersConfig, AnthropicConfig, AzureOpenAIConfig, GoogleConfig, OllamaConfig, OpenAIConfig,
 };
@@ -13,7 +13,8 @@ use oxide_core::google_auth::{authenticate_google, get_access_token};
 use oxide_core::types::{AgentAction, Interaction};
 use reqwest::Client;
 use serde_json::json;
-use std::sync::{Arc, Mutex};
+// use std::sync::Arc; // Reserved for future use
+use tokio::sync::Mutex;
 
 #[async_trait]
 pub trait AIProvider {
@@ -28,6 +29,7 @@ pub trait AIProvider {
 }
 
 pub struct GoogleAIProvider {
+    #[allow(dead_code)]
     config: GoogleConfig,
     http_client: Client,
 }
@@ -81,6 +83,7 @@ impl AIProvider for GoogleAIProvider {
                     text: Some(interaction.user_input.clone()),
                     function_call: None,
                     function_response: None,
+                    inline_data: None,
                 }],
             });
 
@@ -99,11 +102,12 @@ impl AIProvider for GoogleAIProvider {
                                     text: None,
                                     function_call: Some(function_call),
                                     function_response: None,
+                                    inline_data: None,
                                 }],
                             });
                         }
                         Err(e) => {
-                            error!("Failed to parse stored function call: {}", e);
+                            error!("Failed to parse stored function call: {e}");
                             return Err(CopilotError::Serialization(e));
                         }
                     }
@@ -120,11 +124,12 @@ impl AIProvider for GoogleAIProvider {
                                     text: None,
                                     function_call: None,
                                     function_response: Some(function_response),
+                                    inline_data: None,
                                 }],
                             });
                         }
                         Err(e) => {
-                            error!("Failed to parse stored function response: {}", e);
+                            error!("Failed to parse stored function response: {e}");
                             return Err(CopilotError::Serialization(e));
                         }
                     }
@@ -135,6 +140,7 @@ impl AIProvider for GoogleAIProvider {
                             text: Some(interaction.agent_response.clone()),
                             function_call: None,
                             function_response: None,
+                            inline_data: None,
                         }],
                     });
                 }
@@ -148,6 +154,7 @@ impl AIProvider for GoogleAIProvider {
                 text: Some(prompt.to_string()),
                 function_call: None,
                 function_response: None,
+                inline_data: None,
             }],
         });
 
@@ -198,10 +205,9 @@ impl AIProvider for GoogleAIProvider {
         if !response.status().is_success() {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
-            error!("Gemini API error: Status: {}, Body: {}", status, error_text);
+            error!("Gemini API error: Status: {status}, Body: {error_text}");
             return Err(CopilotError::APIRequest(format!(
-                "Gemini API returned non-success status: {} - {}",
-                status, error_text
+                "Gemini API returned non-success status: {status} - {error_text}"
             )));
         }
 
@@ -254,6 +260,7 @@ impl AIProvider for GoogleAIProvider {
 }
 
 pub struct OpenAIProvider {
+    #[allow(dead_code)]
     config: OpenAIConfig,
 }
 
@@ -272,12 +279,12 @@ impl AIProvider for OpenAIProvider {
     async fn generate_response(
         &self,
         prompt: &str,
-        history: &[Interaction],
-        function_registry: Option<&FunctionRegistry>,
+        _history: &[Interaction],
+        _function_registry: Option<&FunctionRegistry>,
     ) -> Result<String, CopilotError> {
         info!("OpenAI: Generating response for prompt: {}", prompt);
         // Placeholder for actual OpenAI API call
-        Ok(format!("OpenAI response to: {}", prompt))
+        Ok(format!("OpenAI response to: {prompt}"))
     }
 
     async fn call_function(&self, action: &AgentAction) -> Result<serde_json::Value, CopilotError> {
@@ -288,6 +295,7 @@ impl AIProvider for OpenAIProvider {
 }
 
 pub struct AnthropicProvider {
+    #[allow(dead_code)]
     config: AnthropicConfig,
 }
 
@@ -306,12 +314,12 @@ impl AIProvider for AnthropicProvider {
     async fn generate_response(
         &self,
         prompt: &str,
-        history: &[Interaction],
-        function_registry: Option<&FunctionRegistry>,
+        _history: &[Interaction],
+        _function_registry: Option<&FunctionRegistry>,
     ) -> Result<String, CopilotError> {
         info!("Anthropic: Generating response for prompt: {}", prompt);
         // Placeholder for actual Anthropic API call
-        Ok(format!("Anthropic response to: {}", prompt))
+        Ok(format!("Anthropic response to: {prompt}"))
     }
 
     async fn call_function(&self, action: &AgentAction) -> Result<serde_json::Value, CopilotError> {
@@ -322,6 +330,7 @@ impl AIProvider for AnthropicProvider {
 }
 
 pub struct AzureOpenAIProvider {
+    #[allow(dead_code)]
     config: AzureOpenAIConfig,
 }
 
@@ -340,12 +349,12 @@ impl AIProvider for AzureOpenAIProvider {
     async fn generate_response(
         &self,
         prompt: &str,
-        history: &[Interaction],
-        function_registry: Option<&FunctionRegistry>,
+        _history: &[Interaction],
+        _function_registry: Option<&FunctionRegistry>,
     ) -> Result<String, CopilotError> {
         info!("Azure OpenAI: Generating response for prompt: {}", prompt);
         // Placeholder for actual Azure OpenAI API call
-        Ok(format!("Azure OpenAI response to: {}", prompt))
+        Ok(format!("Azure OpenAI response to: {prompt}"))
     }
 
     async fn call_function(&self, action: &AgentAction) -> Result<serde_json::Value, CopilotError> {
@@ -356,6 +365,7 @@ impl AIProvider for AzureOpenAIProvider {
 }
 
 pub struct OllamaProvider {
+    #[allow(dead_code)]
     config: OllamaConfig,
 }
 
@@ -374,12 +384,12 @@ impl AIProvider for OllamaProvider {
     async fn generate_response(
         &self,
         prompt: &str,
-        history: &[Interaction],
-        function_registry: Option<&FunctionRegistry>,
+        _history: &[Interaction],
+        _function_registry: Option<&FunctionRegistry>,
     ) -> Result<String, CopilotError> {
         info!("Ollama: Generating response for prompt: {}", prompt);
         // Placeholder for actual Ollama API call
-        Ok(format!("Ollama response to: {}", prompt))
+        Ok(format!("Ollama response to: {prompt}"))
     }
 
     async fn call_function(&self, action: &AgentAction) -> Result<serde_json::Value, CopilotError> {
@@ -426,11 +436,14 @@ impl AIOrchestrator {
         history: &[Interaction],
         function_registry: Option<&FunctionRegistry>,
     ) -> Result<String, CopilotError> {
-        let mut current_index = self.current_provider_index.lock().unwrap();
-        let initial_index = *current_index;
+        let initial_index = {
+            let current_index = self.current_provider_index.lock().await;
+            *current_index
+        };
+        let mut current_index = initial_index;
 
         loop {
-            let provider = &self.providers[*current_index];
+            let provider = &self.providers[current_index];
             info!(
                 "Attempting to generate response with {} provider.",
                 provider.name()
@@ -442,12 +455,16 @@ impl AIOrchestrator {
                 Ok(response) => return Ok(response),
                 Err(e) => {
                     error!("Provider {} failed: {}", provider.name(), e);
-                    *current_index = (*current_index + 1) % self.providers.len();
-                    if *current_index == initial_index {
+                    current_index = (current_index + 1) % self.providers.len();
+                    if current_index == initial_index {
                         return Err(CopilotError::AIProvider(format!(
-                            "All AI providers failed to generate a response: {}",
-                            e
+                            "All AI providers failed to generate a response: {e}"
                         )));
+                    }
+                    // Update the stored index
+                    {
+                        let mut stored_index = self.current_provider_index.lock().await;
+                        *stored_index = current_index;
                     }
                 }
             }
@@ -458,11 +475,14 @@ impl AIOrchestrator {
         &self,
         action: &AgentAction,
     ) -> Result<serde_json::Value, CopilotError> {
-        let mut current_index = self.current_provider_index.lock().unwrap();
-        let initial_index = *current_index;
+        let initial_index = {
+            let current_index = self.current_provider_index.lock().await;
+            *current_index
+        };
+        let mut current_index = initial_index;
 
         loop {
-            let provider = &self.providers[*current_index];
+            let provider = &self.providers[current_index];
             info!(
                 "Attempting to call function with {} provider.",
                 provider.name()
@@ -475,12 +495,16 @@ impl AIOrchestrator {
                         provider.name(),
                         e
                     );
-                    *current_index = (*current_index + 1) % self.providers.len();
-                    if *current_index == initial_index {
+                    current_index = (current_index + 1) % self.providers.len();
+                    if current_index == initial_index {
                         return Err(CopilotError::AIProvider(format!(
-                            "All AI providers failed to call the function: {}",
-                            e
+                            "All AI providers failed to call the function: {e}"
                         )));
+                    }
+                    // Update the stored index
+                    {
+                        let mut stored_index = self.current_provider_index.lock().await;
+                        *stored_index = current_index;
                     }
                 }
             }

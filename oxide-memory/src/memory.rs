@@ -1,11 +1,16 @@
-use chrono::{DateTime, Duration, Utc};
-use log::{error, info, warn};
+use chrono::{DateTime, Utc};
+use log::{info, warn};
 use oxide_core::types::{Interaction, SystemEvent};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use tokio::fs;
+use crate::backend::MemoryBackend;
+#[cfg(feature = "cognee")]
+use crate::backend::CogneeBackend;
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryEntry {
@@ -61,6 +66,7 @@ pub struct MemoryManager {
     user_patterns: Arc<Mutex<HashMap<String, UserPattern>>>,
     storage_path: String,
     max_entries: usize,
+    backend: Option<Arc<dyn MemoryBackend>>, 
 }
 
 impl MemoryManager {
@@ -72,13 +78,27 @@ impl MemoryManager {
             user_patterns: Arc::new(Mutex::new(HashMap::new())),
             storage_path: path,
             max_entries: 10000, // Configurable limit
+            backend: None,
         }
+    }
+    
+    #[cfg(feature = "cognee")]
+    pub fn with_cognee(storage_path: Option<String>, base_url: String, token: Option<String>) -> Self {
+        let mut s = Self::new(storage_path);
+        match CogneeBackend::new(base_url, token) {
+            Ok(b) => { s.backend = Some(Arc::new(b)); }
+            Err(e) => {
+                warn!("Failed to initialize Cognee backend: {}", e);
+                s.backend = None;
+            }
+        }
+        s
     }
 
     pub async fn initialize(&self) -> Result<(), String> {
         // Create storage directory if it doesn't exist
         if let Err(e) = fs::create_dir_all(&self.storage_path).await {
-            return Err(format!("Failed to create storage directory: {}", e));
+            return Err(format!("Failed to create storage directory: {e}"));
         }
 
         // Load existing memory from disk
@@ -99,8 +119,7 @@ impl MemoryManager {
             content: serde_json::to_string(&event).map_err(|e| e.to_string())?,
             metadata: HashMap::from([
                 ("event_type".to_string(), event.event_type.clone()),
-                ("source".to_string(), event.source.clone()),
-                ("severity".to_string(), event.severity.to_string()),
+                ("timestamp".to_string(), event.timestamp.to_rfc3339()),
             ]),
             relevance_score: self.calculate_relevance_score(&event),
             tags: self.extract_tags_from_event(&event),
@@ -141,36 +160,76 @@ impl MemoryManager {
     }
 
     async fn store_memory_entry(&self, entry: MemoryEntry) -> Result<(), String> {
-        let mut store = self.memory_store.lock().unwrap();
+        let (content_for_backend, entry_type_for_backend) = (entry.content.clone(), format!("{:?}", entry.entry_type));
+        {
+            let mut store = self.memory_store.lock().await;
 
-        // Check if we need to evict old entries
-        if store.len() >= self.max_entries {
-            self.evict_old_entries(&mut store);
+            // Check if we need to evict old entries
+            if store.len() >= self.max_entries {
+                self.evict_old_entries(&mut store);
+            }
+
+            store.insert(entry.id.clone(), entry);
         }
-
-        store.insert(entry.id.clone(), entry);
-        drop(store);
 
         // Persist to disk periodically
         self.save_to_disk().await?;
+        
+        // Mirror to backend (best-effort)
+        if let Some(backend) = &self.backend {
+            let metadata = serde_json::json!({ "source": "oxide-memory", "entry_type": entry_type_for_backend });
+            if let Err(e) = backend.add_texts(vec![(content_for_backend, vec![])], metadata).await {
+                warn!("Backend add failed: {}", e);
+            }
+        }
+
         Ok(())
     }
 
     fn evict_old_entries(&self, store: &mut HashMap<String, MemoryEntry>) {
         // Remove oldest 10% of entries
-        let mut entries: Vec<_> = store.values().collect();
+        let mut entries: Vec<_> = store.values().cloned().collect();
         entries.sort_by_key(|e| e.timestamp);
 
         let evict_count = self.max_entries / 10;
-        for entry in entries.iter().take(evict_count) {
-            store.remove(&entry.id);
+        let ids_to_remove: Vec<_> = entries.iter().take(evict_count).map(|e| e.id.clone()).collect();
+        for id in ids_to_remove {
+            store.remove(&id);
         }
 
-        info!("Evicted {} old memory entries", evict_count);
+        info!("Evicted {evict_count} old memory entries");
     }
 
     pub async fn retrieve_context(&self, query: &ContextQuery) -> Result<Vec<MemoryEntry>, String> {
-        let store = self.memory_store.lock().unwrap();
+        // If a backend is available, try it first
+        if let Some(backend) = &self.backend {
+            match backend.search(query.query.clone(), query.max_results).await {
+                Ok(results) => {
+                    let now = Utc::now();
+                    let mut mapped: Vec<MemoryEntry> = Vec::new();
+                    for r in results {
+                        let mut metadata: HashMap<String, String> = HashMap::new();
+                        if let Some(src) = r.source.clone() { metadata.insert("source".to_string(), src); }
+                        // we don't attempt to stringify full meta here
+                        mapped.push(MemoryEntry {
+                            id: Uuid::new_v4().to_string(),
+                            timestamp: now,
+                            entry_type: MemoryEntryType::KnowledgeBase,
+                            content: r.text,
+                            metadata,
+                            relevance_score: r.score,
+                            tags: vec!["external".to_string()],
+                        });
+                    }
+                    if !mapped.is_empty() {
+                        info!("Retrieved {} backend results for query: {}", mapped.len(), query.query);
+                        return Ok(mapped);
+                    }
+                }
+                Err(e) => warn!("Backend search failed: {}", e),
+            }
+        }
+        let store = self.memory_store.lock().await;
         let mut relevant_entries = Vec::new();
 
         for entry in store.values() {
@@ -213,22 +272,27 @@ impl MemoryManager {
     }
 
     fn calculate_relevance_score(&self, event: &SystemEvent) -> f32 {
-        match event.severity.as_str() {
-            "critical" => 1.0,
-            "high" => 0.8,
-            "medium" => 0.6,
-            "low" => 0.4,
+        // Since SystemEvent doesn't have severity, use event_type for scoring
+        match event.event_type.as_str() {
+            "threat_detected" => 1.0,
+            "process_info" => 0.8,
+            "file_access" => 0.6,
+            "network_activity" => 0.4,
             _ => 0.3,
         }
     }
 
     fn extract_tags_from_event(&self, event: &SystemEvent) -> Vec<String> {
-        let mut tags = vec![event.event_type.clone(), event.source.clone()];
+        let mut tags = vec![event.event_type.clone()];
 
         // Extract additional tags from event details
-        for (key, value) in &event.details {
-            if key == "process_name" || key == "file_path" || key == "network_address" {
-                tags.push(format!("{}:{}", key, value));
+        if let Some(details_obj) = event.details.as_object() {
+            for (key, value) in details_obj {
+                if key == "process_name" || key == "file_path" || key == "network_address" {
+                    if let Some(value_str) = value.as_str() {
+                        tags.push(format!("{key}:{value_str}"));
+                    }
+                }
             }
         }
 
@@ -295,37 +359,37 @@ impl MemoryManager {
             ),
         };
 
-        let mut patterns = self.user_patterns.lock().unwrap();
+        let mut patterns = self.user_patterns.lock().await;
         patterns.insert(pattern_id, pattern);
 
         Ok(())
     }
 
     pub async fn get_user_patterns(&self) -> Vec<UserPattern> {
-        let patterns = self.user_patterns.lock().unwrap();
+        let patterns = self.user_patterns.lock().await;
         patterns.values().cloned().collect()
     }
 
     async fn save_to_disk(&self) -> Result<(), String> {
-        let store = self.memory_store.lock().unwrap();
-        let patterns = self.user_patterns.lock().unwrap();
+        let store = self.memory_store.lock().await;
+        let patterns = self.user_patterns.lock().await;
 
         let memory_file = Path::new(&self.storage_path).join("memory.json");
         let patterns_file = Path::new(&self.storage_path).join("patterns.json");
 
         // Save memory entries
         let memory_json = serde_json::to_string_pretty(&*store)
-            .map_err(|e| format!("Failed to serialize memory: {}", e))?;
+            .map_err(|e| format!("Failed to serialize memory: {e}"))?;
         fs::write(&memory_file, memory_json)
             .await
-            .map_err(|e| format!("Failed to write memory file: {}", e))?;
+            .map_err(|e| format!("Failed to write memory file: {e}"))?;
 
         // Save user patterns
         let patterns_json = serde_json::to_string_pretty(&*patterns)
-            .map_err(|e| format!("Failed to serialize patterns: {}", e))?;
+            .map_err(|e| format!("Failed to serialize patterns: {e}"))?;
         fs::write(&patterns_file, patterns_json)
             .await
-            .map_err(|e| format!("Failed to write patterns file: {}", e))?;
+            .map_err(|e| format!("Failed to write patterns file: {e}"))?;
 
         Ok(())
     }
@@ -340,14 +404,14 @@ impl MemoryManager {
                 Ok(content) => {
                     match serde_json::from_str::<HashMap<String, MemoryEntry>>(&content) {
                         Ok(loaded_memory) => {
-                            let mut store = self.memory_store.lock().unwrap();
+                            let mut store = self.memory_store.lock().await;
                             *store = loaded_memory;
                             info!("Loaded {} memory entries from disk", store.len());
                         }
-                        Err(e) => warn!("Failed to parse memory file: {}", e),
+                        Err(e) => warn!("Failed to parse memory file: {e}"),
                     }
                 }
-                Err(e) => warn!("Failed to read memory file: {}", e),
+                Err(e) => warn!("Failed to read memory file: {e}"),
             }
         }
 
@@ -357,23 +421,23 @@ impl MemoryManager {
                 Ok(content) => {
                     match serde_json::from_str::<HashMap<String, UserPattern>>(&content) {
                         Ok(loaded_patterns) => {
-                            let mut patterns = self.user_patterns.lock().unwrap();
+                            let mut patterns = self.user_patterns.lock().await;
                             *patterns = loaded_patterns;
                             info!("Loaded {} user patterns from disk", patterns.len());
                         }
-                        Err(e) => warn!("Failed to parse patterns file: {}", e),
+                        Err(e) => warn!("Failed to parse patterns file: {e}"),
                     }
                 }
-                Err(e) => warn!("Failed to read patterns file: {}", e),
+                Err(e) => warn!("Failed to read patterns file: {e}"),
             }
         }
 
         Ok(())
     }
 
-    pub fn get_memory_stats(&self) -> MemoryStats {
-        let store = self.memory_store.lock().unwrap();
-        let patterns = self.user_patterns.lock().unwrap();
+    pub async fn get_memory_stats(&self) -> MemoryStats {
+        let store = self.memory_store.lock().await;
+        let patterns = self.user_patterns.lock().await;
 
         MemoryStats {
             total_entries: store.len(),
@@ -384,7 +448,7 @@ impl MemoryManager {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct MemoryStats {
     pub total_entries: usize,
     pub total_patterns: usize,

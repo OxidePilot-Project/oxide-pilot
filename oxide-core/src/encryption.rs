@@ -1,7 +1,8 @@
 use aes_gcm::{
-    aead::{Aead, KeyInit, OsRng},
+    aead::{Aead, AeadCore, KeyInit, OsRng},
     Aes256Gcm, Nonce, Key
 };
+use rand::RngCore;
 use base64::{Engine as _, engine::general_purpose};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -36,9 +37,9 @@ impl EncryptionManager {
     pub fn new(key: &[u8]) -> Result<Self, Box<dyn std::error::Error>> {
         let key = Key::<Aes256Gcm>::from_slice(key);
         let cipher = Aes256Gcm::new(key);
-        
+
         let mut roles = HashMap::new();
-        
+
         // Define default roles
         roles.insert("admin".to_string(), Role {
             name: "admin".to_string(),
@@ -50,7 +51,7 @@ impl EncryptionManager {
                 "data.access".to_string(),
             ],
         });
-        
+
         roles.insert("user".to_string(), Role {
             name: "user".to_string(),
             permissions: vec![
@@ -59,7 +60,7 @@ impl EncryptionManager {
                 "config.view".to_string(),
             ],
         });
-        
+
         roles.insert("readonly".to_string(), Role {
             name: "readonly".to_string(),
             permissions: vec![
@@ -77,11 +78,12 @@ impl EncryptionManager {
 
     pub fn encrypt_data(&self, plaintext: &[u8], associated_data: Option<&[u8]>) -> Result<EncryptedData, Box<dyn std::error::Error>> {
         let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
-        let ciphertext = self.cipher.encrypt(&nonce, plaintext)?;
-        
+        let ciphertext = self.cipher.encrypt(&nonce, plaintext)
+            .map_err(|e| format!("Encryption failed: {e:?}"))?;
+
         Ok(EncryptedData {
             ciphertext: general_purpose::STANDARD.encode(&ciphertext),
-            nonce: general_purpose::STANDARD.encode(&nonce),
+            nonce: general_purpose::STANDARD.encode(nonce),
             associated_data: associated_data.map(|data| general_purpose::STANDARD.encode(data)),
         })
     }
@@ -90,8 +92,9 @@ impl EncryptionManager {
         let ciphertext = general_purpose::STANDARD.decode(&encrypted.ciphertext)?;
         let nonce = general_purpose::STANDARD.decode(&encrypted.nonce)?;
         let nonce = Nonce::from_slice(&nonce);
-        
-        let plaintext = self.cipher.decrypt(nonce, ciphertext.as_ref())?;
+
+        let plaintext = self.cipher.decrypt(nonce, ciphertext.as_ref())
+            .map_err(|e| format!("Decryption failed: {e:?}"))?;
         Ok(plaintext)
     }
 
@@ -100,7 +103,7 @@ impl EncryptionManager {
             if access_control.permissions.contains(&permission.to_string()) {
                 return true;
             }
-            
+
             // Check role-based permissions
             for role_name in &access_control.roles {
                 if let Some(role) = self.roles.get(role_name) {
@@ -110,23 +113,23 @@ impl EncryptionManager {
                 }
             }
         }
-        
+
         false
     }
 
     pub fn add_user(&mut self, user_id: String, roles: Vec<String>) {
         let mut permissions = Vec::new();
-        
+
         for role_name in &roles {
             if let Some(role) = self.roles.get(role_name) {
                 permissions.extend(role.permissions.clone());
             }
         }
-        
+
         permissions.dedup();
-        
-        self.access_controls.insert(user_id, AccessControl {
-            user_id: user_id.clone(),
+
+        self.access_controls.insert(user_id.clone(), AccessControl {
+            user_id,
             roles,
             permissions,
         });

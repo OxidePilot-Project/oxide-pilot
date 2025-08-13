@@ -1,17 +1,17 @@
-use log::{info, warn, error};
+use log::{info, warn};
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum PermissionLevel {
     Allow,
     Ask,
     Deny,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, Hash, PartialEq)]
 pub enum RPAActionType {
     MouseClick,
     MouseMove,
@@ -45,10 +45,16 @@ pub struct PermissionManager {
     max_log_size: usize,
 }
 
+impl Default for PermissionManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PermissionManager {
     pub fn new() -> Self {
         let mut permissions = HashMap::new();
-        
+
         // Default permissions - more restrictive
         permissions.insert(RPAActionType::MouseClick, PermissionLevel::Ask);
         permissions.insert(RPAActionType::MouseMove, PermissionLevel::Allow);
@@ -67,7 +73,7 @@ impl PermissionManager {
 
     pub async fn request_permission(&mut self, request: PermissionRequest) -> bool {
         let level = self.permissions.get(&request.action_type).unwrap_or(&PermissionLevel::Ask);
-        
+
         match level {
             PermissionLevel::Allow => {
                 self.log_decision(request.clone(), true, false);
@@ -98,7 +104,7 @@ impl PermissionManager {
         };
 
         self.audit_log.push(decision);
-        
+
         // Keep log size manageable
         if self.audit_log.len() > self.max_log_size {
             self.audit_log.remove(0);
@@ -116,34 +122,64 @@ impl PermissionManager {
     pub fn get_permissions(&self) -> &HashMap<RPAActionType, PermissionLevel> {
         &self.permissions
     }
-}
-
-impl PermissionManager {
-    pub fn new() -> Self {
-        Self {}
-    }
 
     pub fn check_permission(&self, action: &str) -> bool {
-        info!("Checking permission for action: {}", action);
+        info!("Checking permission for action: {action}");
         // Placeholder for actual permission logic
         // For now, all actions are allowed
         true
     }
 
     pub async fn request_confirmation(&self, message: &str) -> bool {
-        warn!("User confirmation requested: {}", message);
+        warn!("User confirmation requested: {message}");
         // In a real system, this would display a dialog to the user
         // For now, always confirm
         true
     }
 
     pub fn log_action(&self, action: &str, status: &str) {
-        info!("Action logged: {} - Status: {}", action, status);
+        info!("Action logged: {action} - Status: {status}");
         // In a real system, this would write to an audit log
     }
 
     pub fn rollback_action(&self, action: &str) {
-        warn!("Attempting to rollback action: {}", action);
+        warn!("Attempting to rollback action: {action}");
         // Placeholder for actual rollback logic
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_permission_manager_creation() {
+        let manager = PermissionManager::new();
+        // Test that the manager can be created successfully
+        assert!(!manager.get_permissions().is_empty());
+    }
+
+    #[test]
+    fn test_permission_levels() {
+        let mut manager = PermissionManager::new();
+        manager.set_permission(RPAActionType::MouseClick, PermissionLevel::Allow);
+
+        let permissions = manager.get_permissions();
+        assert_eq!(permissions.get(&RPAActionType::MouseClick), Some(&PermissionLevel::Allow));
+    }
+
+    #[tokio::test]
+    async fn test_permission_request() {
+        let mut manager = PermissionManager::new();
+        let request = PermissionRequest {
+            action_type: RPAActionType::MouseMove,
+            description: "Test mouse move".to_string(),
+            target: None,
+            severity: 1,
+            timestamp: 0,
+        };
+
+        let result = manager.request_permission(request).await;
+        assert!(result); // MouseMove should be allowed by default
     }
 }

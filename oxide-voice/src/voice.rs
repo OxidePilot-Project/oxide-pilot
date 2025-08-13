@@ -1,11 +1,12 @@
 use crate::audio::{AudioManager, VoiceActivityDetector};
 use async_trait::async_trait;
-use log::{error, info, warn};
+use base64::{Engine as _, engine::general_purpose};
+use log::{info, warn};
 use oxide_core::google_auth::get_access_token;
 use reqwest::Client;
 use serde_json::json;
 use std::sync::{Arc, Mutex};
-use std::thread;
+// use std::thread; // Reserved for future use
 use std::time::Duration;
 use tokio::sync::mpsc;
 
@@ -66,7 +67,7 @@ impl WakeWordDetector {
                 // Simulate wake word detection every 30 seconds for demo
                 if counter % 6 == 0 {
                     if let Some(wake_word) = wake_words.first() {
-                        info!("Wake word detected: {}", wake_word);
+                        info!("Wake word detected: {wake_word}");
                         if tx.send(wake_word.clone()).await.is_err() {
                             warn!("Failed to send wake word detection");
                             break;
@@ -118,7 +119,7 @@ impl STTProvider for GoogleSTTProvider {
 
         let access_token = get_access_token()
             .await
-            .map_err(|e| format!("Failed to get access token: {}", e))?
+            .map_err(|e| format!("Failed to get access token: {e}"))?
             .ok_or("No access token available")?;
 
         let request_body = json!({
@@ -129,7 +130,7 @@ impl STTProvider for GoogleSTTProvider {
                 "enableAutomaticPunctuation": true
             },
             "audio": {
-                "content": base64::encode(&audio_data)
+                "content": general_purpose::STANDARD.encode(&audio_data)
             }
         });
 
@@ -140,24 +141,24 @@ impl STTProvider for GoogleSTTProvider {
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| format!("HTTP request failed: {}", e))?;
+            .map_err(|e| format!("HTTP request failed: {e}"))?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(format!("Google STT API error: {}", error_text));
+            return Err(format!("Google STT API error: {error_text}"));
         }
 
         let response_json: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
+            .map_err(|e| format!("Failed to parse response: {e}"))?;
 
         if let Some(results) = response_json["results"].as_array() {
             if let Some(first_result) = results.first() {
                 if let Some(alternatives) = first_result["alternatives"].as_array() {
                     if let Some(first_alternative) = alternatives.first() {
                         if let Some(transcript) = first_alternative["transcript"].as_str() {
-                            info!("Transcription successful: {}", transcript);
+                            info!("Transcription successful: {transcript}");
                             return Ok(transcript.to_string());
                         }
                     }
@@ -205,7 +206,7 @@ impl TTSProvider for GoogleTTSProvider {
 
         let access_token = get_access_token()
             .await
-            .map_err(|e| format!("Failed to get access token: {}", e))?
+            .map_err(|e| format!("Failed to get access token: {e}"))?
             .ok_or("No access token available")?;
 
         let request_body = json!({
@@ -229,21 +230,21 @@ impl TTSProvider for GoogleTTSProvider {
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| format!("HTTP request failed: {}", e))?;
+            .map_err(|e| format!("HTTP request failed: {e}"))?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(format!("Google TTS API error: {}", error_text));
+            return Err(format!("Google TTS API error: {error_text}"));
         }
 
         let response_json: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
+            .map_err(|e| format!("Failed to parse response: {e}"))?;
 
         if let Some(audio_content) = response_json["audioContent"].as_str() {
-            let audio_data = base64::decode(audio_content)
-                .map_err(|e| format!("Failed to decode audio: {}", e))?;
+            let audio_data = general_purpose::STANDARD.decode(audio_content)
+                .map_err(|e| format!("Failed to decode audio: {e}"))?;
 
             info!("Speech synthesis successful, {} bytes", audio_data.len());
             Ok(audio_data)
@@ -303,15 +304,15 @@ impl VoiceProcessor {
             .await
     }
 
-    pub fn get_input_devices(&self) -> Vec<String> {
-        self.wake_word_detector.audio_manager.list_input_devices()
+    pub async fn get_input_devices(&self) -> Vec<String> {
+        self.wake_word_detector.audio_manager.list_input_devices().await
     }
 
-    pub fn get_output_devices(&self) -> Vec<String> {
-        self.wake_word_detector.audio_manager.list_output_devices()
+    pub async fn get_output_devices(&self) -> Vec<String> {
+        self.wake_word_detector.audio_manager.list_output_devices().await
     }
 
-    pub fn get_input_volume(&self) -> Result<f32, String> {
-        self.wake_word_detector.audio_manager.get_input_volume()
+    pub async fn get_input_volume(&self) -> Result<f32, String> {
+        self.wake_word_detector.audio_manager.get_input_volume().await
     }
 }

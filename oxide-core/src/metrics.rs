@@ -1,4 +1,4 @@
-use std::time::{Instant, Duration};
+use std::time::Instant;
 use std::collections::HashMap;
 use log::{info, debug};
 use serde::{Serialize, Deserialize};
@@ -14,6 +14,12 @@ pub struct Metric {
 pub struct MetricsCollector {
     start_time: Instant,
     metrics: HashMap<String, Vec<Metric>>,
+}
+
+impl Default for MetricsCollector {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MetricsCollector {
@@ -33,7 +39,7 @@ impl MetricsCollector {
             timestamp,
         };
         self.metrics.entry(name.to_string()).or_default().push(metric);
-        debug!("Recorded metric: {} = {} {}", name, value, unit);
+        debug!("Recorded metric: {name} = {value} {unit}");
     }
 
     pub fn get_metrics(&self) -> &HashMap<String, Vec<Metric>> {

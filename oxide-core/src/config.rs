@@ -5,6 +5,8 @@ pub struct OxidePilotConfig {
     pub guardian: GuardianConfig,
     pub copilot: CopilotConfig,
     pub ai_providers: AIProvidersConfig,
+    // Optional memory backend configuration; if present and enabled, Cognee may be used
+    pub cognee: Option<CogneeConfig>,
 }
 
 impl OxidePilotConfig {
@@ -12,6 +14,9 @@ impl OxidePilotConfig {
         self.guardian.validate()?;
         self.copilot.validate()?;
         self.ai_providers.validate(self.copilot.enabled)?;
+        if let Some(cognee) = &self.cognee {
+            cognee.validate()?;
+        }
         Ok(())
     }
 }
@@ -41,6 +46,26 @@ impl CopilotConfig {
     fn validate(&self) -> Result<(), String> {
         if self.enabled && self.wake_word.is_empty() {
             return Err("wake_word must not be empty".to_string());
+        }
+        Ok(())
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CogneeConfig {
+    // Whether Cognee backend should be attempted at runtime
+    pub enabled: bool,
+    // Base URL of the Cognee sidecar HTTP service
+    pub url: String,
+    // Optional encrypted bearer token for secure local storage
+    // Use oxide_core::encryption::EncryptionManager to encrypt/decrypt
+    pub token: Option<crate::encryption::EncryptedData>,
+}
+
+impl CogneeConfig {
+    fn validate(&self) -> Result<(), String> {
+        if self.enabled && self.url.is_empty() {
+            return Err("Cognee URL must not be empty when enabled".to_string());
         }
         Ok(())
     }
@@ -90,6 +115,15 @@ impl AIProvidersConfig {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct GoogleConfig {
     pub api_key: String,
+}
+
+impl GoogleConfig {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.api_key.is_empty() {
+            return Err("Google API key cannot be empty".to_string());
+        }
+        Ok(())
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

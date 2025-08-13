@@ -4,17 +4,22 @@ use oxide_copilot::ai::AIOrchestrator;
 use oxide_copilot::copilot::CopilotAgent;
 use oxide_copilot::functions::FunctionRegistry;
 use oxide_core::config::{
-    AIProvidersConfig, CopilotConfig, GoogleConfig, GuardianConfig, OxidePilotConfig,
+    OxidePilotConfig,
 };
 use oxide_core::performance::{PerformanceMonitor, PerformanceTimer, ResourceOptimizer};
+use oxide_core::security_manager::{SecurityManager, SecurityEvent, SecurityPolicy};
+use oxide_core::input_validation::InputValidator;
 use oxide_core::types::{Context, Interaction};
 use oxide_guardian::guardian::{Guardian, SystemStatus, ThreatEvent};
-use oxide_memory::memory::{ContextQuery, MemoryEntryType, MemoryManager, MemoryStats};
+use oxide_memory::memory::{ContextQuery, MemoryManager, MemoryStats};
 use oxide_voice::voice::{GoogleSTTProvider, GoogleTTSProvider, VoiceProcessor};
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
-use tokio::sync::mpsc;
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::{mpsc, Mutex};
+use std::env;
+use crate::cognee_supervisor::CogneeSupervisor;
 
+#[derive(Clone)]
 pub struct OxideSystem {
     config: Arc<Mutex<OxidePilotConfig>>,
     guardian: Arc<Guardian>,
@@ -23,6 +28,8 @@ pub struct OxideSystem {
     voice_processor: Arc<VoiceProcessor>,
     performance_monitor: Arc<PerformanceMonitor>,
     resource_optimizer: Arc<Mutex<ResourceOptimizer>>,
+    security_manager: Arc<SecurityManager>,
+    input_validator: Arc<InputValidator>,
     is_running: Arc<Mutex<bool>>,
 }
 
@@ -35,8 +42,141 @@ impl OxideSystem {
             .validate()
             .map_err(|e| format!("Configuration validation failed: {}", e))?;
 
-        // Initialize memory manager
-        let memory_manager = Arc::new(MemoryManager::new(Some("oxide_data".to_string())));
+        // Load environment (.env support)
+        let _ = dotenv::dotenv();
+
+        // Initialize memory manager (feature-gated Cognee)
+        let memory_manager: Arc<MemoryManager> = {
+            #[cfg(feature = "cognee")]
+            {
+                // Resolve effective Cognee config from env then config, with sane defaults
+                let cfg_cognee = config.cognee.clone();
+                let env_enable = env::var("OXIDE_COGNEE_ENABLE").ok().map(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+                let enabled_bool = env_enable
+                    .or_else(|| cfg_cognee.as_ref().map(|c| c.enabled))
+                    .unwrap_or(false);
+
+                if enabled_bool {
+                    let base_url = env::var("OXIDE_COGNEE_URL")
+                        .ok()
+                        .or_else(|| cfg_cognee.as_ref().map(|c| c.url.clone()))
+                        .unwrap_or_else(|| "http://127.0.0.1:8765".to_string());
+
+                    // Prefer plaintext env token; fall back to None for now if only encrypted config is present
+                    // TODO: decrypt config token with EncryptionManager once key management is wired
+                    let token = env::var("OXIDE_COGNEE_TOKEN").ok();
+
+                    // Health check the Cognee sidecar before selecting it
+                    match CogneeSupervisor::new(base_url.clone(), token.clone()) {
+                        Ok(supervisor) => {
+                            match tokio::time::timeout(Duration::from_millis(800), supervisor.health_check()).await {
+                                Ok(Ok(())) => {
+                                    info!("Memory backend: Cognee ({}). Fallback: JSON", base_url);
+                                    Arc::new(MemoryManager::with_cognee(Some("oxide_data".to_string()), base_url, token))
+                                }
+                                Ok(Err(e)) => {
+                                    warn!("Cognee health check failed: {}. Attempting to start sidecar...", e);
+                                    // Try to autostart sidecar locally (dev-friendly). Best-effort with short timeout.
+                                    let (host, port) = {
+                                        fn parse_host_port(url: &str) -> (String, u16) {
+                                            let mut rest = url;
+                                            if let Some(idx) = url.find("://") { rest = &url[idx+3..]; }
+                                            let rest = rest.split('/').next().unwrap_or(rest);
+                                            let mut parts = rest.split(':');
+                                            let h = parts.next().unwrap_or("127.0.0.1").to_string();
+                                            let p = parts.next().and_then(|s| s.parse::<u16>().ok()).unwrap_or(8765);
+                                            (h, p)
+                                        }
+                                        parse_host_port(&base_url)
+                                    };
+                                    let working_dir = {
+                                        use std::path::PathBuf;
+                                        let candidates = [
+                                            PathBuf::from("../cognee-sidecar"),
+                                            PathBuf::from("cognee-sidecar"),
+                                        ];
+                                        let found = candidates.iter().find(|p| p.join("cognee_sidecar").join("app.py").exists());
+                                        found.cloned()
+                                    };
+                                    let ensured = tokio::time::timeout(
+                                        Duration::from_secs(3),
+                                        supervisor.ensure_running(Some("python".to_string()), Some(host), Some(port), working_dir)
+                                    ).await;
+                                    match ensured {
+                                        Ok(Ok(())) => {
+                                            info!("Cognee sidecar started and healthy. Selecting Cognee backend.");
+                                            Arc::new(MemoryManager::with_cognee(Some("oxide_data".to_string()), base_url, token))
+                                        }
+                                        Ok(Err(e2)) => {
+                                            warn!("Failed to start Cognee sidecar: {}. Falling back to JSON backend.", e2);
+                                            Arc::new(MemoryManager::new(Some("oxide_data".to_string())))
+                                        }
+                                        Err(_) => {
+                                            warn!("Timed out starting Cognee sidecar. Falling back to JSON backend.");
+                                            Arc::new(MemoryManager::new(Some("oxide_data".to_string())))
+                                        }
+                                    }
+                                }
+                                Err(_) => {
+                                    warn!("Cognee health check timed out. Attempting to start sidecar...");
+                                    let (host, port) = {
+                                        fn parse_host_port(url: &str) -> (String, u16) {
+                                            let mut rest = url;
+                                            if let Some(idx) = url.find("://") { rest = &url[idx+3..]; }
+                                            let rest = rest.split('/').next().unwrap_or(rest);
+                                            let mut parts = rest.split(':');
+                                            let h = parts.next().unwrap_or("127.0.0.1").to_string();
+                                            let p = parts.next().and_then(|s| s.parse::<u16>().ok()).unwrap_or(8765);
+                                            (h, p)
+                                        }
+                                        parse_host_port(&base_url)
+                                    };
+                                    let working_dir = {
+                                        use std::path::PathBuf;
+                                        let candidates = [
+                                            PathBuf::from("../cognee-sidecar"),
+                                            PathBuf::from("cognee-sidecar"),
+                                        ];
+                                        let found = candidates.iter().find(|p| p.join("cognee_sidecar").join("app.py").exists());
+                                        found.cloned()
+                                    };
+                                    let ensured = tokio::time::timeout(
+                                        Duration::from_secs(3),
+                                        supervisor.ensure_running(Some("python".to_string()), Some(host), Some(port), working_dir)
+                                    ).await;
+                                    match ensured {
+                                        Ok(Ok(())) => {
+                                            info!("Cognee sidecar started and healthy. Selecting Cognee backend.");
+                                            Arc::new(MemoryManager::with_cognee(Some("oxide_data".to_string()), base_url, token))
+                                        }
+                                        Ok(Err(e2)) => {
+                                            warn!("Failed to start Cognee sidecar: {}. Falling back to JSON backend.", e2);
+                                            Arc::new(MemoryManager::new(Some("oxide_data".to_string())))
+                                        }
+                                        Err(_) => {
+                                            warn!("Timed out starting Cognee sidecar. Falling back to JSON backend.");
+                                            Arc::new(MemoryManager::new(Some("oxide_data".to_string())))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            warn!("Failed to initialize Cognee supervisor: {}. Falling back to JSON backend.", e);
+                            Arc::new(MemoryManager::new(Some("oxide_data".to_string())))
+                        }
+                    }
+                } else {
+                    info!("Memory backend: JSON (Cognee disabled)");
+                    Arc::new(MemoryManager::new(Some("oxide_data".to_string())))
+                }
+            }
+            #[cfg(not(feature = "cognee"))]
+            {
+                info!("Memory backend: JSON (binary built without Cognee feature)");
+                Arc::new(MemoryManager::new(Some("oxide_data".to_string())))
+            }
+        };
         memory_manager.initialize().await?;
 
         // Initialize Guardian Agent
@@ -62,10 +202,12 @@ impl OxideSystem {
         let voice_processor =
             Arc::new(VoiceProcessor::new(wake_words, stt_provider, tts_provider)?);
 
+        let input_devices = voice_processor.get_input_devices().await;
+        let output_devices = voice_processor.get_output_devices().await;
         info!(
             "Audio devices - Input: {:?}, Output: {:?}",
-            voice_processor.get_input_devices(),
-            voice_processor.get_output_devices()
+            input_devices,
+            output_devices
         );
 
         // Initialize Performance Monitor
@@ -73,6 +215,12 @@ impl OxideSystem {
         let resource_optimizer = Arc::new(Mutex::new(ResourceOptimizer::new(Arc::clone(
             &performance_monitor,
         ))));
+
+        // Initialize security components
+        let encryption_key = oxide_core::encryption::EncryptionManager::generate_key();
+        let security_manager = Arc::new(SecurityManager::new(&encryption_key)
+            .map_err(|e| format!("Failed to initialize security manager: {}", e))?);
+        let input_validator = Arc::new(InputValidator::new());
 
         let system = Self {
             config: Arc::new(Mutex::new(config)),
@@ -82,6 +230,8 @@ impl OxideSystem {
             voice_processor,
             performance_monitor,
             resource_optimizer,
+            security_manager,
+            input_validator,
             is_running: Arc::new(Mutex::new(false)),
         };
 
@@ -93,7 +243,7 @@ impl OxideSystem {
         info!("Starting Oxide Pilot System...");
 
         {
-            let mut running = self.is_running.lock().unwrap();
+            let mut running = self.is_running.lock().await;
             if *running {
                 return Err("System is already running".to_string());
             }
@@ -118,7 +268,7 @@ impl OxideSystem {
         info!("Stopping Oxide Pilot System...");
 
         {
-            let mut running = self.is_running.lock().unwrap();
+            let mut running = self.is_running.lock().await;
             *running = false;
         }
 
@@ -139,7 +289,7 @@ impl OxideSystem {
             info!("Main system loop started");
 
             while {
-                let running = is_running.lock().unwrap();
+                let running = is_running.lock().await;
                 *running
             } {
                 tokio::select! {
@@ -160,10 +310,12 @@ impl OxideSystem {
 
                                         // Process user input with Copilot
                                         let context = Context {
-                                            system_state: Default::default(),
-                                            user_history: Vec::new(),
-                                            relevant_events: Vec::new(),
-                                            knowledge_entries: Vec::new(),
+                                            active_window: None,
+                                            system_status: Some(serde_json::json!({
+                                                "source": "voice_input",
+                                                "timestamp": Utc::now()
+                                            })),
+                                            recent_events: Vec::new(),
                                         };
 
                                         match copilot.handle_user_input(transcription.clone(), context.clone()).await {
@@ -222,7 +374,7 @@ impl OxideSystem {
 
     async fn perform_maintenance(memory_manager: &Arc<MemoryManager>) {
         // Log system statistics
-        let stats = memory_manager.get_memory_stats();
+        let stats = memory_manager.get_memory_stats().await;
         info!(
             "Memory stats - Entries: {}, Patterns: {}",
             stats.total_entries, stats.total_patterns
@@ -254,17 +406,20 @@ impl OxideSystem {
         let relevant_memories = self.memory_manager.retrieve_context(&context_query).await?;
 
         let context = Context {
-            system_state: Default::default(),
-            user_history: Vec::new(),
-            relevant_events: Vec::new(),
-            knowledge_entries: relevant_memories.into_iter().map(|m| m.content).collect(),
+            active_window: None,
+            system_status: Some(serde_json::json!({
+                "memory_entries": relevant_memories.len(),
+                "timestamp": Utc::now()
+            })),
+            recent_events: Vec::new(),
         };
 
         // Process with Copilot
         let response = self
             .copilot
             .handle_user_input(input.clone(), context.clone())
-            .await?;
+            .await
+            .map_err(|e| e.to_string())?;
 
         // Store interaction
         let interaction = Interaction {
@@ -288,26 +443,28 @@ impl OxideSystem {
         self.guardian.get_threat_history()
     }
 
-    pub fn get_memory_stats(&self) -> MemoryStats {
-        self.memory_manager.get_memory_stats()
+    pub async fn get_memory_stats(&self) -> MemoryStats {
+        self.memory_manager.get_memory_stats().await
     }
 
     pub async fn update_config(&self, new_config: OxidePilotConfig) -> Result<(), String> {
         new_config.validate()?;
 
-        let mut config = self.config.lock().unwrap();
-        *config = new_config.clone();
+        {
+            let mut config = self.config.lock().await;
+            *config = new_config.clone();
+        }
 
         // Update individual components
         self.guardian.update_config(new_config.guardian);
-        self.copilot.update_config(new_config.copilot);
+        self.copilot.update_config(new_config.copilot).await;
 
         info!("System configuration updated");
         Ok(())
     }
 
-    pub fn get_config(&self) -> OxidePilotConfig {
-        self.config.lock().unwrap().clone()
+    pub async fn get_config(&self) -> OxidePilotConfig {
+        self.config.lock().await.clone()
     }
 
     pub async fn record_audio(&self, duration_secs: f32) -> Result<Vec<u8>, String> {
@@ -318,70 +475,118 @@ impl OxideSystem {
         self.voice_processor.play_audio(audio_data).await
     }
 
-    pub fn get_audio_devices(&self) -> (Vec<String>, Vec<String>) {
+    pub async fn get_audio_devices(&self) -> (Vec<String>, Vec<String>) {
         (
-            self.voice_processor.get_input_devices(),
-            self.voice_processor.get_output_devices(),
+            self.voice_processor.get_input_devices().await,
+            self.voice_processor.get_output_devices().await,
         )
     }
 
-    pub fn get_input_volume(&self) -> Result<f32, String> {
-        self.voice_processor.get_input_volume()
+    pub async fn get_input_volume(&self) -> Result<f32, String> {
+        self.voice_processor.get_input_volume().await
     }
 
-    pub fn get_performance_metrics(&self) -> PerformanceMetrics {
-        self.performance_monitor.get_metrics()
-    }
-
-    pub fn get_performance_score(&self) -> f32 {
-        self.performance_monitor.get_performance_score()
-    }
-
-    pub async fn optimize_performance(&self) -> Vec<String> {
-        let optimizer = self.resource_optimizer.lock().unwrap();
-        optimizer.optimize_if_needed()
-    }
-
-    pub fn get_performance_metrics(&self) -> oxide_core::performance::PerformanceMetrics {
+    pub async fn get_performance_metrics(&self) -> oxide_core::performance::PerformanceMetrics {
         // Update system metrics
         let system_status = self.guardian.get_system_status();
         self.performance_monitor
-            .update_system_metrics(system_status.cpu_usage, system_status.memory_usage.0);
+            .update_system_metrics(system_status.cpu_usage, system_status.memory_usage.0)
+            .await;
 
-        self.performance_monitor.get_metrics()
+        self.performance_monitor.get_metrics().await
     }
 
-    pub fn get_performance_score(&self) -> f32 {
-        self.performance_monitor.get_performance_score()
+    pub async fn get_performance_score(&self) -> f32 {
+        self.performance_monitor.get_performance_score().await
     }
 
-    pub fn optimize_performance(&self) -> Vec<String> {
-        let optimizer = self.resource_optimizer.lock().unwrap();
-        optimizer.optimize_if_needed()
+    pub async fn optimize_performance(&self) -> Vec<String> {
+        let optimizer = self.resource_optimizer.lock().await;
+        optimizer.optimize_if_needed().await
+    }
+
+    pub async fn get_performance_alerts(&self) -> Vec<oxide_core::performance::PerformanceAlert> {
+        self.performance_monitor.get_alerts().await
+    }
+
+    pub async fn clear_performance_alerts(&self) {
+        self.performance_monitor.clear_alerts().await
+    }
+
+    pub async fn get_operation_profiles(&self) -> std::collections::HashMap<String, oxide_core::performance::PerformanceProfile> {
+        self.performance_monitor.get_operation_profiles().await
+    }
+
+    pub async fn set_performance_monitoring(&self, enabled: bool) {
+        self.performance_monitor.set_monitoring_enabled(enabled).await
+    }
+
+    // Security-related methods
+    pub async fn validate_input(&self, field_name: &str, value: &str) -> Result<String, String> {
+        self.input_validator.validate(field_name, value)
+            .map_err(|e| e.to_string())
+    }
+
+    pub async fn create_security_session(
+        &self,
+        user_id: String,
+        permissions: Vec<String>,
+        ip_address: Option<String>,
+        user_agent: Option<String>,
+    ) -> Result<String, String> {
+        let session = self.security_manager
+            .create_session(user_id, permissions, ip_address, user_agent)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        Ok(session.session_id)
+    }
+
+    pub async fn validate_security_session(&self, session_id: &str) -> Result<bool, String> {
+        match self.security_manager.validate_session(session_id).await {
+            Ok(_) => Ok(true),
+            Err(_) => Ok(false),
+        }
+    }
+
+    pub async fn check_security_permission(&self, session_id: &str, permission: &str) -> Result<bool, String> {
+        self.security_manager
+            .check_permission(session_id, permission)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    pub async fn invalidate_security_session(&self, session_id: &str) -> Result<(), String> {
+        self.security_manager
+            .invalidate_session(session_id)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    pub async fn get_security_events(&self, limit: Option<usize>) -> Vec<SecurityEvent> {
+        self.security_manager.get_security_events(limit).await
+    }
+
+    pub async fn update_security_policy(&self, policy: SecurityPolicy) {
+        self.security_manager.update_security_policy(policy).await
+    }
+
+    pub async fn get_security_policy(&self) -> SecurityPolicy {
+        self.security_manager.get_security_policy().await
+    }
+
+    pub async fn check_rate_limit(&self, identifier: &str) -> Result<(), String> {
+        self.security_manager
+            .check_rate_limit(identifier)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    pub async fn cleanup_security_sessions(&self) {
+        self.security_manager.cleanup_expired_sessions().await
     }
 }
 
 // Default configuration for easy setup
-impl Default for OxidePilotConfig {
-    fn default() -> Self {
-        Self {
-            guardian: GuardianConfig {
-                enabled: true,
-                monitor_interval_secs: 10,
-            },
-            copilot: CopilotConfig {
-                enabled: true,
-                wake_word: "Hey Oxide".to_string(),
-            },
-            ai_providers: AIProvidersConfig {
-                google: Some(GoogleConfig {
-                    api_key: "your-google-api-key".to_string(),
-                }),
-                openai: None,
-                anthropic: None,
-                azure_openai: None,
-                ollama: None,
-            },
-        }
-    }
-}
+// Note: OxidePilotConfig is defined in oxide-core, so we can't implement Default here
+// This implementation should be moved to oxide-core where OxidePilotConfig is defined

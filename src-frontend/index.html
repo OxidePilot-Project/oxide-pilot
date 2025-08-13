@@ -1,0 +1,59 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Oxide Pilot</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 0; padding: 2rem; background: #0b0f17; color: #e7edf9; }
+      .card { background: #111828; border: 1px solid #243045; border-radius: 12px; padding: 1.5rem; max-width: 720px; }
+      h1 { margin-top: 0; }
+      .ok { color: #34d399; }
+      .warn { color: #fbbf24; }
+      .err { color: #f87171; }
+      button { background: #2563eb; color: white; border: 0; padding: 0.6rem 1rem; border-radius: 8px; cursor: pointer; }
+      button:disabled { opacity: 0.6; cursor: not-allowed; }
+      code { background: #0f172a; padding: 0.2rem 0.4rem; border-radius: 6px; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Oxide Pilot</h1>
+      <p>Estado de autenticación y backend:</p>
+      <ul>
+        <li>Auth: <span id="auth">checking...</span></li>
+      </ul>
+      <div style="display:flex; gap:0.5rem; margin-top:1rem;">
+        <button id="check">Revisar estado</button>
+        <button id="send">Enviar mensaje de prueba</button>
+      </div>
+      <pre id="out" style="margin-top:1rem; white-space:pre-wrap;"></pre>
+      <p style="opacity:0.8;">Puedes configurar <code>src-tauri/.env</code> y relanzar.</p>
+    </div>
+    <script type="module">
+      import { invoke } from "@tauri-apps/api/tauri";
+      const el = (id)=>document.getElementById(id);
+      async function refresh() {
+        el('auth').textContent = 'checking...';
+        try {
+          const status = await invoke('startup_check');
+          el('auth').innerHTML = `<span class="ok">${status}</span>`;
+        } catch (e) {
+          el('auth').innerHTML = `<span class="warn">${e}</span>`;
+        }
+      }
+      async function testSend(){
+        el('out').textContent='';
+        try {
+          const res = await invoke('send_message_to_gemini', { message: 'Hello from UI', model: null });
+          el('out').textContent = `Gemini: ${res}`;
+        } catch(e) {
+          el('out').textContent = `Error: ${e}`;
+        }
+      }
+      el('check').addEventListener('click', refresh);
+      el('send').addEventListener('click', testSend);
+      refresh();
+    </script>
+  </body>
+</html>

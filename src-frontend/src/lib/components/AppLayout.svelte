@@ -1,11 +1,16 @@
 <script lang="ts">
 import { onMount } from "svelte";
 import { writable } from "svelte/store";
+import GoogleAuthSetup from "./GoogleAuthSetup.svelte";
+import SystemDashboard from "./SystemDashboard.svelte";
+import AdvancedSettings from "./AdvancedSettings.svelte";
+import ConversationInterface from "./ConversationInterface.svelte";
+import PatternDashboard from "./PatternDashboard.svelte";
 
 type ActiveTab = "dashboard" | "conversation" | "settings" | "advanced";
 
 const activeTab = writable<ActiveTab>("dashboard");
-let _isAuthSetupComplete = false;
+let isAuthSetupComplete = false;
 
 onMount(async () => {
   // Check if Google authentication is set up
@@ -15,15 +20,15 @@ onMount(async () => {
 async function checkAuthStatus() {
   // This would check if Google credentials are configured
   // For now, we'll assume they need to be set up
-  _isAuthSetupComplete = false;
+  isAuthSetupComplete = false;
 }
 
-function _setActiveTab(tab: ActiveTab) {
+function setActiveTab(tab: ActiveTab) {
   activeTab.set(tab);
 }
 
-function _onAuthComplete() {
-  _isAuthSetupComplete = true;
+function onAuthComplete() {
+  isAuthSetupComplete = true;
   activeTab.set("dashboard");
 }
 </script>
@@ -78,7 +83,7 @@ function _onAuthComplete() {
       </div>
     {:else}
       {#if $activeTab === 'dashboard'}
-        <SystemDashboard />
+        <PatternDashboard />
       {:else if $activeTab === 'conversation'}
         <div class="conversation-container">
           <ConversationInterface />

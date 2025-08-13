@@ -1,110 +1,63 @@
 {
-  "build": {
-    "beforeDevCommand": "cd src-frontend && npm run dev",
-    "beforeBuildCommand": "cd src-frontend && npm run build",
-    "devPath": "http://localhost:5173",
-    "distDir": "../src-frontend/dist",
-    "withGlobalTauri": false
-  },
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/v1.5.0/tooling/cli/schema.json",
   "package": {
     "productName": "Oxide Pilot",
-    "version": "1.0.0"
+    "version": "0.1.0"
+  },
+  "build": {
+    "beforeDevCommand": null,
+    "beforeBuildCommand": "npm --prefix ../src-frontend ci && npm --prefix ../src-frontend run build",
+    "devPath": "../src-frontend/dist",
+    "distDir": "../src-frontend/dist"
   },
   "tauri": {
-    "allowlist": {
-      "all": false,
-      "shell": {
-        "all": false,
-        "open": true
-      },
-      "dialog": {
-        "all": false,
-        "open": true,
-        "save": true
-      },
-      "fs": {
-        "all": true,
-        "scope": ["$APPDATA", "$APPDATA/**", "$LOCALDATA", "$LOCALDATA/**"]
-      },
-      "notification": {
-        "all": true
-      },
-      "path": {
-        "all": true
-      },
-      "process": {
-        "all": false,
-        "relaunch": true,
-        "exit": true
-      },
-      "window": {
-        "all": false,
-        "close": true,
-        "hide": true,
-        "show": true,
-        "maximize": true,
-        "minimize": true,
-        "unmaximize": true,
-        "unminimize": true,
-        "startDragging": true
+    "windows": [
+      {
+        "title": "Oxide Pilot",
+        "width": 1024,
+        "height": 768,
+        "resizable": true
       }
-    },
+    ],
     "bundle": {
       "active": true,
-      "targets": "all",
-      "identifier": "com.oxidepilot.app",
-      "icon": [
-        "icons/32x32.png",
-        "icons/128x128.png",
-        "icons/128x128@2x.png",
-        "icons/icon.icns",
-        "icons/icon.ico"
+      "identifier": "com.oxide.pilot",
+      "publisher": "Oxide Systems",
+      "copyright": "© 2025 Oxide Systems",
+      "targets": [
+        "nsis",
+        "msi"
       ],
-      "resources": [],
-      "externalBin": [],
-      "copyright": "Copyright © 2024 Oxide Pilot Team",
-      "category": "Utility",
-      "shortDescription": "AI-Powered System Guardian & Assistant",
-      "longDescription": "Oxide Pilot is a revolutionary agentic system that combines advanced system monitoring, EDR security capabilities, and conversational AI assistance. Built with Rust for maximum performance and security, it features a dual-agent architecture that provides both continuous protection and on-demand assistance.",
-      "deb": {
-        "depends": ["libasound2-dev", "libssl-dev"]
-      },
-      "macOS": {
-        "frameworks": [],
-        "minimumSystemVersion": "10.15",
-        "exceptionDomain": ""
-      },
       "windows": {
-        "certificateThumbprint": null,
-        "digestAlgorithm": "sha256",
-        "timestampUrl": ""
+        "nsis": {
+          "displayLanguageSelector": false
+        }
       }
     },
     "security": {
       "csp": null
     },
-    "updater": {
-      "active": false
-    },
-    "windows": [
-      {
-        "fullscreen": false,
-        "resizable": true,
-        "title": "Oxide Pilot",
-        "width": 1200,
-        "height": 800,
-        "minWidth": 800,
-        "minHeight": 600,
-        "center": true,
-        "decorations": true,
-        "alwaysOnTop": false,
-        "skipTaskbar": false
-      }
-    ],
-    "systemTray": {
-      "iconPath": "icons/icon.png",
-      "iconAsTemplate": true,
-      "menuOnLeftClick": false
+    "allowlist": {
+      "all": false,
+      "app": { "all": true },
+      "window": { "all": true },
+      "dialog": { "all": false, "open": true, "save": true, "ask": true, "confirm": true },
+      "fs": {
+        "all": false,
+        "writeFile": true,
+        "readDir": true,
+        "createDir": true,
+        "renameFile": true,
+        "readFile": true,
+        "copyFile": true,
+        "exists": true,
+        "removeDir": true,
+        "removeFile": true
+      },
+      "http": { "all": true },
+      "path": { "all": true },
+      "notification": { "all": true },
+      "shell": { "all": false, "open": true }
     }
   }
 }

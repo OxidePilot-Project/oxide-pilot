@@ -25,7 +25,7 @@ pub fn watch_config(path: &Path, sender: Sender<OxidePilotConfig>) -> Result<(),
             sender.send(config).map_err(|e| e.to_string())?;
         },
         Err(e) => {
-            eprintln!("Initial config load error: {}", e);
+            eprintln!("Initial config load error: {e}");
         }
     }
 
@@ -40,12 +40,12 @@ pub fn watch_config(path: &Path, sender: Sender<OxidePilotConfig>) -> Result<(),
                             sender.send(config).map_err(|e| e.to_string())?;
                         },
                         Err(e) => {
-                            eprintln!("Config reload error: {}", e);
+                            eprintln!("Config reload error: {e}");
                         }
                     }
                 }
             },
-            Err(e) => eprintln!("watch error: {:?}", e),
+            Err(e) => eprintln!("watch error: {e:?}"),
         }
     }
     Ok(())

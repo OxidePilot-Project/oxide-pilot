@@ -4,7 +4,7 @@ use rdev::{simulate, Button, EventType, Key};
 use screenshots::Screen;
 use std::time::Duration;
 use thiserror::Error;
-use tokio::time::sleep;
+// use tokio::time::sleep; // Reserved for future use
 
 #[derive(Error, Debug)]
 pub enum RPAError {
@@ -20,13 +20,19 @@ pub enum RPAError {
 
 pub struct MouseController;
 
+impl Default for MouseController {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MouseController {
     pub fn new() -> Self {
         Self {}
     }
 
     pub fn move_to(&self, x: i32, y: i32) {
-        info!("Moving mouse to ({}, {})", x, y);
+        info!("Moving mouse to ({x}, {y})");
         simulate(&EventType::MouseMove {
             x: x as f64,
             y: y as f64,
@@ -35,18 +41,24 @@ impl MouseController {
     }
 
     pub fn click(&self, button: Button) {
-        info!("Clicking mouse button: {:?}", button);
+        info!("Clicking mouse button: {button:?}");
         simulate(&EventType::ButtonPress(button)).unwrap();
         simulate(&EventType::ButtonRelease(button)).unwrap();
     }
 
     pub fn scroll(&self, delta_x: i32, delta_y: i32) {
-        info!("Scrolling mouse by ({}, {})", delta_x, delta_y);
-        simulate(&EventType::Wheel { delta_x, delta_y }).unwrap();
+        info!("Scrolling mouse by ({delta_x}, {delta_y})");
+        simulate(&EventType::Wheel { delta_x: delta_x.into(), delta_y: delta_y.into() }).unwrap();
     }
 }
 
 pub struct KeyboardController;
+
+impl Default for KeyboardController {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl KeyboardController {
     pub fn new() -> Self {
@@ -54,7 +66,7 @@ impl KeyboardController {
     }
 
     pub fn type_text(&self, text: &str) {
-        info!("Typing text: {}", text);
+        info!("Typing text: {text}");
         for char_code in text.chars() {
             let key = match char_code {
                 'a' => Key::KeyA,
@@ -122,10 +134,10 @@ impl KeyboardController {
                 ' ' => Key::Space,
                 '.' => Key::Dot,
                 ',' => Key::Comma,
-                '!' => Key::ExclamationMark,
-                '?' => Key::QuestionMark,
+                '!' => Key::Num1, // Fallback for special characters
+                '?' => Key::Slash, // Fallback for special characters
                 _ => {
-                    error!("Unsupported character for typing: {}", char_code);
+                    error!("Unsupported character for typing: {char_code}");
                     continue;
                 }
             };
@@ -136,17 +148,23 @@ impl KeyboardController {
     }
 
     pub fn press_key(&self, key: Key) {
-        info!("Pressing key: {:?}", key);
+        info!("Pressing key: {key:?}");
         simulate(&EventType::KeyPress(key)).unwrap();
     }
 
     pub fn release_key(&self, key: Key) {
-        info!("Releasing key: {:?}", key);
+        info!("Releasing key: {key:?}");
         simulate(&EventType::KeyRelease(key)).unwrap();
     }
 }
 
 pub struct ScreenCapture;
+
+impl Default for ScreenCapture {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl ScreenCapture {
     pub fn new() -> Self {
@@ -158,7 +176,10 @@ impl ScreenCapture {
         let screens = Screen::all().map_err(|e| e.to_string())?;
         if let Some(screen) = screens.first() {
             let image = screen.capture().map_err(|e| e.to_string())?;
-            Ok(image)
+            // Convert screenshots::Image to image::ImageBuffer
+            let rgba_image = ImageBuffer::from_raw(image.width(), image.height(), image.rgba().to_vec())
+                .ok_or("Failed to convert image format")?;
+            Ok(rgba_image)
         } else {
             Err("No screens found.".to_string())
         }
@@ -172,15 +193,17 @@ impl ScreenCapture {
         height: u32,
     ) -> Result<ImageBuffer<Rgba<u8>, Vec<u8>>, String> {
         info!(
-            "Capturing screen area: x={}, y={}, width={}, height={}",
-            x, y, width, height
+            "Capturing screen area: x={x}, y={y}, width={width}, height={height}"
         );
         let screens = Screen::all().map_err(|e| e.to_string())?;
         if let Some(screen) = screens.first() {
             let image = screen
-                .capture_area(x, y, width, height)
+                .capture_area(x.try_into().unwrap_or(0), y.try_into().unwrap_or(0), width, height)
                 .map_err(|e| e.to_string())?;
-            Ok(image)
+            // Convert screenshots::Image to image::ImageBuffer
+            let rgba_image = ImageBuffer::from_raw(image.width(), image.height(), image.rgba().to_vec())
+                .ok_or("Failed to convert image format")?;
+            Ok(rgba_image)
         } else {
             Err("No screens found.".to_string())
         }

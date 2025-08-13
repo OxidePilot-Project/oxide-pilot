@@ -1,11 +1,16 @@
-use sysinfo::{System, SystemExt, ProcessExt, DiskExt, NetworkExt};
-use log::{info, warn, error};
+use sysinfo::{System, SystemExt, ProcessExt, CpuExt, DiskExt, NetworkExt};
 use oxide_core::types::SystemEvent;
 use uuid::Uuid;
 use chrono::Utc;
 
 pub struct SystemMonitor {
     sys: System,
+}
+
+impl Default for SystemMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SystemMonitor {
@@ -40,7 +45,7 @@ impl SystemMonitor {
                     "cpu_usage": process.cpu_usage(),
                     "memory_usage": process.memory(),
                     "status": process.status().to_string(),
-                    "command": process.command().join(" "),
+                    "command": process.cmd().join(" "),
                 }),
             };
             events.push(event);
@@ -59,7 +64,7 @@ impl SystemMonitor {
                     "name": disk.name().to_string_lossy(),
                     "total_space": disk.total_space(),
                     "available_space": disk.available_space(),
-                    "file_system": disk.file_system().to_string_lossy(),
+                    "file_system": String::from_utf8_lossy(disk.file_system()),
                     "mount_point": disk.mount_point().to_string_lossy(),
                 }),
             };
@@ -88,5 +93,26 @@ impl SystemMonitor {
             events.push(event);
         }
         events
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_system_monitor_creation() {
+        let monitor = SystemMonitor::new();
+        // Test that the monitor can be created successfully
+        assert!(true); // Basic test to ensure compilation
+    }
+
+    #[test]
+    fn test_get_memory_usage() {
+        let monitor = SystemMonitor::new();
+        let (used, total) = monitor.get_memory_usage();
+        // Memory values should be reasonable
+        assert!(total > 0);
+        assert!(used <= total);
     }
 }

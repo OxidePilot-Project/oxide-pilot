@@ -1,3 +1,50 @@
+# Oxide Pilot
+
+Oxide Pilot es un asistente agentico con backend en Rust (Tauri) y UI Svelte opcional. Incluye agentes Guardian/Copilot, memoria local (JSON) y soporte opcional para Cognee via sidecar Python.
+
+## Requisitos
+- Windows 10/11 x64
+- Rust + cargo
+- (Opcional) Node.js para construir la UI
+- (Opcional) Python 3.8–3.12 para sidecar Cognee
+
+## Desarrollo rápido
+
+PowerShell:
+
+```powershell
+# Lanzador unificado de desarrollo (gestiona .profraw y frontend)
+pwsh -File scripts/oxide-dev.ps1
+
+# Con memoria Cognee y sidecar Python
+pwsh -File scripts/oxide-dev.ps1 -UseCognee -StartSidecar
+
+# Opcional: qué hacer con artefactos *.profraw (move|delete|none)
+pwsh -File scripts/oxide-dev.ps1 -ProfrawAction move -ProfrawDir dev-artifacts/coverage
+```
+
+Notas:
+- El script crea/ajusta `src-tauri/.env` y construye `src-frontend/` si existe.
+- Los artefactos `*.profraw` (LLVM coverage) se mueven o eliminan según parámetros.
+
+## Pruebas
+```
+cargo test --workspace
+```
+
+## Build de instalador Windows
+PowerShell:
+
+```powershell
+# Requisitos: cargo-tauri, (opcional) WiX/NSIS según target
+pwsh -File scripts/build-windows.ps1
+# Con Cognee habilitado durante build
+pwsh -File scripts/build-windows.ps1 -UseCognee
+```
+
+## Plan de implementación (100%)
+Consulta docs/IMPLEMENTATION-TASKS.md para el desglose de tareas, estados y próximos pasos.
+
 # 🚀 Oxide Pilot v1.0
 
 > **El Primer Asistente de Sistema Agéntico del Mundo**

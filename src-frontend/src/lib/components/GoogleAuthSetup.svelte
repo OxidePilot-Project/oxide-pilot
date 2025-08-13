@@ -3,18 +3,75 @@ import { invoke } from "@tauri-apps/api/tauri";
 import { createEventDispatcher } from "svelte";
 import { writable } from "svelte/store";
 
+// Check if running in Tauri context - multiple detection methods
+const isTauri = typeof window !== 'undefined' && (
+  '__TAURI__' in window ||
+  '__TAURI_IPC__' in window ||
+  window.location.protocol === 'tauri:' ||
+  (window as any).__TAURI_METADATA__ !== undefined
+);
+
 const dispatch = createEventDispatcher();
 
-const clientId = "";
-const clientSecret = "";
+type AuthMethod = "api_key" | "oauth";
+
+let authMethod: AuthMethod = "api_key";
+let apiKey = "";
+let clientId = "";
+let clientSecret = "";
 const authStatus = writable<{
   message: string;
   type: "success" | "error" | "info" | "warning";
 }>({ message: "", type: "info" });
-let _isAuthenticating = false;
+let isAuthenticating = false;
 let showInstructions = false;
+let availableModels: string[] = [];
 
-async function _saveClientCredentials() {
+async function saveApiKey() {
+  if (!apiKey.trim()) {
+    authStatus.set({
+      message: "Please enter your Google API Key",
+      type: "warning",
+    });
+    return;
+  }
+
+  authStatus.set({ message: "Validating and saving API key...", type: "info" });
+
+  // Check if we're in Tauri context
+  if (!isTauri) {
+    authStatus.set({
+      message: "Error: Not running in Tauri context. Please use the desktop application.",
+      type: "error",
+    });
+    return;
+  }
+
+  try {
+    // For API key method, use the correct function
+    await invoke("set_google_api_key", {
+      apiKey: apiKey
+    });
+    authStatus.set({
+      message: "API key saved successfully!",
+      type: "success",
+    });
+
+    // Dispatch success event
+    dispatch("authSuccess", { method: "api_key", apiKey });
+
+    // Dispatch event to parent component
+    dispatch("authComplete");
+  } catch (error) {
+    console.error("API key validation failed:", error);
+    authStatus.set({
+      message: `Failed to save API key: ${error}`,
+      type: "error",
+    });
+  }
+}
+
+async function saveClientCredentials() {
   if (!clientId.trim() || !clientSecret.trim()) {
     authStatus.set({
       message: "Please enter both Client ID and Client Secret",
@@ -24,6 +81,16 @@ async function _saveClientCredentials() {
   }
 
   authStatus.set({ message: "Saving client credentials...", type: "info" });
+
+  // Check if we're in Tauri context
+  if (!isTauri) {
+    authStatus.set({
+      message: "Error: Not running in Tauri context. Please use the desktop application.",
+      type: "error",
+    });
+    return;
+  }
+
   try {
     await invoke("set_google_client_credentials", { clientId, clientSecret });
     authStatus.set({
@@ -40,8 +107,8 @@ async function _saveClientCredentials() {
   }
 }
 
-async function _startGoogleAuth() {
-  if (!clientId.trim() || !clientSecret.trim()) {
+async function startGoogleAuth() {
+  if (authMethod === "oauth" && (!clientId.trim() || !clientSecret.trim())) {
     authStatus.set({
       message: "Please save client credentials first",
       type: "warning",
@@ -49,21 +116,28 @@ async function _startGoogleAuth() {
     return;
   }
 
-  _isAuthenticating = true;
+  isAuthenticating = true;
   authStatus.set({
     message: "Initiating Google authentication flow...",
     type: "info",
   });
 
-  try {
-    const _accessToken = await invoke("authenticate_google_command");
+  // Check if we're in Tauri context
+  if (!isTauri) {
     authStatus.set({
-      message: `Google authentication successful! System is now ready to use.`,
-      type: "success",
+      message: "Error: Not running in Tauri context. Please use the desktop application.",
+      type: "error",
     });
+    isAuthenticating = false;
+    return;
+  }
 
-    // Dispatch event to parent component
-    dispatch("authComplete");
+  try {
+    const result = await invoke("authenticate_google_command");
+    authStatus.set({
+      message: `Authentication flow started: ${result}`,
+      type: "info",
+    });
   } catch (error) {
     authStatus.set({
       message: `Error during Google authentication: ${error}`,
@@ -71,94 +145,266 @@ async function _startGoogleAuth() {
     });
     console.error("Error during Google authentication:", error);
   } finally {
-    _isAuthenticating = false;
+    isAuthenticating = false;
   }
 }
 
-function _toggleInstructions() {
+function toggleInstructions() {
   showInstructions = !showInstructions;
+}
+
+function switchAuthMethod(method: AuthMethod) {
+  authMethod = method;
+  authStatus.set({ message: "", type: "info" });
 }
 </script>
 
 <div class="google-auth-setup">
-  <div class="header">
-    <h2>🔐 Google API Configuration</h2>
-    <button class="help-button" on:click={toggleInstructions}>
-      {showInstructions ? '❌' : '❓'} {showInstructions ? 'Hide' : 'Help'}
-    </button>
+  <div class="auth-header">
+    <div class="header-content">
+      <div class="logo-container">
+        <div class="logo-icon">🔐</div>
+        <h2>Google Gemini API Configuration</h2>
+      </div>
+      <button class="help-button" on:click={toggleInstructions} aria-label={showInstructions ? 'Hide help' : 'Show help'}>
+        {showInstructions ? '✕' : '❓'}
+      </button>
+    </div>
+    <p class="header-subtitle">Connect Oxide Pilot to Google's powerful AI models</p>
+  </div>
+
+  <!-- Auth Method Selection -->
+  <div class="auth-method-selector">
+    <div class="method-option {authMethod === 'api_key' ? 'active' : ''}" on:click={() => switchAuthMethod('api_key')}>
+      <div class="method-icon">🔑</div>
+      <div class="method-content">
+        <h3>API Key</h3>
+        <p>Simple setup for personal use</p>
+      </div>
+    </div>
+    <div class="method-option {authMethod === 'oauth' ? 'active' : ''}" on:click={() => switchAuthMethod('oauth')}>
+      <div class="method-icon">🔐</div>
+      <div class="method-content">
+        <h3>OAuth 2.0</h3>
+        <p>Secure authentication for teams</p>
+      </div>
+    </div>
   </div>
 
   {#if showInstructions}
     <div class="instructions">
       <h3>📋 Setup Instructions</h3>
-      <ol>
-        <li>Go to the <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a></li>
-        <li>Create a new project or select an existing one</li>
-        <li>Enable the following APIs:
-          <ul>
-            <li>Google AI Generative Language API</li>
-            <li>Google Speech-to-Text API</li>
-            <li>Google Text-to-Speech API</li>
-          </ul>
-        </li>
-        <li>Go to "Credentials" → "Create Credentials" → "OAuth 2.0 Client IDs"</li>
-        <li>Set application type to "Desktop application"</li>
-        <li>Copy the Client ID and Client Secret below</li>
-      </ol>
+      {#if authMethod === 'api_key'}
+        <div class="instruction-steps">
+          <div class="step">
+            <div class="step-number">1</div>
+            <div class="step-content">
+              <p>Go to <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a></p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-number">2</div>
+            <div class="step-content">
+              <p>Click "Create API Key"</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-number">3</div>
+            <div class="step-content">
+              <p>Copy the generated API key</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-number">4</div>
+            <div class="step-content">
+              <p>Paste it in the field below</p>
+            </div>
+          </div>
+        </div>
+        <div class="info-box">
+          <div class="info-icon">💡</div>
+          <div class="info-content">
+            <strong>Why API Key?</strong>
+            <p>API keys are simpler to set up and perfect for personal use. They provide direct access to Google's Gemini AI models.</p>
+          </div>
+        </div>
+      {:else}
+        <div class="instruction-steps">
+          <div class="step">
+            <div class="step-number">1</div>
+            <div class="step-content">
+              <p>Go to the <a href="https://console.cloud.google.com/" target="_blank" rel="noopener">Google Cloud Console</a></p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-number">2</div>
+            <div class="step-content">
+              <p>Create a new project or select an existing one</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-number">3</div>
+            <div class="step-content">
+              <p>Enable the "Generative Language API"</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-number">4</div>
+            <div class="step-content">
+              <p>Go to "Credentials" → "Create Credentials" → "OAuth 2.0 Client IDs"</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-number">5</div>
+            <div class="step-content">
+              <p>Set application type to "Desktop application"</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-number">6</div>
+            <div class="step-content">
+              <p>Copy the Client ID and Client Secret below</p>
+            </div>
+          </div>
+        </div>
+      {/if}
     </div>
   {/if}
 
   <div class="form-section">
-    <div class="input-group">
-      <label for="clientId">
-        <span class="label-text">Google Client ID</span>
-        <span class="required">*</span>
-      </label>
-      <input
-        type="text"
-        id="clientId"
-        bind:value={clientId}
-        placeholder="123456789-abcdefghijklmnop.apps.googleusercontent.com"
-        class="credential-input"
-      />
-    </div>
+    {#if authMethod === 'api_key'}
+      <div class="input-group">
+        <label for="apiKey">
+          <span class="label-text">Google Gemini API Key</span>
+          <span class="required">*</span>
+        </label>
+        <div class="input-wrapper">
+          <input
+            type="password"
+            id="apiKey"
+            bind:value={apiKey}
+            placeholder="AIzaSy..."
+            class="credential-input"
+            autocomplete="off"
+          />
+          <button 
+            class="visibility-toggle" 
+            on:click="{() => {
+              const input = document.getElementById('apiKey');
+              input.type = input.type === 'password' ? 'text' : 'password';
+            }}"
+            aria-label="Toggle API key visibility"
+          >
+            👁️
+          </button>
+        </div>
+        <small class="input-hint">Get your API key from <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a></small>
+      </div>
 
-    <div class="input-group">
-      <label for="clientSecret">
-        <span class="label-text">Google Client Secret</span>
-        <span class="required">*</span>
-      </label>
-      <input
-        type="password"
-        id="clientSecret"
-        bind:value={clientSecret}
-        placeholder="GOCSPX-xxxxxxxxxxxxxxxxxxxxxxxx"
-        class="credential-input"
-      />
-    </div>
+      <div class="button-group">
+        <button
+          class="auth-button primary"
+          on:click={saveApiKey}
+          disabled={!apiKey.trim() || isAuthenticating}
+        >
+          {#if isAuthenticating}
+            <div class="button-content">
+              <div class="spinner"></div>
+              <span>Validating...</span>
+            </div>
+          {:else}
+            <div class="button-content">
+              <span>🔑 Save & Validate API Key</span>
+            </div>
+          {/if}
+        </button>
+      </div>
+    {:else}
+      <div class="input-group">
+        <label for="clientId">
+          <span class="label-text">Google Client ID</span>
+          <span class="required">*</span>
+        </label>
+        <input
+          type="text"
+          id="clientId"
+          bind:value={clientId}
+          placeholder="123456789-abcdefghijklmnop.apps.googleusercontent.com"
+          class="credential-input"
+        />
+      </div>
 
-    <div class="button-group">
-      <button
-        class="save-button"
-        on:click={saveClientCredentials}
-        disabled={!clientId.trim() || !clientSecret.trim()}
-      >
-        💾 Save Credentials
-      </button>
+      <div class="input-group">
+        <label for="clientSecret">
+          <span class="label-text">Google Client Secret</span>
+          <span class="required">*</span>
+        </label>
+        <div class="input-wrapper">
+          <input
+            type="password"
+            id="clientSecret"
+            bind:value={clientSecret}
+            placeholder="GOCSPX-xxxxxxxxxxxxxxxxxxxxxxxx"
+            class="credential-input"
+            autocomplete="off"
+          />
+          <button 
+            class="visibility-toggle" 
+            on:click="{() => {
+              const input = document.getElementById('clientSecret');
+              input.type = input.type === 'password' ? 'text' : 'password';
+            }}"
+            aria-label="Toggle client secret visibility"
+          >
+            👁️
+          </button>
+        </div>
+      </div>
 
-      <button
-        class="auth-button"
-        on:click={startGoogleAuth}
-        disabled={isAuthenticating || !clientId.trim() || !clientSecret.trim()}
-      >
-        {#if isAuthenticating}
-          🔄 Authenticating...
-        {:else}
-          🚀 Authenticate with Google
-        {/if}
-      </button>
-    </div>
+      <div class="button-group">
+        <button
+          class="auth-button"
+          on:click={saveClientCredentials}
+          disabled={!clientId.trim() || !clientSecret.trim() || isAuthenticating}
+        >
+          <div class="button-content">
+            <span>💾 Save Credentials</span>
+          </div>
+        </button>
+
+        <button
+          class="auth-button primary"
+          on:click={startGoogleAuth}
+          disabled={isAuthenticating || !clientId.trim() || !clientSecret.trim()}
+        >
+          {#if isAuthenticating}
+            <div class="button-content">
+              <div class="spinner"></div>
+              <span>Authenticating...</span>
+            </div>
+          {:else}
+            <div class="button-content">
+              <span>🚀 Authenticate with Google</span>
+            </div>
+          {/if}
+        </button>
+      </div>
+    {/if}
   </div>
+
+  {#if availableModels.length > 0}
+    <div class="models-info">
+      <h4>✅ Available Models ({availableModels.length})</h4>
+      <div class="models-list">
+        {#each availableModels.slice(0, 3) as model}
+          <span class="model-tag">{model.split('/').pop()}</span>
+        {/each}
+        {#if availableModels.length > 3}
+          <span class="model-tag more">+{availableModels.length - 3} more</span>
+        {/if}
+      </div>
+    </div>
+  {/if}
 
   {#if $authStatus.message}
     <div class="auth-status {$authStatus.type}">
@@ -181,84 +427,203 @@ function _toggleInstructions() {
 <style>
   .google-auth-setup {
     background: white;
-    border-radius: 12px;
+    border-radius: 16px;
     padding: 30px;
-    max-width: 600px;
+    max-width: 700px;
     margin: 0 auto;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
     border: 1px solid #e1e8ed;
+    backdrop-filter: blur(10px);
   }
 
-  .header {
+  .auth-header {
+    margin-bottom: 30px;
+  }
+
+  .header-content {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    margin-bottom: 25px;
-    padding-bottom: 15px;
-    border-bottom: 2px solid #f1f3f4;
+    align-items: flex-start;
+    margin-bottom: 15px;
   }
 
-  h2 {
+  .logo-container {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+  }
+
+  .logo-icon {
+    font-size: 32px;
+  }
+
+  .auth-header h2 {
     color: #1a73e8;
     margin: 0;
     font-size: 24px;
-    font-weight: 600;
+    font-weight: 700;
+  }
+
+  .header-subtitle {
+    color: #5f6368;
+    margin: 0 0 0 48px;
+    font-size: 16px;
+    line-height: 1.5;
   }
 
   .help-button {
     background: #f8f9fa;
     border: 1px solid #dadce0;
-    border-radius: 20px;
-    padding: 8px 16px;
-    font-size: 14px;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
     color: #5f6368;
     cursor: pointer;
     transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
   }
 
   .help-button:hover {
     background: #e8f0fe;
     border-color: #1a73e8;
     color: #1a73e8;
+    transform: rotate(15deg);
+  }
+
+  .auth-method-selector {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 25px;
+  }
+
+  .method-option {
+    flex: 1;
+    padding: 20px;
+    border: 2px solid #e8eaed;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: #f8f9fa;
+  }
+
+  .method-option:hover {
+    border-color: #d2e3fc;
+    background: #f1f8ff;
+    transform: translateY(-3px);
+  }
+
+  .method-option.active {
+    border-color: #1a73e8;
+    background: #e8f0fe;
+    box-shadow: 0 6px 20px rgba(26, 115, 232, 0.15);
+  }
+
+  .method-icon {
+    font-size: 24px;
+    margin-bottom: 12px;
+  }
+
+  .method-content h3 {
+    margin: 0 0 8px 0;
+    color: #202124;
+    font-size: 18px;
+    font-weight: 600;
+  }
+
+  .method-content p {
+    margin: 0;
+    color: #5f6368;
+    font-size: 14px;
   }
 
   .instructions {
     background: #f8f9fa;
-    border-radius: 8px;
-    padding: 20px;
-    margin-bottom: 25px;
-    border-left: 4px solid #1a73e8;
+    border-radius: 12px;
+    padding: 25px;
+    margin-bottom: 30px;
+    border: 1px solid #e8eaed;
   }
 
   .instructions h3 {
     color: #1a73e8;
-    margin: 0 0 15px 0;
-    font-size: 18px;
+    margin: 0 0 20px 0;
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
   }
 
-  .instructions ol {
+  .instruction-steps {
+    margin-bottom: 20px;
+  }
+
+  .step {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 15px;
+  }
+
+  .step-number {
+    width: 28px;
+    height: 28px;
+    background: #1a73e8;
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+
+  .step-content p {
     margin: 0;
-    padding-left: 20px;
-  }
-
-  .instructions li {
-    margin-bottom: 8px;
-    line-height: 1.5;
     color: #3c4043;
+    font-size: 15px;
+    line-height: 1.5;
   }
 
-  .instructions ul {
-    margin: 5px 0;
-    padding-left: 20px;
-  }
-
-  .instructions a {
+  .step-content a {
     color: #1a73e8;
     text-decoration: none;
+    font-weight: 500;
   }
 
-  .instructions a:hover {
+  .step-content a:hover {
     text-decoration: underline;
+  }
+
+  .info-box {
+    background: #e8f0fe;
+    border: 1px solid #d2e3fc;
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    gap: 15px;
+  }
+
+  .info-icon {
+    font-size: 24px;
+    flex-shrink: 0;
+  }
+
+  .info-content strong {
+    color: #1967d2;
+    display: block;
+    margin-bottom: 8px;
+    font-size: 16px;
+  }
+
+  .info-content p {
+    margin: 0;
+    color: #3c4043;
+    font-size: 14px;
+    line-height: 1.5;
   }
 
   .form-section {
@@ -266,19 +631,19 @@ function _toggleInstructions() {
   }
 
   .input-group {
-    margin-bottom: 20px;
+    margin-bottom: 25px;
   }
 
   label {
     display: flex;
     align-items: center;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
     font-weight: 500;
-    color: #3c4043;
+    color: #202124;
   }
 
   .label-text {
-    font-size: 14px;
+    font-size: 15px;
   }
 
   .required {
@@ -287,14 +652,18 @@ function _toggleInstructions() {
     font-weight: bold;
   }
 
+  .input-wrapper {
+    position: relative;
+  }
+
   .credential-input {
     width: 100%;
-    padding: 12px 16px;
+    padding: 14px 50px 14px 16px;
     border: 2px solid #dadce0;
-    border-radius: 8px;
-    font-size: 14px;
-    font-family: 'Courier New', monospace;
-    transition: border-color 0.2s ease;
+    border-radius: 12px;
+    font-size: 15px;
+    font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+    transition: all 0.2s ease;
     box-sizing: border-box;
   }
 
@@ -309,52 +678,83 @@ function _toggleInstructions() {
     font-style: italic;
   }
 
+  .visibility-toggle {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 5px;
+    border-radius: 4px;
+  }
+
+  .visibility-toggle:hover {
+    background: #f1f3f4;
+  }
+
+  .input-hint {
+    display: block;
+    margin-top: 8px;
+    color: #5f6368;
+    font-size: 13px;
+  }
+
+  .input-hint a {
+    color: #1a73e8;
+    text-decoration: none;
+    font-weight: 500;
+  }
+
+  .input-hint a:hover {
+    text-decoration: underline;
+  }
+
   .button-group {
     display: flex;
-    gap: 12px;
-    margin-top: 25px;
+    gap: 15px;
+    margin-top: 30px;
     flex-wrap: wrap;
   }
 
-  .save-button, .auth-button {
+  .auth-button {
     flex: 1;
     min-width: 200px;
-    padding: 12px 24px;
+    padding: 0;
     border: none;
-    border-radius: 8px;
-    font-size: 14px;
+    border-radius: 12px;
+    font-size: 15px;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s ease;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    min-height: 50px;
+    background: #f1f3f4;
+    color: #3c4043;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
   }
 
-  .save-button {
-    background: #34a853;
-    color: white;
-  }
-
-  .save-button:hover:not(:disabled) {
-    background: #2d8f47;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(52, 168, 83, 0.3);
-  }
-
-  .auth-button {
+  .auth-button.primary {
     background: #1a73e8;
     color: white;
-  }
-
-  .auth-button:hover:not(:disabled) {
-    background: #1557b0;
-    transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(26, 115, 232, 0.3);
   }
 
-  .save-button:disabled, .auth-button:disabled {
+  .auth-button:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+  }
+
+  .auth-button.primary:hover:not(:disabled) {
+    background: #1557b0;
+    box-shadow: 0 6px 20px rgba(26, 115, 232, 0.4);
+  }
+
+  .auth-button:disabled {
     background: #f1f3f4;
     color: #9aa0a6;
     cursor: not-allowed;
@@ -362,48 +762,106 @@ function _toggleInstructions() {
     box-shadow: none;
   }
 
+  .button-content {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .spinner {
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-top: 3px solid white;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  .models-info {
+    background: #e6f4ea;
+    border: 1px solid #c3e6cb;
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 25px;
+  }
+
+  .models-info h4 {
+    margin: 0 0 15px 0;
+    color: #155724;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .models-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .model-tag {
+    background: #4caf50;
+    color: white;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .model-tag.more {
+    background: #9e9e9e;
+  }
+
   .auth-status {
-    margin-top: 20px;
-    padding: 16px;
-    border-radius: 8px;
+    margin-top: 25px;
+    padding: 20px;
+    border-radius: 12px;
     display: flex;
     align-items: flex-start;
-    gap: 12px;
+    gap: 15px;
     animation: slideIn 0.3s ease;
+    border: 1px solid;
   }
 
   .status-icon {
-    font-size: 18px;
+    font-size: 20px;
     flex-shrink: 0;
   }
 
   .status-message {
     flex: 1;
     line-height: 1.5;
+    font-size: 15px;
   }
 
   .auth-status.success {
     background: #e6f4ea;
     color: #137333;
-    border: 1px solid #ceead6;
+    border-color: #ceead6;
   }
 
   .auth-status.error {
     background: #fce8e6;
     color: #c5221f;
-    border: 1px solid #f9dedc;
+    border-color: #f9dedc;
   }
 
   .auth-status.warning {
     background: #fef7e0;
     color: #b06000;
-    border: 1px solid #feefc3;
+    border-color: #feefc3;
   }
 
   .auth-status.info {
     background: #e8f0fe;
     color: #1967d2;
-    border: 1px solid #d2e3fc;
+    border-color: #d2e3fc;
   }
 
   @keyframes slideIn {
@@ -417,24 +875,50 @@ function _toggleInstructions() {
     }
   }
 
-  @media (max-width: 600px) {
+  @media (max-width: 768px) {
     .google-auth-setup {
-      margin: 10px;
-      padding: 20px;
+      margin: 15px;
+      padding: 25px;
     }
 
-    .header {
+    .header-content {
       flex-direction: column;
       gap: 15px;
       align-items: stretch;
+    }
+
+    .auth-method-selector {
+      flex-direction: column;
+      gap: 12px;
     }
 
     .button-group {
       flex-direction: column;
     }
 
-    .save-button, .auth-button {
+    .auth-button {
       min-width: auto;
+    }
+
+    .info-box {
+      flex-direction: column;
+      gap: 10px;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .google-auth-setup {
+      margin: 10px;
+      padding: 20px;
+    }
+
+    .step {
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .step-number {
+      align-self: flex-start;
     }
   }
 </style>

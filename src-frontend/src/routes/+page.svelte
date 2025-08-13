@@ -1,7 +1,7 @@
 <script lang="ts">
-
+	import AppLayout from '$lib/components/AppLayout.svelte';
 </script>
 
-<InitialSetup />
 <AppLayout />
-<GoogleAuthSetup />
+
+

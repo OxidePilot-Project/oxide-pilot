@@ -4,28 +4,70 @@ name = "oxide-pilot"
 version = "0.1.0"
 authors = ["You"]
 edition = "2021"
+default-run = "oxide-pilot"
+
+[[bin]]
+name = "oxide-pilot"
+path = "src/main_working.rs"
 
 [dependencies]
-tauri = { version = "1.4", features = ["shell-open", "system-tray", "notification", "dialog", "fs-all", "path-all", "window-all", "process-all"] }
+tauri = { version = "1.5", features = [
+  "app-all",
+  "window-all",
+  "http-all",
+  "path-all",
+  "notification-all",
+  "shell-open",
+  "fs-write-file",
+  "fs-read-dir",
+  "fs-create-dir",
+  "fs-rename-file",
+  "fs-read-file",
+  "fs-copy-file",
+  "fs-exists",
+  "fs-remove-dir",
+  "fs-remove-file",
+  "dialog-open",
+  "dialog-save",
+  "dialog-ask",
+  "dialog-confirm"
+] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1.28", features = ["full"] }
-thiserror = "1.0"
-log = "0.4"
+dotenv = "0.15"
 env_logger = "0.10"
+log = "0.4"
+thiserror = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
-uuid = { version = "1.3", features = ["v4", "serde"] }
-sysinfo = "0.29"
-oxide-core = { path = "../oxide-core" }
+uuid = { version = "1.0", features = ["v4"] }
+lazy_static = "1.4"
+oxide-core = { path = "../oxide-core", features = ["tauri-integration"] }
 oxide-guardian = { path = "../oxide-guardian" }
+oxide-memory = { path = "../oxide-memory", features = ["cognee"] }
 oxide-copilot = { path = "../oxide-copilot" }
-oxide-memory = { path = "../oxide-memory" }
-oxide-voice = { path = "../oxide-voice" }
-oxide-rpa = { path = "../oxide-rpa" }
+oxide-cognee-bridge = { path = "../oxide-cognee-bridge", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.48", features = ["Win32_System_ProcessStatus"] }
+windows = { version = "0.52", features = [
+    "Win32_System_ProcessStatus",
+    "Win32_UI_Controls",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_System_LibraryLoader",
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Threading",
+    "Win32_System_Diagnostics_Debug"
+] }
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
 
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
+cognee = ["oxide-cognee-bridge"]
+
+[[test]]
+name = "async_concurrency_tests"
+path = "../tests/async_concurrency_tests.rs"

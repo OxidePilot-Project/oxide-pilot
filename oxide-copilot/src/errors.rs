@@ -27,3 +27,25 @@ pub enum CopilotError {
     #[error("Failed to parse API response: {0}")]
     APIResponseParse(String),
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_copilot_error_display() {
+        let error = CopilotError::AIProvider("Test error".to_string());
+        assert!(error.to_string().contains("AI Provider error"));
+    }
+
+    #[test]
+    fn test_copilot_error_from_serde() {
+        let json_error = serde_json::from_str::<serde_json::Value>("invalid json");
+        assert!(json_error.is_err());
+
+        if let Err(e) = json_error {
+            let copilot_error: CopilotError = e.into();
+            assert!(matches!(copilot_error, CopilotError::Serialization(_)));
+        }
+    }
+}

@@ -1,9 +1,58 @@
-.kiro
-target
-src-frontend/node_modules
-src-tauri/target
-src-tauri/tauri.conf.json
-src-tauri/tauri-bundler
-src-tauri/tauri-bundler/dist
-src-tauri/tauri-bundler/src
+# Oxide Pilot gitignore
 
+# Dev artifacts
+/dev-artifacts/
+**/*.profraw
+
+# Rust
+/target/
+**/target/
+# Cargo lockfiles (ignore sub-crates)
+**/Cargo.lock
+!/Cargo.lock
+
+# Node
+**/node_modules/
+src-frontend/.svelte-kit/
+src-frontend/dist/
+
+# Python venvs
+**/.venv/
+
+# Env files
+.env
+src-tauri/.env
+
+# Tauri build and test artifacts
+src-tauri/dist/
+src-tauri/test_async_mutex_*/
+src-tauri/test_timeouts/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Project artifacts
+.gemini/
+installer-package/
+OxidePilot-v1.0-Installer/
+superdesign/
+temp-pattern-craft/
+temp-qwen-code/
+temp-superdesign/
+cognee-sidecar/
+oxide-cognee-bridge/
+pattern-craft/
+.vscode/
+.idea/
+
+# Coverage
+coverage/
+.target-workspace

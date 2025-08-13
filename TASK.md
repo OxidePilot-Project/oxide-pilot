@@ -109,6 +109,46 @@ Oxide Pilot is an advanced AI-powered system assistant with agentic capabilities
 5. Prepare production release package
 6. Create final documentation and user guides
 
----
+## 🧠 Cognee Integration Plan (Feature-Gated)
 
+The memory system now supports a pluggable backend via `oxide-memory/src/backend.rs` with a `MemoryBackend` trait. `CogneeBackend` is available behind the `cognee` feature and accessed from `MemoryManager` when enabled.
+
+### ✅ What’s Done
+
+- Implemented `MemoryBackend` trait and `CogneeBackend` implementation (feature-gated).
+- Refactored `MemoryManager` to use optional backend while preserving JSON default behavior.
+- Wired Tauri to initialize backend via env vars under the `cognee` feature in `src-tauri/src/oxide_system.rs`.
+- Enabled `oxide-memory = { features = ["cognee"] }` in `src-tauri/Cargo.toml`.
+
+### 🔜 In-Flight / Next Steps
+
+- [ ] Config: Add persisted settings for Cognee (enable flag, URL, token) with secure storage (keyring) in `oxide-core`.
+- [ ] UI: Add settings in `oxide-ui/AdvancedSettings.svelte` to toggle Cognee and edit URL/token.
+- [ ] Sidecar: Implement supervised process management (start/stop/health, localhost bind, bearer token).
+- [ ] Migration: One-click ingest of local JSON memory into Cognee using `backend.add_texts(...)`.
+- [ ] Tests: Unit tests for mapping and error handling; integration tests with mock sidecar.
+- [ ] Metrics: Add latency/availability metrics for backend; warn and auto-fallback to JSON on errors.
+- [ ] Docs: Update developer guide for Cognee dev loop and packaging.
+
+### 🔧 Runtime Behavior
+
+- With feature compiled and `OXIDE_COGNEE_ENABLE=true|1`, Tauri initializes `MemoryManager::with_cognee(...)`.
+- Writes are mirrored to Cognee best-effort; reads query Cognee first, fallback to local JSON.
+- If feature not compiled or disabled, JSON backend remains the default.
+
+### 🔐 Env Vars (for local dev)
+
+- `OXIDE_COGNEE_ENABLE=true`
+- `OXIDE_COGNEE_URL=http://127.0.0.1:8765`
+- `OXIDE_COGNEE_TOKEN=<your-bearer-token>`
+
+### ▶️ Dev Validation Commands
+
+- Bridge: `cargo check -p oxide-cognee-bridge`
+- Memory: `cargo check -p oxide-memory`
+- App (w/ feature): ensure `src-tauri/Cargo.toml` enables `oxide-memory` with `features=["cognee"]`, then `cargo check -p oxide-pilot`
+
+Note: If you encounter Windows file lock issues (os error 32) during build, simply re-run. If workspace dependency errors arise for other crates, pin their dependencies (avoid workspace-only manifests) or add a top-level Cargo workspace.
+
+---
 *This document is automatically updated based on git status and implementation progress.*

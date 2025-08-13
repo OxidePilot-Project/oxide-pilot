@@ -5,11 +5,12 @@ use log::{info, warn, error};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
+#[cfg(feature = "yara-detection")]
 use yara::{Compiler, Rules};
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct ThreatEvent {
     pub id: String,
     pub timestamp: DateTime<Utc>,
@@ -21,7 +22,7 @@ pub struct ThreatEvent {
     pub details: HashMap<String, String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub enum ThreatType {
     MalwareSignature,
     SuspiciousProcess,
@@ -30,7 +31,7 @@ pub enum ThreatType {
     FileSystemAnomaly,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub enum ThreatSeverity {
     Low,
     Medium,
@@ -39,6 +40,7 @@ pub enum ThreatSeverity {
 }
 
 pub struct ThreatDetector {
+    #[cfg(feature = "yara-detection")]
     yara_rules: Arc<Mutex<Option<Rules>>>,
     process_baseline: Arc<Mutex<HashMap<String, ProcessBaseline>>>,
     threat_history: Arc<Mutex<Vec<ThreatEvent>>>,
@@ -48,21 +50,31 @@ pub struct ThreatDetector {
 struct ProcessBaseline {
     average_cpu: f32,
     average_memory: u64,
+    #[allow(dead_code)]
     first_seen: DateTime<Utc>,
     execution_count: u32,
 }
 
+impl Default for ThreatDetector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ThreatDetector {
     pub fn new() -> Self {
-        let mut detector = Self {
+        let detector = Self {
+            #[cfg(feature = "yara-detection")]
             yara_rules: Arc::new(Mutex::new(None)),
             process_baseline: Arc::new(Mutex::new(HashMap::new())),
             threat_history: Arc::new(Mutex::new(Vec::new())),
         };
+        #[cfg(feature = "yara-detection")]
         detector.load_yara_rules();
         detector
     }
 
+    #[cfg(feature = "yara-detection")]
     fn load_yara_rules(&mut self) {
         let rules_str = r#"
 rule suspicious_powershell {
@@ -110,19 +122,24 @@ rule suspicious_network_tool {
 
     pub fn analyze_processes(&self, processes: &[SystemEvent]) -> Vec<ThreatEvent> {
         let mut threats = Vec::new();
+        #[cfg(feature = "yara-detection")]
         let yara_rules = self.yara_rules.lock().unwrap();
         let mut baseline = self.process_baseline.lock().unwrap();
 
         for event in processes {
             if event.event_type == "process_info" {
-                let process_name = event.details.get("name").cloned().unwrap_or_default();
+                let process_name = event.details.get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string();
                 let process_id = event.details.get("pid")
+                    .and_then(|v| v.as_str())
                     .and_then(|s| s.parse::<u32>().ok());
                 let cpu_usage = event.details.get("cpu_usage")
-                    .and_then(|s| s.parse::<f32>().ok())
-                    .unwrap_or(0.0);
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0) as f32;
                 let memory_usage = event.details.get("memory")
-                    .and_then(|s| s.parse::<u64>().ok())
+                    .and_then(|v| v.as_u64())
                     .unwrap_or(0);
 
                 // Update baseline
@@ -143,7 +160,7 @@ rule suspicious_network_tool {
                         timestamp: Utc::now(),
                         threat_type: ThreatType::HighResourceUsage,
                         severity: ThreatSeverity::Medium,
-                        description: format!("High CPU usage detected: {:.2}%", cpu_usage),
+                        description: format!("High CPU usage detected: {cpu_usage:.2}%"),
                         process_name: Some(process_name.clone()),
                         process_id,
                         details: HashMap::from([
@@ -154,6 +171,7 @@ rule suspicious_network_tool {
                 }
 
                 // YARA rule scanning
+                #[cfg(feature = "yara-detection")]
                 if let Some(rules) = yara_rules.as_ref() {
                     if let Some(command) = event.details.get("command") {
                         match rules.scan_mem(command.as_bytes(), 0) {
@@ -183,15 +201,22 @@ rule suspicious_network_tool {
 
                 // Heuristic analysis for suspicious processes
                 if self.is_suspicious_process(&process_name, &event.details) {
+                    let mut details_map = HashMap::new();
+                    if let Some(obj) = event.details.as_object() {
+                        for (k, v) in obj {
+                            details_map.insert(k.clone(), v.to_string());
+                        }
+                    }
+
                     threats.push(ThreatEvent {
                         id: uuid::Uuid::new_v4().to_string(),
                         timestamp: Utc::now(),
                         threat_type: ThreatType::SuspiciousProcess,
                         severity: ThreatSeverity::Medium,
-                        description: format!("Suspicious process behavior detected: {}", process_name),
+                        description: format!("Suspicious process behavior detected: {process_name}"),
                         process_name: Some(process_name.clone()),
                         process_id,
-                        details: event.details.clone(),
+                        details: details_map,
                     });
                 }
             }
@@ -203,13 +228,14 @@ rule suspicious_network_tool {
 
         // Keep only last 1000 threats to prevent memory bloat
         if history.len() > 1000 {
-            history.drain(0..history.len() - 1000);
+            let len = history.len();
+            history.drain(0..len - 1000);
         }
 
         threats
     }
 
-    fn is_suspicious_process(&self, process_name: &str, details: &HashMap<String, String>) -> bool {
+    fn is_suspicious_process(&self, process_name: &str, details: &serde_json::Value) -> bool {
         // Check for suspicious process names
         let suspicious_names = [
             "cmd.exe", "powershell.exe", "wscript.exe", "cscript.exe",
@@ -218,7 +244,7 @@ rule suspicious_network_tool {
 
         if suspicious_names.iter().any(|&name| process_name.to_lowercase().contains(name)) {
             // Check for suspicious command line arguments
-            if let Some(command) = details.get("command") {
+            if let Some(command) = details.get("command").and_then(|v| v.as_str()) {
                 let suspicious_args = [
                     "-encodedcommand", "-windowstyle hidden", "-noprofile",
                     "invoke-expression", "downloadstring", "bypass"
@@ -231,7 +257,7 @@ rule suspicious_network_tool {
         }
 
         // Check for processes running from suspicious locations
-        if let Some(path) = details.get("exe") {
+        if let Some(path) = details.get("exe").and_then(|v| v.as_str()) {
             let suspicious_paths = [
                 "\\temp\\", "\\appdata\\local\\temp\\", "\\users\\public\\",
                 "\\programdata\\", "\\windows\\temp\\"
@@ -293,7 +319,7 @@ impl Guardian {
 
                 let cpu_usage = monitor.get_cpu_usage();
                 let (used_mem, total_mem) = monitor.get_memory_usage();
-                info!("System Status - CPU: {:.2}%, Memory: {}/{} bytes", cpu_usage, used_mem, total_mem);
+                info!("System Status - CPU: {cpu_usage:.2}%, Memory: {used_mem}/{total_mem} bytes");
 
                 let processes = monitor.list_processes();
                 info!("Monitoring {} processes.", processes.len());
@@ -334,11 +360,10 @@ impl Guardian {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct SystemStatus {
     pub cpu_usage: f32,
     pub memory_usage: (u64, u64), // (used, total)
     pub process_count: usize,
     pub threat_count: usize,
-}
 }

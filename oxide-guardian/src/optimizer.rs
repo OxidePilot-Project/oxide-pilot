@@ -1,10 +1,8 @@
-use log::{info, warn, error};
-use sysinfo::{System, SystemExt, ProcessExt};
-
+use log::{info, warn};
+use sysinfo::{System, SystemExt, ProcessExt, CpuExt, Pid};
 use std::time::{Duration, Instant};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use sysinfo::{System, SystemExt, ProcessExt};
 
 #[derive(Debug, Clone)]
 pub struct ResourceUsage {
@@ -26,10 +24,18 @@ pub struct OptimizationConfig {
 pub struct PerformanceOptimizer {
     sys: System,
     config: OptimizationConfig,
+    #[allow(dead_code)]
     last_check: Instant,
     is_throttled: Arc<AtomicBool>,
     background_mode: Arc<AtomicBool>,
+    #[allow(dead_code)]
     idle_threshold: Duration,
+}
+
+impl Default for PerformanceOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PerformanceOptimizer {
@@ -58,10 +64,10 @@ impl PerformanceOptimizer {
 
     pub fn get_current_usage(&mut self) -> ResourceUsage {
         self.sys.refresh_all();
-        
-        let current_pid = std::process::id() as i32;
-        let process = self.sys.process(current_pid.into());
-        
+
+        let current_pid = std::process::id() as usize;
+        let process = self.sys.process(Pid::from(current_pid));
+
         let (cpu_percent, memory_mb) = match process {
             Some(p) => (p.cpu_usage(), p.memory() / 1024 / 1024),
             None => (0.0, 0),
@@ -77,17 +83,17 @@ impl PerformanceOptimizer {
 
     pub fn should_throttle(&mut self) -> bool {
         let usage = self.get_current_usage();
-        
+
         let should_throttle = usage.cpu_percent > self.config.max_cpu_percent ||
                             usage.memory_mb > self.config.max_memory_mb;
-        
+
         self.is_throttled.store(should_throttle, Ordering::Relaxed);
         should_throttle
     }
 
     pub fn set_background_mode(&self, enabled: bool) {
         self.background_mode.store(enabled, Ordering::Relaxed);
-        
+
         if enabled {
             self.set_process_priority_low();
         } else {
@@ -98,8 +104,8 @@ impl PerformanceOptimizer {
     #[cfg(target_os = "windows")]
     fn set_process_priority_low(&self) {
         use winapi::um::processthreadsapi::SetPriorityClass;
-        use winapi::um::winbase::{BELOW_NORMAL_PRIORITY_CLASS, IDLE_PRIORITY_CLASS};
-        
+        use winapi::um::winbase::BELOW_NORMAL_PRIORITY_CLASS;
+
         unsafe {
             let current_process = winapi::um::processthreadsapi::GetCurrentProcess();
             SetPriorityClass(current_process, BELOW_NORMAL_PRIORITY_CLASS);
@@ -110,7 +116,7 @@ impl PerformanceOptimizer {
     fn set_process_priority_normal(&self) {
         use winapi::um::processthreadsapi::SetPriorityClass;
         use winapi::um::winbase::NORMAL_PRIORITY_CLASS;
-        
+
         unsafe {
             let current_process = winapi::um::processthreadsapi::GetCurrentProcess();
             SetPriorityClass(current_process, NORMAL_PRIORITY_CLASS);
@@ -144,11 +150,11 @@ impl PerformanceOptimizer {
 
     pub fn is_system_idle(&mut self) -> bool {
         self.sys.refresh_cpu();
-        
+
         let cpu_usage: f32 = self.sys.cpus().iter()
             .map(|cpu| cpu.cpu_usage())
             .sum::<f32>() / self.sys.cpus().len() as f32;
-        
+
         cpu_usage < 10.0 // System is idle if CPU usage < 10%
     }
 
@@ -172,14 +178,6 @@ impl PerformanceOptimizer {
 
         recommendations
     }
-}
-
-impl PerformanceOptimizer {
-    pub fn new() -> Self {
-        Self {
-            sys: System::new_all(),
-        }
-    }
 
     pub fn analyze_and_optimize(&mut self) {
         self.sys.refresh_all();
@@ -197,7 +195,7 @@ impl PerformanceOptimizer {
         if !high_cpu_processes.is_empty() {
             warn!("High CPU usage detected in the following processes:");
             for (pid, name, cpu) in high_cpu_processes {
-                warn!("  PID: {}, Name: {}, CPU: {:.2}%", pid, name, cpu);
+                warn!("  PID: {pid}, Name: {name}, CPU: {cpu:.2}%");
                 // In a real scenario, you might offer to terminate or reduce priority
                 // For now, just logging
             }
@@ -218,7 +216,7 @@ impl PerformanceOptimizer {
         if !high_mem_processes.is_empty() {
             warn!("High memory usage detected in the following processes:");
             for (pid, name, mem_percent) in high_mem_processes {
-                warn!("  PID: {}, Name: {}, Memory: {:.2}%", pid, name, mem_percent);
+                warn!("  PID: {pid}, Name: {name}, Memory: {mem_percent:.2}%");
                 // In a real scenario, you might offer to terminate or suggest actions
             }
         } else {
