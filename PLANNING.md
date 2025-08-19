@@ -241,7 +241,7 @@ Oxide Pilot represents the evolution of traditional system assistants towards a 
 - Gemini
   - UI de API Key (entrada, validación mínima, persistencia segura si aplica); documentar OAuth2 como futuro y fallback actual.
 - Documentación
-  - Extender `OAUTH_SETUP.md` con guía Qwen (ya agregado) y enlazar desde `README.md`.
+  - Extender `docs/OAUTH_SETUP.md` con guía Qwen (ya agregado) y enlazar desde `README.md`.
   - Mantener `src-tauri/.env.example` sincronizado.
   
 ### Criterios de Aceptación
