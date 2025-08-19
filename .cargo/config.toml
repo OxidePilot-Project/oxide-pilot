@@ -2,3 +2,10 @@
 # Coverage disabled in dev to avoid profraw disk usage and build failures.
 # Re-enable for test runs by setting environment variable:
 #   set RUSTFLAGS=-C instrument-coverage
+
+# Unify all Rust build artifacts under the repo root 'target/'
+# This avoids duplicate targets across workspace members and Tauri crate.
+target-dir = "target"
+
+# Optional: speed up builds with sccache (if installed)
+# rustc-wrapper = "sccache"
