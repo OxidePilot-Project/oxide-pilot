@@ -13,8 +13,9 @@ Welcome to the unified documentation hub. This folder consolidates project docs 
 - Archive (historical notes/reports): [archive/](archive/)
 
 ## Canonical Root Docs
-
+ 
 These remain in the repository root:
+ 
 - [TASK.md](../TASK.md) — Active tasks and status
 - [Project rules and guidelines](../RULES.md)
 - [Strategy and planning](../PLANNING.md)

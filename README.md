@@ -3,11 +3,14 @@
 Oxide Pilot es un asistente agentico con backend en Rust (Tauri) y UI Svelte opcional. Incluye agentes Guardian/Copilot, memoria local (JSON) y soporte opcional para Cognee via sidecar Python.
 
 ## Requisitos
-- Windows 10/11 x64
-- Rust + cargo
-- (Opcional) Node.js para construir la UI
-- (Opcional) Python 3.8–3.12 para sidecar Cognee
-
+ 
+ 
+ - Windows 10/11 x64
+ - Rust + cargo
+ - (Opcional) Node.js para construir la UI
+ - (Opcional) Python 3.8–3.12 para sidecar Cognee
+ 
+ 
 ## Desarrollo rápido
 
 PowerShell:
@@ -28,7 +31,8 @@ Notas:
 - Los artefactos `*.profraw` (LLVM coverage) se mueven o eliminan según parámetros.
 
 ## Pruebas
-```
+
+```bash
 cargo test --workspace
 ```
 
@@ -44,6 +48,7 @@ npm run test:e2e
 ```
 
 Notas:
+ 
 - Configuración: `src-frontend/playwright.config.ts` (levanta Vite dev y prueba en Chromium/Firefox/WebKit).
 - Prueba de humo: `src-frontend/tests/smoke.spec.ts`.
 
@@ -54,6 +59,7 @@ Notas:
 - Guía completa en `docs/OAUTH_SETUP.md`.
 
 ## Build de instalador Windows
+
 PowerShell:
 
 ```powershell
@@ -64,9 +70,10 @@ pwsh -File scripts/build-windows.ps1 -UseCognee
 ```
 
 ## Plan de implementación (100%)
+
 Consulta docs/IMPLEMENTATION-TASKS.md para el desglose de tareas, estados y próximos pasos.
 
-# 🚀 Oxide Pilot v1.0
+## 🚀 Oxide Pilot v1.0
 
 > **El Primer Asistente de Sistema Agéntico del Mundo**
 
@@ -89,7 +96,7 @@ Para obtener información detallada sobre el proyecto, consulte los siguientes d
 
 ## 🎯 Visión del Proyecto
 
-### Oxide Pilot representa la evolución de los asistentes de sistema tradicionales hacia una nueva era de inteligencia agéntica. Combinamos la potencia y seguridad de Rust con la inteligencia artificial conversacional más avanzada para crear un asistente que no solo monitorea tu sistema, sino que entiende, aprende y actúa de forma proactiva.
+### Oxide Pilot representa la evolución de los asistentes de sistema tradicionales hacia una nueva era de inteligencia agéntica. Combinamos la potencia y seguridad de Rust con la inteligencia artificial conversacional más avanzada para crear un asistente que no solo monitorea tu sistema, sino que entiende, aprende y actúa de forma proactiva
 
 ### ¿Qué hace único a Oxide Pilot?
 
