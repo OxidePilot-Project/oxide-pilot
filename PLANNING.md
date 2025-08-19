@@ -1,5 +1,7 @@
 # 📐 Oxide Pilot - Project Planning
 
+> Notas de Infra (Ago 2025): ver `docs/README.md` (índice), `docs/REPO_CLEANUP.md` (limpieza y target unificado) y CI en `.github/workflows/ci.yml`.
+
 ## 🎯 Vision & Objectives
 
 Oxide Pilot represents the evolution of traditional system assistants towards a new era of **agent intelligence**. We combine the power and security of Rust with the most advanced conversational AI to create an assistant that doesn't just monitor your system, but **understands, learns, and acts** proactively.
@@ -225,7 +227,7 @@ Oxide Pilot represents the evolution of traditional system assistants towards a 
 ### Alcance y Arquitectura
 - Backend: Qwen OAuth2 Device Code Flow expuesto por comandos Tauri ya integrados en `src-tauri/src/main.rs`.
 - Frontend: Componentes Svelte para iniciar, visualizar y completar el flujo Qwen, más soporte API Key para Gemini.
-- Configuración: Variables en `src-tauri/.env.example` para Qwen y `GEMINI_API_KEY`; documentación en `OAUTH_SETUP.md`.
+- Configuración: Variables en `src-tauri/.env.example` para Qwen y `GEMINI_API_KEY`; documentación en `docs/OAUTH_SETUP.md`.
 - Seguridad: Tokens guardados en el llavero del SO; no exponer secretos en logs o UI.
   
 ### Tareas (Frontend y Docs)

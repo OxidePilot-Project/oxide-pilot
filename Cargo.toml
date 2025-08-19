@@ -4,7 +4,6 @@ members = [
   "oxide-copilot",
   "oxide-guardian",
   "oxide-memory",
-  "oxide-cognee-bridge",
   "oxide-rpa",
   "oxide-voice"
 ]

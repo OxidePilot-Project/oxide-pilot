@@ -8,6 +8,15 @@
 
 Oxide Pilot is an advanced AI-powered system assistant with agentic capabilities, combining system monitoring, security EDR, and conversational AI. Built with a Rust backend using the Tauri framework and a Svelte frontend, it integrates Google's Gemini 1.5 Pro, speech APIs, and a custom Cognee-based memory system.
 
+## 🔄 Cambios recientes (Ago 2025)
+
+- Workspace: eliminado crate inexistente `oxide-cognee-bridge` del workspace y de manifests (`src-tauri/`, `oxide-memory/`).
+- Memoria: `oxide-memory` usa backend JSON por defecto; la feature `cognee` queda desactivada (código con `#[cfg(feature = "cognee")]` permanece como futuro).
+- Build: unificación de `target/` vía `.cargo/config.toml`; eliminado `CARGO_TARGET_DIR` del `scripts/oxide-dev.bat` para una sola fuente de verdad.
+- Mantenimiento: script `scripts/oxide-clean.bat` mejorado y documentación `docs/REPO_CLEANUP.md` añadida.
+- CI: agregado workflow `.github/workflows/ci.yml` con caché de Cargo (registry/git/target) y npm; build de frontend.
+- Documentación: consolidación de archivos raíz a `docs/` y referencia a `.kiro/specs/oxide-pilot-agentic-system`.
+
 ## 📈 Progress by Component
 
 | Component | Progress | Status | Notes |
@@ -144,9 +153,10 @@ The memory system now supports a pluggable backend via `oxide-memory/src/backend
 
 ### ▶️ Dev Validation Commands
 
-- Bridge: `cargo check -p oxide-cognee-bridge`
 - Memory: `cargo check -p oxide-memory`
 - App (w/ feature): ensure `src-tauri/Cargo.toml` enables `oxide-memory` with `features=["cognee"]`, then `cargo check -p oxide-pilot`
+
+Nota: La feature `cognee` está actualmente desactivada; para reactivarla habría que restaurar el bridge y volver a habilitar las features en los manifests.
 
 ## 🔐 Autenticación (Qwen + Gemini) – Plan y Tareas Profesionales
 
@@ -171,7 +181,7 @@ Implementar una experiencia de autenticación robusta con:
   - Mensajes de error consistentes, logs útiles (sin exponer secretos).
   - Telemetría básica (eventos de inicio/éxito/fallo de auth) respetando privacidad.
 - [ ] Documentación
-  - Actualizar `OAUTH_SETUP.md` (Qwen ya documentado) y enlazar desde `README.md`.
+  - Actualizar `docs/OAUTH_SETUP.md` (Qwen ya documentado) y enlazar desde `README.md`.
   - Mantener `src-tauri/.env.example` (ya extendido con Qwen/Gemini).
 - [ ] QA
   - Casos de prueba manuales: éxito, `pending` prolongado, `slow_down`, timeout, error.
@@ -190,7 +200,7 @@ Implementar una experiencia de autenticación robusta con:
 
 ### Entregables
 - Componentes Svelte (`QwenAuthSetup.svelte` + integración en login/index).
-- Documentación actualizada (`OAUTH_SETUP.md`, `README.md`).
+- Documentación actualizada (`docs/OAUTH_SETUP.md`, `README.md`).
 - `.env.example` con variables Qwen/Gemini (ya actualizado).
 
 ### Timeline sugerido (orientativo)

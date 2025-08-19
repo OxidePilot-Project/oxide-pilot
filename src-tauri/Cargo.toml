@@ -45,10 +45,9 @@ uuid = { version = "1.0", features = ["v4"] }
 lazy_static = "1.4"
 oxide-core = { path = "../oxide-core", features = ["tauri-integration"] }
 oxide-guardian = { path = "../oxide-guardian" }
-oxide-memory = { path = "../oxide-memory", features = ["cognee"] }
+oxide-memory = { path = "../oxide-memory" }
 oxide-copilot = { path = "../oxide-copilot" }
 oxide-voice = { path = "../oxide-voice" }
-oxide-cognee-bridge = { path = "../oxide-cognee-bridge", optional = true }
 rmcp = { version = "0.3", features = ["server", "transport-io", "transport-worker", "transport-streamable-http-server"] }
 axum = "0.7"
 
@@ -70,7 +69,6 @@ tauri-build = { version = "1.5", features = [] }
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
-cognee = ["oxide-cognee-bridge"]
 
 [[test]]
 name = "async_concurrency_tests"

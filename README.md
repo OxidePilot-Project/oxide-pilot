@@ -51,7 +51,7 @@ Notas:
 
 - Configure Google Gemini (API Key u OAuth) desde la UI en `Settings` o en el asistente inicial.
 - Configure Qwen mediante el flujo Device Code desde el asistente inicial o `Settings`.
-- Guía completa en `OAUTH_SETUP.md`.
+- Guía completa en `docs/OAUTH_SETUP.md`.
 
 ## Build de instalador Windows
 PowerShell:

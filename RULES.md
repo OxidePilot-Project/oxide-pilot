@@ -14,6 +14,21 @@ trigger: always_on
 
 ---
 
+## 🔄 Actualización de infraestructura (Ago 2025)
+
+- Workspace corregido: se eliminó el crate inexistente `oxide-cognee-bridge` y se desactivó la feature `cognee` en manifests.
+- Unificación de `target/` en la raíz vía `.cargo/config.toml`; `scripts/oxide-dev.bat` deja de forzar `CARGO_TARGET_DIR`.
+- CI añadido (`.github/workflows/ci.yml`) con caché de Cargo (registry/git/target) y npm; build de frontend.
+- Guía de limpieza y mantenimiento: `docs/REPO_CLEANUP.md`.
+
+## 📚 Índice de documentación
+
+- `docs/README.md`: índice principal de documentación
+- `docs/REPO_CLEANUP.md`: guía de limpieza y artefactos de build
+- `.kiro/specs/oxide-pilot-agentic-system/`: especificaciones del sistema agentic
+
+---
+
 ## 🏗️ Core Architecture Rules
 
 ### 1. Dual Agent System

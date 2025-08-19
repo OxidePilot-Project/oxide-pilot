@@ -13,9 +13,5 @@ serde_json = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.3", features = ["v4"] }
 
-# Optional Cognee integration via local sidecar bridge
-oxide-cognee-bridge = { path = "../oxide-cognee-bridge", optional = true }
-
 [features]
 default = []
-cognee = ["oxide-cognee-bridge"]

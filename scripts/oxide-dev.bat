@@ -101,9 +101,7 @@ echo     - Vite dev server: http://localhost:%PORT%
 echo     - Tauri dev app will connect to that URL
 echo.
 
-:: Unify Rust build outputs to repo 'target/' to avoid duplicate caches
-set "CARGO_TARGET_DIR=%ROOT%\target"
-if not exist "%ROOT%\target" mkdir "%ROOT%\target"
+:: Using Cargo unified target configured in .cargo\config.toml (build.target-dir)
 
 pushd "%TAURI_DIR%" >nul 2>&1
 cargo tauri dev

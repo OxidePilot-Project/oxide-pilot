@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-check:
+    runs-on: ubuntu-latest
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Detect rustc version
+        id: rustc
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "version=$(rustc --version --verbose | sed -n 's/^release: //p')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache cargo registry and git index
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-${{ runner.os }}-${{ steps.rustc.outputs.version }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-${{ steps.rustc.outputs.version }}-
+            cargo-${{ runner.os }}-
+
+      - name: Cache target dir (unified)
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: target-${{ runner.os }}-${{ steps.rustc.outputs.version }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            target-${{ runner.os }}-${{ steps.rustc.outputs.version }}-
+            target-${{ runner.os }}-
+
+      - name: Cargo check (workspace)
+        run: cargo check --workspace --all-targets
+
+      - name: Cargo test (workspace)
+        run: cargo test --workspace --all-features --no-fail-fast
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: src-frontend/package-lock.json
+
+      - name: Install frontend deps
+        working-directory: src-frontend
+        run: npm ci
+
+      - name: Frontend build
+        working-directory: src-frontend
+        run: npm run build --if-present
+
+      # Optional: sccache for faster Rust builds
+      # - name: Install sccache
+      #   uses: mozilla-actions/sccache-action@v0.0.5
+      # - name: Configure sccache env
+      #   run: echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+
+      # Optional: Tauri build can be heavy; run only on release/tag workflows
+      # - name: Tauri build (optional)
+      #   working-directory: src-tauri
+      #   run: cargo tauri build --verbose
