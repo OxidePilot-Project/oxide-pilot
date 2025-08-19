@@ -17,6 +17,10 @@ popd >nul 2>&1
 echo.
 echo Oxide Cleanup
 echo Project root: "%PROJ%"
+rem Detect unified Cargo target directory (CARGO_TARGET_DIR or default to %PROJ%\target)
+set "TARGET_DIR=%CARGO_TARGET_DIR%"
+if not defined TARGET_DIR set "TARGET_DIR=%PROJ%\target"
+echo Cargo target: "%TARGET_DIR%"
 echo.
 
 :askMode
@@ -44,6 +48,23 @@ if exist "%PROJ%\superdesign" (
 )
 
 echo.
+choice /C YN /N /M "Preview ignored deletions with 'git clean -ndX'? [Y]es/[N]o: "
+if errorlevel 2 (
+  echo Skipping git clean preview.
+) else (
+  echo --- git clean -ndX (preview) ---
+  git clean -ndX
+  echo -------------------------------
+  choice /C YN /N /M "Proceed to delete ignored files now with 'git clean -fdX' (excluding node_modules)? [Y]es/[N]o: "
+  if errorlevel 2 (
+    echo Skipping deletion of ignored files.
+  ) else (
+    rem Exclude node_modules to avoid Windows lock prompts; user can delete manually as needed
+    git clean -fdX -e src-frontend/node_modules
+  )
+)
+
+echo.
 echo Cleaning coverage artifacts (*.profraw)...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-ChildItem -LiteralPath '%PROJ%' -Recurse -Filter '*.profraw' -Force -ErrorAction SilentlyContinue ^| Remove-Item -Force -ErrorAction SilentlyContinue"
 
@@ -54,11 +75,25 @@ if exist "%PROJ%\src-frontend\node_modules\.vite" rmdir /S /Q "%PROJ%\src-fronte
 
 rem Always trim Rust incremental artifacts; deeper removal if DEEP=1
 echo Removing Rust incremental artifacts...
-if exist "%PROJ%\src-tauri\target\debug\incremental" rmdir /S /Q "%PROJ%\src-tauri\target\debug\incremental"
+if exist "%TARGET_DIR%\debug\incremental" rmdir /S /Q "%TARGET_DIR%\debug\incremental"
+
+rem Remove hidden workspace caches if present
+if exist "%PROJ%\.target-workspace" rmdir /S /Q "%PROJ%\.target-workspace"
+if exist "%PROJ%\src-tauri\.target-workspace" rmdir /S /Q "%PROJ%\src-tauri\.target-workspace"
+
+echo.
+choice /C YN /N /M "Run 'cargo clean' in src-tauri (safe even if workspace root is broken)? [Y]es/[N]o: "
+if errorlevel 2 (
+  echo Skipping cargo clean in src-tauri.
+) else (
+  pushd "%PROJ%\src-tauri" >nul 2>&1
+  cargo clean
+  popd >nul 2>&1
+)
 
 if "%DEEP%"=="1" (
   echo Deep clean enabled: removing Rust target and npm cache...
-  if exist "%PROJ%\src-tauri\target" rmdir /S /Q "%PROJ%\src-tauri\target"
+  if exist "%TARGET_DIR%" rmdir /S /Q "%TARGET_DIR%"
   powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Test-Path \"$env:LOCALAPPDATA\npm-cache\") { Get-ChildItem -LiteralPath \"$env:LOCALAPPDATA\npm-cache\" -Force -ErrorAction SilentlyContinue ^| Remove-Item -Recurse -Force -ErrorAction SilentlyContinue }"
 )
 
