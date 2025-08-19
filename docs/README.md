@@ -4,24 +4,24 @@ Welcome to the unified documentation hub. This folder consolidates project docs 
 
 ## Index
 
-- Project Cleanup & Build Artifacts: `REPO_CLEANUP.md`
-- OAuth Setup: `OAUTH_SETUP.md`
-- QWEN OAuth Device Flow: `QWEN.md`
-- Windows Build Guide: `README-WINDOWS-BUILD.md`
-- Scripts Reference: `README-SCRIPTS.md`
-- Dual Model Integration: `dual-model-integration.md`
-- Archive (historical notes/reports): `archive/`
+- Project Cleanup & Build Artifacts: [REPO_CLEANUP.md](REPO_CLEANUP.md)
+- OAuth Setup: [OAUTH_SETUP.md](OAUTH_SETUP.md)
+- QWEN OAuth Device Flow: [QWEN.md](QWEN.md)
+- Windows Build Guide: [README-WINDOWS-BUILD.md](README-WINDOWS-BUILD.md)
+- Scripts Reference: [README-SCRIPTS.md](README-SCRIPTS.md)
+- Dual Model Integration: [dual-model-integration.md](dual-model-integration.md)
+- Archive (historical notes/reports): [archive/](archive/)
 
 ## Canonical Root Docs
 
 These remain in the repository root:
-- `TASK.md` — Active tasks and status
-- `RULES.md` — Project rules and guidelines
-- `PLANNING.md` — Strategy and planning
+- [TASK.md](../TASK.md) — Active tasks and status
+- [Project rules and guidelines](../RULES.md)
+- [Strategy and planning](../PLANNING.md)
 
 ## System Specifications
 
-- `.kiro/specs/oxide-pilot-agentic-system/` — Agentic system specs and related artifacts
+- [Agentic system specs and related artifacts](../.kiro/specs/oxide-pilot-agentic-system/) 
 
 ## Contribution Notes
 
