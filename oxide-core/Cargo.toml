@@ -23,6 +23,7 @@ reqwest = { version = "0.11", features = ["json"] }
 tauri = { version = "1.0", features = ["api-all"], optional = true }
 regex = "1.10"
 base64 = "0.21"
+webbrowser = "0.8"
 
 [features]
 default = []

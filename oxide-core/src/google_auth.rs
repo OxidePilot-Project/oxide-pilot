@@ -19,6 +19,7 @@ use log::{info, error};
 use thiserror::Error;
 use keyring::Entry;
 use chrono::{Utc, Duration, DateTime};
+use std::net::SocketAddr;
 
 #[derive(Error, Debug)]
 pub enum AuthError {
@@ -138,6 +139,23 @@ pub async fn get_refresh_token() -> Result<Option<String>, AuthError> {
     }
 }
 
+pub async fn clear_auth() -> Result<(), AuthError> {
+    // Delete Google OAuth tokens from keyring (ignore if missing)
+    for key in [
+        GOOGLE_ACCESS_TOKEN_KEY,
+        GOOGLE_REFRESH_TOKEN_KEY,
+        GOOGLE_ACCESS_TOKEN_EXPIRY_KEY,
+    ] {
+        let entry = Entry::new(GOOGLE_AUTH_SERVICE_ID, key)?;
+        match entry.delete_password() {
+            Ok(_) => {}
+            Err(keyring::Error::NoEntry) => {}
+            Err(e) => return Err(e.into()),
+        }
+    }
+    Ok(())
+}
+
 pub async fn refresh_access_token() -> Result<String, AuthError> {
     let (client_id_str, client_secret_str) = get_client_credentials().await?;
     let refresh_token_str = get_refresh_token().await?.ok_or(AuthError::RefreshTokenNotFound)?;
@@ -180,6 +198,25 @@ pub async fn authenticate_google() -> Result<String, AuthError> {
     let token_url = TokenUrl::new("https://oauth2.googleapis.com/token".to_string())
         .expect("Invalid token endpoint URL");
 
+    // Determine redirect listener port: env override -> try 8080 -> random
+    let preferred_port = std::env::var("GOOGLE_REDIRECT_PORT").ok().and_then(|s| s.parse::<u16>().ok());
+    let listener = if let Some(port) = preferred_port {
+        TcpListener::bind(("127.0.0.1", port)).await.map_err(AuthError::TcpBind)?
+    } else {
+        match TcpListener::bind("127.0.0.1:8080").await {
+            Ok(l) => l,
+            Err(_) => {
+                info!("Port 8080 is busy; falling back to a random localhost port for OAuth redirect. If using a Web application client ID, register the chosen redirect URI or switch to a Desktop client ID.");
+                TcpListener::bind("127.0.0.1:0").await.map_err(AuthError::TcpBind)?
+            }
+        }
+    };
+    let local_addr: SocketAddr = listener.local_addr().map_err(|e| AuthError::TcpBind(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+    let redirect_origin = format!("http://127.0.0.1:{}", local_addr.port());
+    // Allow overriding the redirect path; default to "/callback" to align with docs
+    let redirect_path = std::env::var("GOOGLE_REDIRECT_PATH").unwrap_or_else(|_| "/callback".to_string());
+    let redirect_url_full = format!("{}{}", redirect_origin, redirect_path);
+
     let client = BasicClient::new(
         google_client_id,
         Some(google_client_secret),
@@ -187,7 +224,7 @@ pub async fn authenticate_google() -> Result<String, AuthError> {
         Some(token_url),
     )
     .set_redirect_uri(
-        RedirectUrl::new("http://localhost:8080".to_string()).expect("Invalid redirect URL"),
+        RedirectUrl::new(redirect_url_full.clone()).expect("Invalid redirect URL"),
     );
 
     let (pkce_code_challenge, pkce_code_verifier) = PkceCodeChallenge::new_random_sha256();
@@ -196,27 +233,32 @@ pub async fn authenticate_google() -> Result<String, AuthError> {
         .authorize_url(CsrfToken::new_random)
         .add_scope(Scope::new("https://www.googleapis.com/auth/userinfo.email".to_string()))
         .add_scope(Scope::new("https://www.googleapis.com/auth/userinfo.profile".to_string()))
-        .add_scope(Scope::new("https://www.googleapis.com/auth/drive.file".to_string())) // Example: Add a scope that requires refresh token
+        .add_scope(Scope::new("https://www.googleapis.com/auth/drive.file".to_string()))
+        .add_extra_param("access_type", "offline")
+        .add_extra_param("prompt", "consent")
         .set_pkce_challenge(pkce_code_challenge)
         .url();
 
-    info!("Opening browser for Google authentication...");
-    // Open the authorization URL in the user's browser
-    #[cfg(feature = "tauri-integration")]
-    {
-        // For Tauri 2.x, we'll need to handle this differently
-        // For now, just log the URL
-        info!("Please open this URL in your browser: {authorize_url}");
-    }
-    #[cfg(not(feature = "tauri-integration"))]
-    {
-        info!("Please open this URL in your browser: {}", authorize_url);
+    // Support headless/no-browser mode for CI or restricted environments
+    let no_browser = std::env::var("GOOGLE_OAUTH_NO_BROWSER")
+        .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"))
+        .unwrap_or(false);
+    if no_browser {
+        info!(
+            "NO-BROWSER mode: Please open the following URL manually to complete Google authentication: {}",
+            authorize_url
+        );
+    } else {
+        info!("Opening browser for Google authentication at {}", authorize_url);
+        if let Err(e) = webbrowser::open(authorize_url.as_str()) {
+            return Err(AuthError::BrowserOpen(e.to_string()));
+        }
     }
 
-    let listener = TcpListener::bind("127.0.0.1:8080").await.map_err(AuthError::TcpBind)?;
+    // Wait for the redirect
     let (stream, _) = listener.accept().await.map_err(|_e| AuthError::NoIncomingConnection)?;
 
-    let access_token = handle_redirect(stream, csrf_state, client, pkce_code_verifier).await?;
+    let access_token = handle_redirect(stream, csrf_state, client, pkce_code_verifier, &redirect_origin).await?;
 
     info!("Google authentication successful!");
     Ok(access_token)
@@ -227,6 +269,7 @@ async fn handle_redirect(
     csrf_state: CsrfToken,
     client: BasicClient,
     pkce_code_verifier: PkceCodeVerifier,
+    redirect_origin: &str,
 ) -> Result<String, AuthError> {
     let mut reader = tokio::io::BufReader::new(&mut stream);
     let mut request_line = String::new();
@@ -236,7 +279,7 @@ async fn handle_redirect(
         .split_whitespace()
         .nth(1)
         .ok_or(AuthError::InvalidRedirectUrl)?;
-    let url = Url::parse(&format!("http://localhost:8080{redirect_url_str}"))?;
+    let url = Url::parse(&format!("{redirect_origin}{redirect_url_str}"))?;
 
     let code = url
         .query_pairs()

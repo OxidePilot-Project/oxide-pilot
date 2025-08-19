@@ -198,3 +198,29 @@ impl QwenAuth {
         Ok(PollResult { status: "error".into(), message: Some(text) })
     }
 }
+
+impl QwenAuth {
+    /// Retrieve the stored access token, ensuring it is not expired
+    pub async fn get_access_token(&self) -> Result<String, QwenAuthError> {
+        let entry = Entry::new(&self.keyring_service, AUTH_CONFIG_ENTRY)?;
+        match entry.get_password() {
+            Ok(json) => {
+                let cfg: QwenAuthConfig = serde_json::from_str(&json)?;
+                if let Some(exp) = cfg.expires_at {
+                    if chrono::Utc::now() >= exp {
+                        return Err(QwenAuthError::Auth("Token expired".into()));
+                    }
+                }
+                Ok(cfg.access_token)
+            },
+            Err(keyring::Error::NoEntry) => Err(QwenAuthError::Auth("Not authenticated".into())),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Build the Authorization header value using the stored access token
+    pub async fn get_auth_header(&self) -> Result<String, QwenAuthError> {
+        let token = self.get_access_token().await?;
+        Ok(format!("Bearer {}", token))
+    }
+}

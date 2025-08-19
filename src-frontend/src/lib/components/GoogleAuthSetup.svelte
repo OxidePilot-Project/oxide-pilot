@@ -1,21 +1,11 @@
 <script lang="ts">
-import { createEventDispatcher } from "svelte";
+import { createEventDispatcher, onMount, onDestroy } from "svelte";
 import { writable } from "svelte/store";
 import { isTauri } from "$lib/utils/env";
 
 const dispatch = createEventDispatcher();
 
-// Lazy-load Tauri invoke to avoid SSR/browser issues when not in Tauri
-type InvokeFn = <T = any>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
-let invokeFn: InvokeFn | null = null;
-async function tauriInvoke<T = any>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  if (!isTauri) throw new Error("Not running in Tauri context");
-  if (!invokeFn) {
-    const mod = await import("@tauri-apps/api/tauri");
-    invokeFn = mod.invoke as InvokeFn;
-  }
-  return invokeFn<T>(cmd, args);
-}
+import { tauriInvoke } from "$lib/utils/tauri";
 
 type AuthMethod = "api_key" | "oauth";
 
@@ -31,8 +21,66 @@ let isAuthenticating = false;
 let showInstructions = false;
 let availableModels: string[] = [];
 
+// Listen for backend auth completion events (Tauri) or browser-dispatched CustomEvent fallback
+let unlisten: null | (() => void | Promise<void>) = null;
+
+type GoogleAuthEvent = {
+  status?: string;
+  provider?: string;
+  message?: string;
+  timestamp?: number;
+};
+
+function handleGoogleAuthComplete(payload: GoogleAuthEvent) {
+  // Stop any spinner
+  isAuthenticating = false;
+  const status = (payload?.status || "").toLowerCase();
+  if (status === "success") {
+    authStatus.set({ message: "Google authentication completed.", type: "success" });
+    // Notify parent layout to proceed
+    dispatch("authComplete");
+  } else if (status === "error") {
+    const msg = payload?.message || "Unknown error";
+    authStatus.set({ message: `Google authentication failed: ${msg}`, type: "error" });
+  } else {
+    // Unknown/other payloads
+    authStatus.set({ message: "Received authentication update.", type: "info" });
+  }
+}
+
+onMount(async () => {
+  try {
+    if (isTauri) {
+      const mod = await import("@tauri-apps/api/event");
+      const stop = await mod.listen("google_auth_complete", (evt: any) => {
+        handleGoogleAuthComplete(evt?.payload as GoogleAuthEvent);
+      });
+      unlisten = () => {
+        try { (stop as any)(); } catch {}
+      };
+    } else if (typeof window !== "undefined") {
+      const browserHandler = (e: Event) => {
+        const detail = (e as CustomEvent).detail as GoogleAuthEvent;
+        handleGoogleAuthComplete(detail);
+      };
+      window.addEventListener("google_auth_complete", browserHandler as EventListener);
+      unlisten = () => window.removeEventListener("google_auth_complete", browserHandler as EventListener);
+    }
+  } catch (e) {
+    // Non-fatal; just log to console
+    console.error("Failed to initialize google_auth_complete listener:", e);
+  }
+});
+
+onDestroy(() => {
+  try { if (unlisten) { unlisten(); } } catch {}
+});
+
 async function clearGoogleSession() {
-  if (!isTauri) return;
+  if (!isTauri) {
+    authStatus.set({ message: "Clear session is a desktop-only operation (browser test mode).", type: "info" });
+    return;
+  }
   try {
     await tauriInvoke("clear_google_auth");
     authStatus.set({ message: "Google session cleared.", type: "info" });
@@ -192,20 +240,20 @@ function switchAuthMethod(method: AuthMethod) {
 
   <!-- Auth Method Selection -->
   <div class="auth-method-selector">
-    <div class="method-option {authMethod === 'api_key' ? 'active' : ''}" on:click={() => switchAuthMethod('api_key')}>
+    <button type="button" class="method-option {authMethod === 'api_key' ? 'active' : ''}" on:click={() => switchAuthMethod('api_key')} aria-pressed={authMethod === 'api_key'}>
       <div class="method-icon">🔑</div>
       <div class="method-content">
         <h3>API Key</h3>
         <p>Simple setup for personal use</p>
       </div>
-    </div>
-    <div class="method-option {authMethod === 'oauth' ? 'active' : ''}" on:click={() => switchAuthMethod('oauth')}>
+    </button>
+    <button type="button" class="method-option {authMethod === 'oauth' ? 'active' : ''}" on:click={() => switchAuthMethod('oauth')} aria-pressed={authMethod === 'oauth'}>
       <div class="method-icon">🔐</div>
       <div class="method-content">
         <h3>OAuth 2.0</h3>
         <p>Secure authentication for teams</p>
       </div>
-    </div>
+    </button>
   </div>
 
   {#if showInstructions}
@@ -307,8 +355,10 @@ function switchAuthMethod(method: AuthMethod) {
           <button 
             class="visibility-toggle" 
             on:click="{() => {
-              const input = document.getElementById('apiKey');
-              input.type = input.type === 'password' ? 'text' : 'password';
+              const input = document.getElementById('apiKey') as HTMLInputElement | null;
+              if (input) {
+                input.type = input.type === 'password' ? 'text' : 'password';
+              }
             }}"
             aria-label="Toggle API key visibility"
           >
@@ -369,8 +419,10 @@ function switchAuthMethod(method: AuthMethod) {
           <button 
             class="visibility-toggle" 
             on:click="{() => {
-              const input = document.getElementById('clientSecret');
-              input.type = input.type === 'password' ? 'text' : 'password';
+              const input = document.getElementById('clientSecret') as HTMLInputElement | null;
+              if (input) {
+                input.type = input.type === 'password' ? 'text' : 'password';
+              }
             }}"
             aria-label="Toggle client secret visibility"
           >

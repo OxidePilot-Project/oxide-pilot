@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { writable } from "svelte/store";
+  import SecurityCenter from "./SecurityCenter.svelte";
+  import PerformanceAlertsPanel from "./PerformanceAlertsPanel.svelte";
 
   interface SystemMetric {
     id: string;
@@ -255,36 +257,14 @@
             </div>
             <p>CPU Usage Over Time</p>
           </div>
+          <div style="margin-top: 16px;">
+            <PerformanceAlertsPanel />
+          </div>
         </div>
       {:else if activeTab === "security"}
         <div class="security-section">
           <h2>🔒 Security Overview</h2>
-          <div class="security-grid">
-            <div class="security-card">
-              <div class="security-icon">🛡️</div>
-              <h3>Threat Detection</h3>
-              <p class="status success">Active</p>
-              <p>No threats detected in the last 24 hours</p>
-            </div>
-            <div class="security-card">
-              <div class="security-icon">🔔</div>
-              <h3>Real-time Monitoring</h3>
-              <p class="status success">Enabled</p>
-              <p>Monitoring 127 processes</p>
-            </div>
-            <div class="security-card">
-              <div class="security-icon">🔍</div>
-              <h3>Behavioral Analysis</h3>
-              <p class="status warning">Learning</p>
-              <p>Building baseline behavior profile</p>
-            </div>
-            <div class="security-card">
-              <div class="security-icon">🔄</div>
-              <h3>Automatic Updates</h3>
-              <p class="status success">Enabled</p>
-              <p>Last update: Today at 02:30 AM</p>
-            </div>
-          </div>
+          <SecurityCenter />
         </div>
       {:else if activeTab === "ai-insights"}
         <div class="ai-insights-section">

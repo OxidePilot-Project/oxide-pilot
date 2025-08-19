@@ -5,7 +5,6 @@ use std::fmt;
 use thiserror::Error;
 use oxide_copilot::errors::CopilotError;
 use oxide_core::google_auth::AuthError;
-use oxide_rpa::rpa::RPAError;
 
 /// Centralized error type for the Oxide Pilot application
 #[derive(Error, Debug)]
@@ -21,9 +20,6 @@ pub enum OxideError {
 
     #[error("Copilot error: {0}")]
     Copilot(#[from] CopilotError),
-
-    #[error("RPA error: {0}")]
-    RPA(#[from] RPAError),
 
     #[error("Memory operation failed: {0}")]
     Memory(String),
@@ -177,7 +173,6 @@ impl OxideError {
             OxideError::Config(_) => "Config".to_string(),
             OxideError::Auth(_) => "Auth".to_string(),
             OxideError::Copilot(_) => "Copilot".to_string(),
-            OxideError::RPA(_) => "RPA".to_string(),
             OxideError::Memory(_) => "Memory".to_string(),
             OxideError::Voice(_) => "Voice".to_string(),
             OxideError::Audio(_) => "Audio".to_string(),
@@ -200,7 +195,6 @@ impl OxideError {
             OxideError::Config(_) => false,
             OxideError::Auth(_) => true,
             OxideError::Copilot(_) => true,
-            OxideError::RPA(_) => true,
             OxideError::Memory(_) => true,
             OxideError::Voice(_) => true,
             OxideError::Audio(_) => true,

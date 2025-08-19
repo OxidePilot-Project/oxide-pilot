@@ -3,17 +3,7 @@ import { onDestroy, onMount } from "svelte";
 import { writable } from "svelte/store";
 import { isTauri } from "$lib/utils/env";
 
-// Lazy-load Tauri invoke to avoid SSR importing '@tauri-apps/api/tauri'
-type InvokeFn = <T = any>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
-let invokeFn: InvokeFn | null = null;
-async function tauriInvoke<T = any>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  if (!isTauri) throw new Error("Not running in Tauri context");
-  if (!invokeFn) {
-    const mod = await import("@tauri-apps/api/tauri");
-    invokeFn = mod.invoke as InvokeFn;
-  }
-  return invokeFn<T>(cmd, args);
-}
+import { tauriInvoke } from "$lib/utils/tauri";
 
 const isRecording = writable(false);
 const inputVolume = writable(0);
@@ -24,7 +14,7 @@ const audioDevices = writable<{ input: string[]; output: string[] }>({
 const recordedAudio = writable<Uint8Array | null>(null);
 
 let volumeInterval: number;
-const recordingDuration = 3.0;
+let recordingDuration = 3.0;
 
 onMount(async () => {
   if (!isTauri) {
@@ -120,7 +110,7 @@ function getVolumeColor(volume: number): string {
 
   <!-- Volume Monitor -->
   <div class="volume-monitor">
-    <label>Input Volume:</label>
+    <span class="volume-label">Input Volume:</span>
     <div class="volume-bar">
       <div
         class="volume-level"

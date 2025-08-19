@@ -1,7 +1,8 @@
 param(
   [switch]$Run,
   [Alias("Host")][string]$ListenHost = "127.0.0.1",
-  [int]$Port = 8765
+  [int]$Port = 8765,
+  [switch]$Foreground
 )
 
 $ErrorActionPreference = "Stop"
@@ -62,6 +63,21 @@ if ($Run) {
   Write-Host "Lanzando sidecar en http://${ListenHost}:$Port ..." -ForegroundColor Green
   $uvicorn = Join-Path $venvDir "Scripts/uvicorn.exe"
   $uvicornArgs = @("cognee_sidecar.app:app", "--host", $ListenHost, "--port", $Port, "--reload")
-  Start-Process -FilePath $uvicorn -ArgumentList $uvicornArgs -WorkingDirectory $sidecarDir
-  Write-Host "Sidecar iniciado en segundo plano." -ForegroundColor Green
+
+  if ($Foreground) {
+    Write-Host "Ejecutando sidecar en primer plano (adjunto). Presiona Ctrl+C para detener." -ForegroundColor Yellow
+    Push-Location $sidecarDir
+    try {
+      & $uvicorn @uvicornArgs
+    } finally {
+      Pop-Location
+    }
+  } else {
+    $proc = Start-Process -FilePath $uvicorn -ArgumentList $uvicornArgs -WorkingDirectory $sidecarDir -PassThru
+    if ($null -ne $proc) {
+      Write-Host ("Sidecar iniciado en segundo plano. PID={0}" -f $proc.Id) -ForegroundColor Green
+    } else {
+      Write-Host "Sidecar iniciado en segundo plano." -ForegroundColor Green
+    }
+  }
 }

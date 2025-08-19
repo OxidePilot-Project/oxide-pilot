@@ -7,6 +7,8 @@ pub struct OxidePilotConfig {
     pub ai_providers: AIProvidersConfig,
     // Optional memory backend configuration; if present and enabled, Cognee may be used
     pub cognee: Option<CogneeConfig>,
+    // Optional embedded MCP server configuration
+    pub mcp: Option<McpConfig>,
 }
 
 impl OxidePilotConfig {
@@ -17,6 +19,9 @@ impl OxidePilotConfig {
         if let Some(cognee) = &self.cognee {
             cognee.validate()?;
         }
+        if let Some(mcp) = &self.mcp {
+            mcp.validate()?;
+        }
         Ok(())
     }
 }
@@ -25,12 +30,46 @@ impl OxidePilotConfig {
 pub struct GuardianConfig {
     pub enabled: bool,
     pub monitor_interval_secs: u64,
+    // Antivirus feature toggles and settings
+    pub antivirus_enabled: Option<bool>,
+    pub signatures_path: Option<String>,
+    pub quarantine_dir: Option<String>,
+    pub max_file_size_mb: Option<u64>,
+    // External malware scan providers
+    pub virustotal_api_key: Option<crate::encryption::EncryptedData>,
+    pub hybrid_analysis_api_key: Option<crate::encryption::EncryptedData>,
+    // Game booster toggle
+    pub game_booster_enabled: Option<bool>,
+    // VT cache tuning
+    pub vt_cache_ttl_secs: Option<u64>,
+    pub vt_cache_max_entries: Option<usize>,
+    // Folder scan tuning
+    pub folder_scan_max_workers: Option<usize>,
+    pub folder_scan_max_depth: Option<usize>,
+    // Optional YARA feature toggles/paths (feature-gated in guardian)
+    pub yara_enabled: Option<bool>,
+    pub yara_rules_paths: Option<Vec<String>>,
 }
 
 impl GuardianConfig {
     fn validate(&self) -> Result<(), String> {
         if self.enabled && self.monitor_interval_secs == 0 {
             return Err("monitor_interval_secs must be greater than 0".to_string());
+        }
+        if let Some(mb) = self.max_file_size_mb {
+            if mb == 0 { return Err("max_file_size_mb must be greater than 0".to_string()); }
+        }
+        if let Some(ttl) = self.vt_cache_ttl_secs {
+            if ttl == 0 { return Err("vt_cache_ttl_secs must be greater than 0".to_string()); }
+        }
+        if let Some(max) = self.vt_cache_max_entries {
+            if max == 0 { return Err("vt_cache_max_entries must be greater than 0".to_string()); }
+        }
+        if let Some(w) = self.folder_scan_max_workers {
+            if w == 0 { return Err("folder_scan_max_workers must be greater than 0".to_string()); }
+        }
+        if let Some(d) = self.folder_scan_max_depth {
+            if d == 0 { return Err("folder_scan_max_depth must be greater than 0".to_string()); }
         }
         Ok(())
     }
@@ -66,6 +105,31 @@ impl CogneeConfig {
     fn validate(&self) -> Result<(), String> {
         if self.enabled && self.url.is_empty() {
             return Err("Cognee URL must not be empty when enabled".to_string());
+        }
+        Ok(())
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct McpConfig {
+    // Whether the embedded MCP server should run
+    pub enabled: bool,
+    // Localhost port for the MCP HTTP server (streamable)
+    pub port: u16,
+    // Optional encrypted password for simple bearer auth
+    pub password: Option<crate::encryption::EncryptedData>,
+}
+
+impl McpConfig {
+    fn validate(&self) -> Result<(), String> {
+        if self.enabled {
+            if self.port == 0 {
+                return Err("MCP port must be greater than 0".to_string());
+            }
+            // Disallow privileged or invalid ranges conservatively
+            if self.port < 1024 {
+                return Err("MCP port must be between 1024 and 65535".to_string());
+            }
         }
         Ok(())
     }

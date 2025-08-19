@@ -4,37 +4,69 @@ import { writable } from "svelte/store";
 import GoogleAuthSetup from "./GoogleAuthSetup.svelte";
 import QwenAuthSetup from "./QwenAuthSetup.svelte";
 import SystemDashboard from "./SystemDashboard.svelte";
+import SystemAnalysisPanel from "./SystemAnalysisPanel.svelte";
 import AdvancedSettings from "./AdvancedSettings.svelte";
 import ConversationInterface from "./ConversationInterface.svelte";
 import PatternDashboard from "./PatternDashboard.svelte";
 import { isTauri } from "$lib/utils/env";
+import { tauriInvoke } from "$lib/utils/tauri";
+import LocalModelsPanel from "./LocalModelsPanel.svelte";
 
-type ActiveTab = "dashboard" | "conversation" | "settings" | "advanced";
+type ActiveTab = "dashboard" | "conversation" | "analysis" | "settings" | "advanced";
 
 const activeTab = writable<ActiveTab>("dashboard");
 let isAuthSetupComplete = false;
-let selectedProvider: "gemini" | "qwen" = "gemini";
+let selectedProvider: "gemini" | "qwen" | "local" = "gemini";
+let providerInitialized = false;
 
 // Persist and restore provider selection
 const PROVIDER_KEY = "oxide.provider";
 
-// Lazy-load Tauri invoke to avoid SSR importing '@tauri-apps/api/tauri'
-type InvokeFn = <T = any>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
-let invokeFn: InvokeFn | null = null;
-async function tauriInvoke<T = any>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  if (!isTauri) throw new Error("Not running in Tauri context");
-  if (!invokeFn) {
-    const mod = await import("@tauri-apps/api/tauri");
-    invokeFn = mod.invoke as InvokeFn;
+// Window sizing controls (Tauri only): fullscreen or fixed medium
+let windowApi: any = null;
+async function ensureWindowApi() {
+  if (!isTauri) return null;
+  if (!windowApi) {
+    const mod = await import("@tauri-apps/api/window");
+    windowApi = mod.appWindow;
   }
-  return invokeFn<T>(cmd, args);
+  return windowApi;
+}
+
+async function enterFullscreen() {
+  const win = await ensureWindowApi();
+  if (win) {
+    await win.setFullscreen(true);
+  }
+}
+
+async function exitToMedium() {
+  const win = await ensureWindowApi();
+  if (win) {
+    await win.setFullscreen(false);
+    // Set fixed medium size and center
+    const mod = await import("@tauri-apps/api/window");
+    const size = new mod.LogicalSize(1280, 800);
+    await win.setSize(size);
+    try { await win.center(); } catch {}
+  }
 }
 
 onMount(async () => {
   try {
     const saved = typeof localStorage !== 'undefined' ? localStorage.getItem(PROVIDER_KEY) : null;
-    if (saved === 'gemini' || saved === 'qwen') {
+    if (saved === 'gemini' || saved === 'qwen' || saved === 'local') {
       selectedProvider = saved;
+    }
+  } catch {}
+  providerInitialized = true;
+  // E2E test bypass: allow dashboard in browser mode when ?e2e=1 is present
+  try {
+    if (!isTauri && typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('e2e') === '1') {
+        isAuthSetupComplete = true;
+      }
     }
   } catch {}
   await checkAuthStatus();
@@ -43,18 +75,20 @@ onMount(async () => {
 async function checkAuthStatus() {
   // If running under Tauri, check both providers; mark complete if either is authenticated
   if (!isTauri) {
-    isAuthSetupComplete = false;
+    // In browser mode default to setup incomplete unless E2E bypass set above
     return;
   }
   try {
-    const [geminiStatus, qwenStatus] = await Promise.allSettled([
+    const [geminiStatus, qwenStatus, localStatus] = await Promise.allSettled([
       tauriInvoke<string>("get_auth_status"),
       tauriInvoke<string>("qwen_get_auth_status"),
+      tauriInvoke<{ running: boolean }>("local_llm_server_status"),
     ]);
 
     const geminiOk = geminiStatus.status === 'fulfilled' && /auth/i.test(geminiStatus.value) && !/not\s+auth/i.test(geminiStatus.value);
     const qwenOk = qwenStatus.status === 'fulfilled' && /auth/i.test(qwenStatus.value) && !/not\s+auth/i.test(qwenStatus.value);
-    isAuthSetupComplete = !!(geminiOk || qwenOk);
+    const localOk = localStatus.status === 'fulfilled' && !!localStatus.value?.running;
+    isAuthSetupComplete = !!(geminiOk || qwenOk || localOk);
   } catch (_) {
     isAuthSetupComplete = false;
   }
@@ -71,7 +105,7 @@ function onAuthComplete() {
 
 // Write provider changes to localStorage
 $: try {
-  if (typeof localStorage !== 'undefined' && (selectedProvider === 'gemini' || selectedProvider === 'qwen')) {
+  if (providerInitialized && typeof localStorage !== 'undefined' && (selectedProvider === 'gemini' || selectedProvider === 'qwen' || selectedProvider === 'local')) {
     localStorage.setItem(PROVIDER_KEY, selectedProvider);
   }
 } catch {}
@@ -84,45 +118,61 @@ $: try {
       <p>AI-Powered System Guardian & Assistant</p>
     </div>
 
-    {#if isAuthSetupComplete}
-      <nav class="tab-navigation">
-        <button
-          class="tab-button"
-          class:active={$activeTab === 'dashboard'}
-          on:click={() => setActiveTab('dashboard')}
-        >
-          📊 Dashboard
-        </button>
-        <button
-          class="tab-button"
-          class:active={$activeTab === 'conversation'}
-          on:click={() => setActiveTab('conversation')}
-        >
-          💬 Chat
-        </button>
-        <button
-          class="tab-button"
-          class:active={$activeTab === 'settings'}
-          on:click={() => setActiveTab('settings')}
-        >
-          ⚙️ Settings
-        </button>
-        <button
-          class="tab-button"
-          class:active={$activeTab === 'advanced'}
-          on:click={() => setActiveTab('advanced')}
-        >
-          🔧 Advanced
-        </button>
-      </nav>
-    {/if}
+    <div class="header-actions">
+      {#if isAuthSetupComplete}
+        <nav class="tab-navigation">
+          <button
+            class="tab-button"
+            class:active={$activeTab === 'dashboard'}
+            on:click={() => setActiveTab('dashboard')}
+          >
+            📊 Dashboard
+          </button>
+          <button
+            class="tab-button"
+            class:active={$activeTab === 'conversation'}
+            on:click={() => setActiveTab('conversation')}
+          >
+            💬 Chat
+          </button>
+          <button
+            class="tab-button"
+            class:active={$activeTab === 'analysis'}
+            on:click={() => setActiveTab('analysis')}
+          >
+            🧠 Analysis
+          </button>
+          <button
+            class="tab-button"
+            class:active={$activeTab === 'settings'}
+            on:click={() => setActiveTab('settings')}
+          >
+            ⚙️ Settings
+          </button>
+          <button
+            class="tab-button"
+            class:active={$activeTab === 'advanced'}
+            on:click={() => setActiveTab('advanced')}
+          >
+            🔧 Advanced
+          </button>
+        </nav>
+      {/if}
+
+      {#if isTauri}
+        <div class="window-controls">
+          <button class="win-btn" on:click={enterFullscreen} title="Fullscreen">⛶ Fullscreen</button>
+          <button class="win-btn" on:click={exitToMedium} title="Medium window">◻ Medium</button>
+        </div>
+      {/if}
+    </div>
   </header>
 
   <main class="app-main">
     {#if !isAuthSetupComplete}
       <div class="setup-container">
         <h2>🔐 Setup Required</h2>
-        <p>Please configure your AI provider to get started. Choose between Google Gemini or Qwen.</p>
+        <p>Please configure your AI provider to get started. Choose Google Gemini, Qwen, or Local Models.</p>
         <div class="provider-selector">
           <button class="prov-btn" class:active={selectedProvider === 'gemini'} on:click={() => selectedProvider = 'gemini'}>
             🌟 Google Gemini
@@ -130,11 +180,16 @@ $: try {
           <button class="prov-btn" class:active={selectedProvider === 'qwen'} on:click={() => selectedProvider = 'qwen'}>
             🤖 Qwen (Device Code)
           </button>
+          <button class="prov-btn" class:active={selectedProvider === 'local'} on:click={() => selectedProvider = 'local'}>
+            💻 Local Models
+          </button>
         </div>
         {#if selectedProvider === 'gemini'}
           <GoogleAuthSetup on:authComplete={onAuthComplete} />
-        {:else}
+        {:else if selectedProvider === 'qwen'}
           <QwenAuthSetup on:authComplete={onAuthComplete} />
+        {:else if selectedProvider === 'local'}
+          <LocalModelsPanel />
         {/if}
       </div>
     {:else}
@@ -142,8 +197,10 @@ $: try {
         <PatternDashboard />
       {:else if $activeTab === 'conversation'}
         <div class="conversation-container">
-          <ConversationInterface />
+          <ConversationInterface provider={selectedProvider} />
         </div>
+      {:else if $activeTab === 'analysis'}
+        <SystemAnalysisPanel />
       {:else if $activeTab === 'settings'}
         <div class="settings-container">
           <h2>⚙️ Settings</h2>
@@ -157,6 +214,10 @@ $: try {
               <div>
                 <h4>Qwen</h4>
                 <QwenAuthSetup on:authComplete={() => {}} />
+              </div>
+              <div>
+                <h4>Local Models (LM Studio)</h4>
+                <LocalModelsPanel />
               </div>
             </div>
 
@@ -202,10 +263,17 @@ $: try {
 </div>
 
 <style>
+  :global(html, body) {
+    height: 100%;
+    overflow-x: hidden;
+    overflow-y: hidden;
+  }
+
   .app-container {
-    display: flex;
-    flex-direction: column;
-    height: 100vh;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    min-height: 100dvh;
+    overflow: hidden;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background: var(--color-bg);
   }
@@ -234,9 +302,15 @@ $: try {
     font-size: 14px;
   }
 
+  .header-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .window-controls { display: flex; gap: 8px; }
+  .win-btn { padding: 8px 10px; border: 1px solid rgba(0,0,0,0.08); border-radius: 8px; background: var(--color-surface); cursor: pointer; font-size: 12px; }
+
   .tab-navigation {
     display: flex;
+    flex-wrap: wrap;
     gap: 10px;
+    max-width: 100%;
   }
 
   .tab-button {
@@ -262,21 +336,34 @@ $: try {
     box-shadow: 0 4px 15px rgba(79, 70, 229, 0.35);
   }
 
+  /* Prevent flex/grid children from forcing horizontal overflow */
+  .header-actions,
+  .tab-navigation,
+  .setup-container,
+  .settings-container,
+  .settings-panel,
+  .conversation-container {
+    min-width: 0;
+  }
+
   .app-main {
-    flex: 1;
+    min-height: 0; /* allow this area to shrink and be the only scroller */
     overflow-y: auto;
+    overflow-x: hidden;
     background: var(--color-surface);
-    margin: 20px;
+    padding: clamp(12px, 2.5vh, 20px);
     border-radius: 15px;
     box-shadow: var(--shadow-lg);
     backdrop-filter: blur(10px);
+    box-sizing: border-box;
+    max-width: 100%;
   }
 
   .setup-container {
-    padding: 60px 40px;
+    padding: clamp(24px, 4vh, 60px) clamp(16px, 4vw, 40px);
     text-align: center;
-    max-width: 600px;
-    margin: 0 auto;
+    max-width: min(800px, 100% - 32px);
+    margin-inline: auto;
   }
 
   .setup-container h2 {
@@ -316,14 +403,14 @@ $: try {
   }
 
   .conversation-container {
-    height: 100%;
-    padding: 20px;
+    min-height: 0;
+    padding: clamp(12px, 2vh, 20px);
   }
 
   .settings-container {
-    padding: 30px;
-    max-width: 800px;
-    margin: 0 auto;
+    padding: clamp(16px, 2.5vh, 30px);
+    max-width: min(900px, 100% - 32px);
+    margin-inline: auto;
   }
 
   .settings-container h2 {
@@ -335,8 +422,17 @@ $: try {
   .settings-panel {
     background: var(--color-surface);
     border-radius: var(--radius-md);
-    padding: 25px;
+    padding: clamp(14px, 2vh, 25px);
     box-shadow: var(--shadow-md);
+  }
+
+  /* Compact vertical spacing on short viewports (e.g. 800px window) */
+  @media (max-height: 840px) {
+    .app-header { padding: var(--space-4); }
+    .logo h1 { font-size: 24px; }
+    .tab-button { padding: 10px 14px; font-size: 13px; }
+    .setup-container h2 { font-size: 28px; }
+    .setup-container p { font-size: 15px; margin-bottom: 28px; }
   }
 
   .auth-grid {
@@ -410,6 +506,10 @@ $: try {
     align-items: center;
     gap: 8px;
   }
+
+  /* Prevent horizontal scroll globally */
+  :global(html, body) { overflow-x: hidden; width: 100%; }
+  :global(#app), :global(#svelte) { max-width: 100vw; overflow-x: hidden; }
 
   .status-dot {
     width: 10px;

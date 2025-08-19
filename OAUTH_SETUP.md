@@ -57,9 +57,11 @@ The application will automatically detect and use the API key.
 2. Click "Create Credentials" > "OAuth 2.0 Client IDs"
 3. Choose "Desktop application"
 4. Name: "Oxide Pilot Desktop"
-5. Add authorized redirect URIs:
+5. Add authorized redirect URIs (default path is `/callback`):
    - `http://localhost:8080/callback`
    - `http://127.0.0.1:8080/callback`
+   
+   You can customize the port and path used locally via environment variables below. If you change them, be sure to register matching redirect URIs in Cloud Console.
 
 ### Step 4: Download Credentials
 1. Download the JSON file with your credentials
@@ -70,21 +72,36 @@ The application will automatically detect and use the API key.
 # Windows (PowerShell)
 $env:GOOGLE_OAUTH_CLIENT_ID="your-client-id.apps.googleusercontent.com"
 $env:GOOGLE_OAUTH_CLIENT_SECRET="your-client-secret"
-$env:GOOGLE_OAUTH_REDIRECT_URI="http://localhost:8080/callback"
+# Optional overrides for the local redirect listener
+# Default path is /callback; default port tries 8080 then falls back to a random free port
+$env:GOOGLE_REDIRECT_PORT="8080"            # optional
+$env:GOOGLE_REDIRECT_PATH="/callback"        # optional
+# Headless/CI: do not auto-open browser; copy URL from logs instead
+$env:GOOGLE_OAUTH_NO_BROWSER="1"             # optional
 
 # Windows (Command Prompt)
 set GOOGLE_OAUTH_CLIENT_ID=your-client-id.apps.googleusercontent.com
 set GOOGLE_OAUTH_CLIENT_SECRET=your-client-secret
-set GOOGLE_OAUTH_REDIRECT_URI=http://localhost:8080/callback
+rem Optional
+set GOOGLE_REDIRECT_PORT=8080
+set GOOGLE_REDIRECT_PATH=/callback
+set GOOGLE_OAUTH_NO_BROWSER=1
 
 # Linux/macOS
 export GOOGLE_OAUTH_CLIENT_ID="your-client-id.apps.googleusercontent.com"
 export GOOGLE_OAUTH_CLIENT_SECRET="your-client-secret"
-export GOOGLE_OAUTH_REDIRECT_URI="http://localhost:8080/callback"
+# Optional
+export GOOGLE_REDIRECT_PORT=8080
+export GOOGLE_REDIRECT_PATH="/callback"
+export GOOGLE_OAUTH_NO_BROWSER=1
 ```
 
 ### Step 6: Run Oxide Pilot
 The application will use OAuth authentication and open a browser for login.
+
+Notes:
+- The backend listens on `http://127.0.0.1:<port><path>` and exchanges the auth code for tokens using PKCE. Tokens are stored via OS keyring.
+- If `GOOGLE_OAUTH_NO_BROWSER` is set, the app will NOT auto-open a browser. Copy the authorization URL from the console logs and open it manually.
 
 ---
 
@@ -263,8 +280,9 @@ Detalles:
 
 #### "Browser doesn't open"
 - Check firewall settings
-- Try manually opening the URL shown in console
-- Ensure port 8080 is available
+- If running in CI or headless mode, set `GOOGLE_OAUTH_NO_BROWSER=1` and open the URL printed in logs manually.
+- Ensure port 8080 is available or set a custom `GOOGLE_REDIRECT_PORT`.
+- If you change the path using `GOOGLE_REDIRECT_PATH`, make sure the corresponding redirect URI is registered in Google Cloud.
 
 #### "Token refresh failed"
 - Clear saved authentication: `cargo run --bin test_auth` and choose clear option

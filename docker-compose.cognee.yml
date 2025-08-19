@@ -1,0 +1,17 @@
+services:
+  cognee-sidecar:
+    build:
+      context: ./cognee-sidecar
+      dockerfile: Dockerfile
+    environment:
+      - LLM_API_KEY=${LLM_API_KEY}
+      - COGNEE_SIDECAR_TOKEN=${COGNEE_SIDECAR_TOKEN}
+    ports:
+      # Map container 8765 to a random host port on localhost
+      - "127.0.0.1::8765"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8765/v1/health"]
+      interval: 5s
+      timeout: 2s
+      retries: 20
+    restart: "no"

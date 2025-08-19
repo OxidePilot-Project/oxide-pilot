@@ -3,17 +3,10 @@ import { onDestroy, onMount } from "svelte";
 import { writable } from "svelte/store";
 import { isTauri } from "$lib/utils/env";
 
-// Lazy-load Tauri invoke to avoid SSR/browser issues when not in Tauri
-type InvokeFn = <T = any>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
-let invokeFn: InvokeFn | null = null;
-async function tauriInvoke<T = any>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  if (!isTauri) throw new Error("Not running in Tauri context");
-  if (!invokeFn) {
-    const mod = await import("@tauri-apps/api/tauri");
-    invokeFn = mod.invoke as InvokeFn;
-  }
-  return invokeFn<T>(cmd, args);
-}
+// Centralized invoke utility
+import PerformancePanel from "./PerformancePanel.svelte";
+import AudioControls from "./AudioControls.svelte";
+import { tauriInvoke } from "$lib/utils/tauri";
 
 interface SystemStatus {
   cpu_usage: number;

@@ -4,46 +4,10 @@
     <meta charset="utf-8" />
     <link rel="icon" href="%sveltekit.assets%/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="%sveltekit.assets%/styles/tokens.css" />
+    <link rel="stylesheet" href="%sveltekit.assets%/styles/utilities.css" />
     <style>
-      :root {
-        --color-bg: #f7f9fc;
-        --color-surface: #ffffff;
-        --color-text: #1f2937;
-        --color-muted: #6b7280;
-        --color-primary: #4f46e5;
-        --color-danger: #e11d48;
-        --radius-sm: 6px;
-        --radius-md: 10px;
-        --radius-lg: 14px;
-        --radius-pill: 9999px;
-        --shadow-sm: 0 1px 2px rgba(0,0,0,.06);
-        --shadow-md: 0 4px 12px rgba(0,0,0,.10);
-        --shadow-lg: 0 10px 30px rgba(0,0,0,.15);
-        --space-1: 4px;
-        --space-2: 8px;
-        --space-3: 12px;
-        --space-4: 16px;
-        --space-5: 20px;
-        --space-6: 24px;
-        --space-8: 32px;
-      }
-
       body { background: var(--color-bg); color: var(--color-text); }
-
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --color-bg: #0b1220;
-          --color-surface: #121a2a;
-          --color-text: #e5e7eb;
-          --color-muted: #9ca3af;
-          --color-primary: #8b93f9;
-          --color-danger: #fb7185;
-          --shadow-sm: 0 1px 2px rgba(0,0,0,.40);
-          --shadow-md: 0 6px 18px rgba(0,0,0,.50);
-          --shadow-lg: 0 18px 45px rgba(0,0,0,.60);
-        }
-        body { background: var(--color-bg); color: var(--color-text); }
-      }
 
       *:focus { outline: none; }
       *:focus-visible {

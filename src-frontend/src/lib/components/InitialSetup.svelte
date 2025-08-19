@@ -3,17 +3,7 @@
  import { systemConfig } from "$lib/stores/systemConfig";
  import { isTauri } from "$lib/utils/env";
 
- // Lazy-load Tauri invoke to avoid SSR importing '@tauri-apps/api/tauri'
- type InvokeFn = <T = any>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
- let invokeFn: InvokeFn | null = null;
- async function tauriInvoke<T = any>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-   if (!isTauri) throw new Error("Not running in Tauri context");
-   if (!invokeFn) {
-     const mod = await import("@tauri-apps/api/tauri");
-     invokeFn = mod.invoke as InvokeFn;
-   }
-   return invokeFn<T>(cmd, args);
- }
+ import { tauriInvoke } from "$lib/utils/tauri";
 
  let googleApiKey = "";
  let isLoading = false;

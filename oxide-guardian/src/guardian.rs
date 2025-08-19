@@ -1,14 +1,61 @@
 use crate::monitor::SystemMonitor;
+use crate::scanner::{FileScanner, FileScanReport, ExternalVerdict};
+use crate::signatures::SignatureDb;
+use crate::external_api;
 use oxide_core::config::GuardianConfig;
 use oxide_core::types::SystemEvent;
 use log::{info, warn, error};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 #[cfg(feature = "yara-detection")]
 use yara::{Compiler, Rules};
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
+
+// Simple in-memory cache for VirusTotal verdicts with TTL and max size.
+struct VtCacheEntry {
+    verdict: ExternalVerdict,
+    inserted: Instant,
+}
+
+struct VtCache {
+    map: HashMap<String, VtCacheEntry>,
+    ttl: Duration,
+    max_entries: usize,
+}
+
+impl VtCache {
+    fn new(ttl: Duration, max_entries: usize) -> Self {
+        Self { map: HashMap::new(), ttl, max_entries }
+    }
+
+    fn get(&mut self, sha256: &str) -> Option<ExternalVerdict> {
+        if let Some(entry) = self.map.get(sha256) {
+            if entry.inserted.elapsed() <= self.ttl {
+                return Some(entry.verdict.clone());
+            }
+        }
+        // Expired or missing; ensure stale entry is removed
+        self.map.remove(sha256);
+        None
+    }
+
+    fn put(&mut self, sha256: String, verdict: ExternalVerdict) {
+        // Evict oldest if over capacity
+        if self.map.len() >= self.max_entries {
+            if let Some((oldest_key, _)) = self
+                .map
+                .iter()
+                .min_by_key(|(_, v)| v.inserted)
+                .map(|(k, v)| (k.clone(), v.inserted))
+            {
+                self.map.remove(&oldest_key);
+            }
+        }
+        self.map.insert(sha256, VtCacheEntry { verdict, inserted: Instant::now() });
+    }
+}
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ThreatEvent {
@@ -29,6 +76,7 @@ pub enum ThreatType {
     HighResourceUsage,
     UnauthorizedNetworkAccess,
     FileSystemAnomaly,
+    MaliciousFile,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -72,6 +120,15 @@ impl ThreatDetector {
         #[cfg(feature = "yara-detection")]
         detector.load_yara_rules();
         detector
+    }
+
+    pub fn record_threat(&self, event: ThreatEvent) {
+        let mut history = self.threat_history.lock().unwrap();
+        history.push(event);
+        if history.len() > 1000 {
+            let len = history.len();
+            history.drain(0..len - 1000);
+        }
     }
 
     #[cfg(feature = "yara-detection")]
@@ -280,14 +337,20 @@ pub struct Guardian {
     monitor: Arc<Mutex<SystemMonitor>>,
     config: Arc<Mutex<GuardianConfig>>,
     threat_detector: Arc<ThreatDetector>,
+    file_scanner: Arc<Mutex<FileScanner>>,
+    vt_cache: Arc<Mutex<VtCache>>,
 }
 
 impl Guardian {
     pub fn new(config: GuardianConfig) -> Self {
+        let scanner = Self::build_scanner(&config);
         Self {
             monitor: Arc::new(Mutex::new(SystemMonitor::new())),
             config: Arc::new(Mutex::new(config)),
             threat_detector: Arc::new(ThreatDetector::new()),
+            file_scanner: Arc::new(Mutex::new(scanner)),
+            // Cache VT verdicts for 24h with a modest cap to bound memory.
+            vt_cache: Arc::new(Mutex::new(VtCache::new(Duration::from_secs(24 * 60 * 60), 2048))),
         }
     }
 
@@ -295,6 +358,18 @@ impl Guardian {
         let mut config = self.config.lock().unwrap();
         *config = new_config;
         info!("Guardian config updated.");
+        // Rebuild scanner from new config
+        let scanner = Self::build_scanner(&config);
+        let mut fs = self.file_scanner.lock().unwrap();
+        *fs = scanner;
+    }
+
+    fn build_scanner(cfg: &GuardianConfig) -> FileScanner {
+        let sigdb = cfg
+            .signatures_path
+            .as_ref()
+            .and_then(|p| SignatureDb::load_from_path(p).ok());
+        FileScanner::new(sigdb, cfg.max_file_size_mb)
     }
 
     pub fn start_monitoring(&self) {
@@ -357,6 +432,71 @@ impl Guardian {
             process_count: monitor.list_processes().len(),
             threat_count: self.threat_detector.get_threat_history().len(),
         }
+    }
+
+    pub fn scan_file(
+        &self,
+        path: &str,
+        virustotal_api_key: Option<String>,
+        quarantine: bool,
+    ) -> Result<FileScanReport, String> {
+        // Local scan
+        let scanner = self.file_scanner.lock().unwrap();
+        let mut report = scanner.scan_local(path)?;
+
+        // If no local match and VT key present, try VT lookup by SHA-256
+        if report.local_match.is_none() {
+            if let Some(api_key) = virustotal_api_key {
+                if !api_key.is_empty() {
+                    let sha = report.hashes.sha256.clone();
+                    // Check cache first
+                    let mut cache = self.vt_cache.lock().unwrap();
+                    if let Some(v) = cache.get(&sha) {
+                        report.external_verdict = Some(v.clone());
+                        if v.malicious { report.malicious = true; }
+                    } else {
+                        match external_api::virustotal_lookup(&sha, &api_key) {
+                            Ok(v) => {
+                                report.external_verdict = Some(v.clone());
+                                if v.malicious { report.malicious = true; }
+                                cache.put(sha, v);
+                            }
+                            Err(e) => {
+                                warn!("VirusTotal lookup failed: {}", e);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Quarantine if malicious
+        if report.malicious && quarantine {
+            let qdir = { self.config.lock().unwrap().quarantine_dir.clone() };
+            if let Some(dir) = qdir {
+                let _ = scanner.quarantine_if_malicious(&report, Some(dir));
+            }
+        }
+
+        // Log threat event if malicious
+        if report.malicious {
+            let event = ThreatEvent {
+                id: uuid::Uuid::new_v4().to_string(),
+                timestamp: Utc::now(),
+                threat_type: ThreatType::MaliciousFile,
+                severity: ThreatSeverity::High,
+                description: format!("Malicious file detected: {}", report.path),
+                process_name: None,
+                process_id: None,
+                details: HashMap::from([
+                    ("sha256".to_string(), report.hashes.sha256.clone()),
+                    ("blake3".to_string(), report.hashes.blake3.clone()),
+                ]),
+            };
+            self.threat_detector.record_threat(event);
+        }
+
+        Ok(report)
     }
 }
 

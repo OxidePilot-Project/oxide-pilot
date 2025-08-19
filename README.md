@@ -83,6 +83,7 @@ Para obtener información detallada sobre el proyecto, consulte los siguientes d
 
 - [TASK.md](TASK.md) - Gestión de tareas y progreso actual
 - [PLANNING.md](PLANNING.md) - Planificación estratégica y técnica
+- [UI-UX-CHANGES.md](docs/UI-UX-CHANGES.md) - Cambios recientes de UI/UX, nuevos paneles de Seguridad y Rendimiento, y guía de uso
 
 ---
 

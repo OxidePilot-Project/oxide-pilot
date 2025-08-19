@@ -11,6 +11,7 @@ use oxide_core::security_manager::{SecurityManager, SecurityEvent, SecurityPolic
 use oxide_core::input_validation::InputValidator;
 use oxide_core::types::{Context, Interaction};
 use oxide_guardian::guardian::{Guardian, SystemStatus, ThreatEvent};
+use oxide_guardian::scanner::FileScanReport;
 use oxide_memory::memory::{ContextQuery, MemoryManager, MemoryStats};
 use oxide_voice::voice::{GoogleSTTProvider, GoogleTTSProvider, VoiceProcessor};
 use std::sync::Arc;
@@ -283,7 +284,7 @@ impl OxideSystem {
         let is_running = Arc::clone(&self.is_running);
         let copilot = Arc::clone(&self.copilot);
         let memory_manager = Arc::clone(&self.memory_manager);
-        let voice_processor = Arc::clone(&self.voice_processor);
+        let voice_processor: Arc<VoiceProcessor> = Arc::clone(&self.voice_processor);
 
         tokio::spawn(async move {
             info!("Main system loop started");
@@ -521,6 +522,83 @@ impl OxideSystem {
         self.performance_monitor.set_monitoring_enabled(enabled).await
     }
 
+    // File scanning API plumbing for frontend commands
+    pub async fn scan_file(&self, path: String, use_cloud: bool, quarantine: bool) -> Result<FileScanReport, String> {
+        // Check antivirus feature toggle (defaults to enabled if not set)
+        let av_enabled = {
+            let cfg = self.config.lock().await;
+            cfg.guardian.antivirus_enabled.unwrap_or(true)
+        };
+        if !av_enabled {
+            return Err("Antivirus scanning is disabled in settings".to_string());
+        }
+
+        // Optional rate limiting for cloud lookups
+        if use_cloud {
+            self
+                .security_manager
+                .check_rate_limit("antivirus_cloud_scan")
+                .await
+                .map_err(|e| e.to_string())?;
+        }
+
+        // Resolve VirusTotal API key if cloud scanning requested
+        let vt_key: Option<String> = if use_cloud {
+            // Prefer env override
+            if let Ok(k) = std::env::var("VIRUSTOTAL_API_KEY") {
+                if !k.is_empty() { Some(k) } else { None }
+            } else {
+                // Fallback to encrypted key from config
+                let enc = {
+                    let cfg = self.config.lock().await;
+                    cfg.guardian.virustotal_api_key.clone()
+                };
+                if let Some(ed) = enc {
+                    let bytes = self
+                        .decrypt_data(&ed)
+                        .map_err(|e| format!("Failed to decrypt VirusTotal API key: {}", e))?;
+                    let s = String::from_utf8(bytes)
+                        .map_err(|_| "Decrypted VirusTotal API key is not valid UTF-8".to_string())?;
+                    if s.is_empty() { None } else { Some(s) }
+                } else {
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        // Offload blocking scan (file IO + potential blocking HTTP) to a blocking thread
+        let guardian = self.guardian.clone();
+        let path_cloned = path.clone();
+        tokio::task::spawn_blocking(move || guardian.scan_file(&path_cloned, vt_key, quarantine))
+            .await
+            .map_err(|e| format!("Scan task join error: {}", e))?
+    }
+
+    /// Returns true if a VirusTotal API key is configured via env or encrypted config.
+    pub async fn has_virustotal_key(&self) -> bool {
+        if let Ok(k) = std::env::var("VIRUSTOTAL_API_KEY") {
+            if !k.is_empty() {
+                return true;
+            }
+        }
+
+        // Check encrypted key in config
+        let enc = {
+            let cfg = self.config.lock().await;
+            cfg.guardian.virustotal_api_key.clone()
+        };
+        if let Some(ed) = enc {
+            if let Ok(bytes) = self.decrypt_data(&ed) {
+                if let Ok(s) = String::from_utf8(bytes) {
+                    return !s.is_empty();
+                }
+            }
+        }
+        false
+    }
+
     // Security-related methods
     pub async fn validate_input(&self, field_name: &str, value: &str) -> Result<String, String> {
         self.input_validator.validate(field_name, value)
@@ -573,6 +651,13 @@ impl OxideSystem {
 
     pub async fn get_security_policy(&self) -> SecurityPolicy {
         self.security_manager.get_security_policy().await
+    }
+
+    // Convenience: decrypt an `EncryptedData` blob using the system SecurityManager
+    pub fn decrypt_data(&self, encrypted: &oxide_core::encryption::EncryptedData) -> Result<Vec<u8>, String> {
+        self.security_manager
+            .decrypt_data(encrypted)
+            .map_err(|e| e.to_string())
     }
 
     pub async fn check_rate_limit(&self, identifier: &str) -> Result<(), String> {

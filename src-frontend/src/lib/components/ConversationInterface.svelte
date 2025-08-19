@@ -1,18 +1,9 @@
 <script lang="ts">
 import { writable } from "svelte/store";
 import { isTauri } from "$lib/utils/env";
+import { tauriInvoke } from "$lib/utils/tauri";
 
-// Lazy-load Tauri invoke to avoid SSR importing '@tauri-apps/api/tauri'
-type InvokeFn = <T = any>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
-let invokeFn: InvokeFn | null = null;
-async function tauriInvoke<T = any>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  if (!isTauri) throw new Error("Not running in Tauri context");
-  if (!invokeFn) {
-    const mod = await import("@tauri-apps/api/tauri");
-    invokeFn = mod.invoke as InvokeFn;
-  }
-  return invokeFn<T>(cmd, args);
-}
+export let provider: "gemini" | "qwen" | "local" = "gemini";
 
 interface Message {
   id: string;
@@ -26,6 +17,13 @@ const messages = writable<Message[]>([]);
 let inputText = "";
 let isProcessing = false;
 let charCount = 0;
+
+const PROVIDER_LABELS: Record<"gemini"|"qwen"|"local", string> = {
+  gemini: "Gemini",
+  qwen: "Qwen",
+  local: "Local",
+};
+function providerLabel() { return PROVIDER_LABELS[provider] ?? provider; }
 
 async function sendMessage() {
   if (!inputText.trim() || isProcessing) return;
@@ -47,12 +45,22 @@ async function sendMessage() {
   try {
     let response: string;
     if (isTauri) {
-      response = await tauriInvoke<string>("handle_user_input_command", {
-        user_input: currentInput
-      });
+      if (provider === "local") {
+        response = await tauriInvoke<string>("local_llm_chat", {
+          userPrompt: currentInput
+        });
+      } else {
+        response = await tauriInvoke<string>("handle_user_input_command", {
+          user_input: currentInput
+        });
+      }
     } else {
-      // Browser/SSR fallback to avoid crashes during web preview/E2E
-      response = `Web preview: I received your message: "${currentInput}"`;
+      // Browser/SSR fallback
+      if (provider === "local") {
+        response = "Local models are only available in the desktop (Tauri) app.";
+      } else {
+        response = `Web preview: I received your message: "${currentInput}"`;
+      }
     }
 
     // Update user message status
@@ -107,6 +115,10 @@ function handleInput(event: Event) {
   <div class="messages-header">
     <h2>💬 Conversation with Oxide Pilot</h2>
     <div class="header-actions">
+      <span class="provider-badge" title="Active provider">{providerLabel()}</span>
+      {#if provider === 'local' && !isTauri}
+        <span class="provider-warning">Local models require the desktop (Tauri) app</span>
+      {/if}
       <button class="action-button" on:click={() => messages.set([])}>
         🧹 Clear Chat
       </button>
@@ -230,6 +242,22 @@ function handleInput(event: Event) {
   .header-actions {
     display: flex;
     gap: 10px;
+  }
+
+  .provider-badge {
+    background: #e8f0fe;
+    border: 1px solid #d2e3fc;
+    color: #1a73e8;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    align-self: center;
+  }
+
+  .provider-warning {
+    color: #c5221f;
+    font-size: 12px;
+    align-self: center;
   }
 
   .action-button {

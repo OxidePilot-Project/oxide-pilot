@@ -1,4 +1,4 @@
-use crate::encryption::EncryptionManager;
+use crate::encryption::{EncryptionManager, EncryptedData};
 use log::{info, warn, error};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -397,5 +397,14 @@ impl SecurityManager {
 
     pub async fn get_security_policy(&self) -> SecurityPolicy {
         self.policy.read().await.clone()
+    }
+
+    /// Decrypt data encrypted with the system's EncryptionManager.
+    /// Returns plaintext bytes on success.
+    pub fn decrypt_data(&self, encrypted: &EncryptedData) -> Result<Vec<u8>, SecurityError> {
+        self
+            .encryption_manager
+            .decrypt_data(encrypted)
+            .map_err(|e| SecurityError::EncryptionError(e.to_string()))
     }
 }

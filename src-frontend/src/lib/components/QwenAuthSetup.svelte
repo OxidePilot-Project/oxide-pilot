@@ -1,22 +1,12 @@
 <script lang="ts">
-  import { onDestroy, onMount } from "svelte";
+  import { onDestroy, onMount, tick } from "svelte";
   import { createEventDispatcher } from "svelte";
   import { writable } from "svelte/store";
   import { isTauri } from "$lib/utils/env";
 
   const dispatch = createEventDispatcher();
 
-  // Lazy-load Tauri invoke to avoid SSR/browser issues when not in Tauri
-  type InvokeFn = <T = any>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
-  let invokeFn: InvokeFn | null = null;
-  async function tauriInvoke<T = any>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-    if (!isTauri) throw new Error("Not running in Tauri context");
-    if (!invokeFn) {
-      const mod = await import("@tauri-apps/api/tauri");
-      invokeFn = mod.invoke as InvokeFn;
-    }
-    return invokeFn<T>(cmd, args);
-  }
+  import { tauriInvoke } from "$lib/utils/tauri";
 
   type StatusType = "success" | "error" | "info" | "warning";
   const status = writable<{ message: string; type: StatusType }>({ message: "", type: "info" });
@@ -35,6 +25,29 @@
   let pollAbort = false;
   let pollTimer: number | null = null;
   let countdownTimer: number | null = null;
+
+  // QR code rendering
+  let qrCanvas: HTMLCanvasElement | null = null;
+  let qrRenderError: string | null = null;
+
+  async function renderQR() {
+    try {
+      if (!verification_uri || !qrCanvas) return;
+      // Dynamic import to avoid SSR bundle issues
+      const mod: any = await import("qrcode");
+      // Render compact QR for the verification URL (complete if provided by backend)
+      await mod.toCanvas(qrCanvas, verification_uri, {
+        width: 180,
+        errorCorrectionLevel: "M",
+        margin: 1,
+        color: { dark: "#111827", light: "#ffffff" }
+      });
+      qrRenderError = null;
+    } catch (e: any) {
+      console.error("QR render failed", e);
+      qrRenderError = e?.message ?? String(e);
+    }
+  }
 
   function clearTimers() {
     if (pollTimer !== null) {
@@ -70,6 +83,54 @@
 
   onMount(() => {
     checkQwenStatus();
+    // In browser mode, support E2E simulation via CustomEvent("qwen_device_flow")
+    if (!isTauri && typeof window !== 'undefined') {
+      const handler = (ev: Event) => {
+        try {
+          const detail: any = (ev as CustomEvent).detail || {};
+          const action = (detail.action || '').toLowerCase();
+          if (action === 'start') {
+            // Initialize device flow UI state from payload
+            isBusy = true;
+            pollAbort = false;
+            clearTimers();
+            device_code = detail.device_code || 'mock_device_code';
+            user_code = detail.user_code || 'MOCK-C0DE';
+            verification_uri = detail.verification_uri || 'https://example.com/verify';
+            expires_in = typeof detail.expires_in === 'number' ? detail.expires_in : 300;
+            intervalSec = typeof detail.interval === 'number' ? detail.interval : 5;
+            if (expires_in) startCountdown(expires_in);
+            status.set({ message: 'Open the verification URL and enter the code to authorize.', type: 'info' });
+            void tick().then(() => void renderQR());
+          } else if (action === 'success') {
+            clearTimers();
+            hasExistingSession = true;
+            status.set({ message: 'Authenticated successfully. Tokens stored securely.', type: 'success' });
+            isBusy = false;
+            dispatch('authSuccess', { provider: 'qwen' });
+            dispatch('authComplete');
+          } else if (action === 'error') {
+            clearTimers();
+            const msg = detail.message || 'Authentication failed';
+            status.set({ message: msg, type: 'error' });
+            isBusy = false;
+          } else if (action === 'pending') {
+            // no-op; reserved for future simulation of polling
+          } else if (action === 'clear') {
+            device_code = '';
+            user_code = '';
+            verification_uri = '';
+            expires_in = null;
+            isBusy = false;
+            clearTimers();
+            hasExistingSession = false;
+            status.set({ message: 'Session cleared (mock).', type: 'info' });
+          }
+        } catch (_) { /* ignore */ }
+      };
+      window.addEventListener('qwen_device_flow', handler as EventListener);
+      return () => window.removeEventListener('qwen_device_flow', handler as EventListener);
+    }
   });
 
   function startCountdown(totalSec: number) {
@@ -117,6 +178,9 @@
 
       // Start polling loop respecting interval and slow_down
       void pollUntilDone();
+      // Ensure DOM reflects device-info block, then render QR
+      await tick();
+      void renderQR();
     } catch (err) {
       console.error("Failed to start Qwen device auth:", err);
       status.set({ message: `Failed to start device auth: ${err}`, type: "error" });
@@ -184,7 +248,10 @@
   }
 
   async function clearQwenSession() {
-    if (!isTauri) return;
+    if (!isTauri) {
+      status.set({ message: 'Clear session is a desktop-only operation in this demo mode.', type: 'info' });
+      return;
+    }
     try {
       await tauriInvoke("qwen_clear_auth");
       hasExistingSession = false;
@@ -232,6 +299,15 @@
             <button class="open" on:click={openVerification} title="Open in browser" aria-label="Open verification URL in browser">🌐</button>
           </div>
         </div>
+        <div class="row">
+          <span class="label">Or Scan QR</span>
+          <div class="qr-box">
+            <canvas bind:this={qrCanvas} width="200" height="200" aria-label="Qwen verification QR"></canvas>
+            {#if qrRenderError}
+              <span class="qr-error">QR unavailable: {qrRenderError}</span>
+            {/if}
+          </div>
+        </div>
         {#if expires_in}
           <div class="row">
             <span class="label">Expires In</span>
@@ -268,9 +344,18 @@
   .label { color: #6b7280; font-weight: 600; }
   .code-box, .link-box { display: flex; align-items: center; gap: 8px; }
   .code-box code { background: #111827; color: #e5e7eb; padding: 6px 8px; border-radius: 6px; font-weight: 700; letter-spacing: 1px; }
+  /* Prevent long values from causing horizontal overflow */
+  .row > .code-box, .row > .link-box { min-width: 0; }
+  .code-box code, .link-box a { word-break: break-word; overflow-wrap: anywhere; max-width: 100%; }
+  .link-box { flex-wrap: wrap; }
   .copy, .open { border: 1px solid #d1d5db; background: #fff; border-radius: 6px; padding: 6px 8px; cursor: pointer; }
   .value { font-weight: 600; color: #111827; }
   .hint { font-size: 12px; color: #6b7280; margin-top: 4px; }
+  .qr-box { display: flex; align-items: center; gap: 10px; }
+  .qr-box canvas { border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
+  .qr-error { color: #b91c1c; font-size: 12px; }
+  /* Extra safety to ensure no horizontal scroll inside details block */
+  .device-info { overflow-x: hidden; }
 
   .status-area { margin-top: 12px; }
   .status { padding: 10px 12px; border-radius: 8px; }

@@ -5,18 +5,19 @@
     "version": "0.1.0"
   },
   "build": {
-    "beforeDevCommand": null,
-    "beforeBuildCommand": "npm --prefix ../src-frontend ci && npm --prefix ../src-frontend run build",
-    "devPath": "../src-frontend/dist",
+    "beforeDevCommand": "npm --prefix ./src-frontend run dev -- --port 5317",
+    "beforeBuildCommand": "npm --prefix ./src-frontend ci && npm --prefix ./src-frontend run build",
+    "devPath": "http://localhost:5317",
     "distDir": "../src-frontend/dist"
   },
   "tauri": {
     "windows": [
       {
         "title": "Oxide Pilot",
-        "width": 1024,
-        "height": 768,
-        "resizable": true
+        "width": 1280,
+        "height": 800,
+        "resizable": false,
+        "fullscreen": false
       }
     ],
     "bundle": {

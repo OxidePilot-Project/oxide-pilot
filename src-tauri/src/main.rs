@@ -6,6 +6,8 @@
 mod error_handler;
 mod oxide_system;
 mod cognee_supervisor;
+mod mcp_server;
+mod local_llm;
 
 use error_handler::{ErrorHandler, OxideError, RetryConfig, retry_with_backoff, GLOBAL_ERROR_MONITOR};
 use log::{error, info};
@@ -14,17 +16,193 @@ use oxide_core::config::OxidePilotConfig;
 use oxide_core::google_auth;
 use oxide_core::qwen_auth::{QwenAuth, DeviceAuthStart, PollResult};
 use oxide_guardian::guardian::{SystemStatus, ThreatEvent};
+use oxide_guardian::scanner::FileScanReport;
 use oxide_memory::memory::MemoryStats;
 use oxide_system::OxideSystem;
 use oxide_copilot::auth_manager::AuthManager;
-use std::sync::Arc;
-use tauri::State;
-use tokio::sync::RwLock;
+use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+use std::collections::HashMap;
+use tauri::{Manager, State};
+use tokio::sync::{RwLock, Mutex, mpsc};
+use std::path::PathBuf;
+use std::collections::VecDeque;
+use std::time::Instant;
+use crate::mcp_server::McpServerHandle;
 
 // Define a struct to hold the application state with async-safe mutexes
 pub struct AppState {
     oxide_system: Arc<RwLock<Option<OxideSystem>>>,
     auth_manager: Arc<RwLock<Option<AuthManager>>>,
+    mcp_server: Arc<RwLock<Option<McpServerHandle>>>,
+    // Track folder scan cancellation flags by scan_id
+    folder_scan_cancels: Arc<RwLock<HashMap<String, Arc<AtomicBool>>>>,
+}
+
+// ==============================
+// Local LLM (LM Studio) Commands
+// ==============================
+#[tauri::command]
+async fn local_llm_server_start(port: Option<u16>, cors: Option<bool>) -> Result<String, String> {
+    local_llm::server_start(port, cors.unwrap_or(true)).await
+}
+
+#[tauri::command]
+async fn local_llm_server_stop() -> Result<String, String> {
+    local_llm::server_stop().await
+}
+
+#[tauri::command]
+async fn local_llm_server_status() -> Result<serde_json::Value, String> {
+    let status = local_llm::server_status().await?;
+    serde_json::to_value(status).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn local_llm_ls() -> Result<String, String> {
+    local_llm::ls_json().await
+}
+
+#[tauri::command]
+async fn local_llm_get(model_spec: String, gguf: Option<bool>, yes: Option<bool>) -> Result<String, String> {
+    local_llm::get_model(&model_spec, gguf.unwrap_or(true), yes.unwrap_or(true)).await
+}
+
+#[tauri::command]
+async fn local_llm_load(
+    model_key: String,
+    identifier: Option<String>,
+    context_len: Option<u32>,
+    gpu: Option<String>,
+    ttl_secs: Option<u32>,
+) -> Result<String, String> {
+    local_llm::load_model(
+        &model_key,
+        identifier.as_deref(),
+        context_len,
+        gpu.as_deref(),
+        ttl_secs,
+    ).await
+}
+
+#[tauri::command]
+async fn local_llm_chat(
+    base_url: Option<String>,
+    api_key: Option<String>,
+    model: Option<String>,
+    system_prompt: Option<String>,
+    user_prompt: String,
+) -> Result<String, String> {
+    let resolved_base = base_url.or_else(|| std::env::var("LOCAL_LLM_BASE_URL").ok());
+    let resolved_key = api_key.or_else(|| std::env::var("LOCAL_LLM_API_KEY").ok());
+    let resolved_model = model
+        .or_else(|| std::env::var("LOCAL_LLM_MODEL").ok())
+        .unwrap_or_else(|| "ui-tars-local".to_string());
+    local_llm::chat_completion(resolved_base, resolved_key, resolved_model, system_prompt, user_prompt).await
+}
+
+// Call Qwen Chat Completions API using stored OAuth token
+async fn qwen_chat_completion(prompt: &str, model: Option<String>) -> Result<String, String> {
+    // Resolve config
+    let base = std::env::var("QWEN_API_BASE").map_err(|_| "Missing env QWEN_API_BASE".to_string())?;
+    let path = std::env::var("QWEN_CHAT_COMPLETIONS_PATH").unwrap_or_else(|_| "/v1/chat/completions".to_string());
+    let url = format!("{}{}", base, path);
+    let model_name = model
+        .or_else(|| std::env::var("QWEN_MODEL").ok())
+        .unwrap_or_else(|| "qwen-plus".to_string());
+
+    // Auth header from stored OAuth token
+    let qauth = QwenAuth::new();
+    let auth_header = qauth.get_auth_header().await.map_err(|e| e.to_string())?;
+
+    let body = serde_json::json!({
+        "model": model_name,
+        "messages": [
+            {"role": "system", "content": "You are an expert OS internals, performance, and security analyst. Respond concisely and technically."},
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.2
+    });
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(&url)
+        .header("Authorization", auth_header)
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        return Err(format!("Qwen API error: {} - {}", status, text));
+    }
+
+    let v: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    // Prefer OpenAI-compatible shape: choices[0].message.content
+    if let Some(content) = v
+        .get("choices")
+        .and_then(|c| c.as_array())
+        .and_then(|arr| arr.get(0))
+        .and_then(|first| first.get("message"))
+        .and_then(|m| m.get("content"))
+        .and_then(|c| c.as_str())
+    {
+        return Ok(content.to_string());
+    }
+    // Fallbacks
+    if let Some(text) = v.get("text").and_then(|t| t.as_str()) {
+        return Ok(text.to_string());
+    }
+    Err("Unexpected Qwen response format".to_string())
+}
+
+// Multi-agent orchestration: Gemini planning + Qwen deep analysis
+#[tauri::command]
+async fn run_multi_agent_analysis(
+    state: State<'_, AppState>,
+    gemini_model: Option<String>,
+    qwen_model: Option<String>,
+) -> Result<String, String> {
+    let snapshot_val = get_system_snapshot(state).await?;
+    let snapshot_str = serde_json::to_string_pretty(&snapshot_val).unwrap_or_else(|_| snapshot_val.to_string());
+
+    // Prompts for each agent
+    let gemini_prompt = format!(
+        "You are an expert OS performance and security analyst. Given this JSON snapshot, produce a concise analysis with:\n\
+        - Key performance issues and likely root causes\n\
+        - Suspicious processes or threats (if any)\n\
+        - Immediate remediation steps (bulleted)\n\
+        - Risk score (0-100) and confidence.\n\nSnapshot:\n{}",
+        snapshot_str
+    );
+
+    let qwen_prompt = format!(
+        "Perform a deep technical analysis of this system snapshot focusing on:\n\
+        - Hot threads and blocking syscalls\n\
+        - Memory pressure, leaks, fragmentation indicators\n\
+        - Process anomalies (handles, CPU spikes, I/O)\n\
+        - Concrete remediation with commands and config changes.\n\nSnapshot:\n{}",
+        snapshot_str
+    );
+
+    use oxide_core::gemini_auth::GeminiAuth;
+    let gauth = GeminiAuth::new();
+    let _ = gauth.init_from_env().await; // best-effort API key init
+
+    // Run both analyses concurrently
+    let (g_res, q_res) = tokio::join!(
+        async { gauth.send_message(&gemini_prompt, gemini_model.as_deref()).await.map_err(|e| e.to_string()) },
+        async { qwen_chat_completion(&qwen_prompt, qwen_model).await }
+    );
+
+    let result = serde_json::json!({
+        "gemini_summary": g_res.as_deref().unwrap_or("Gemini analysis failed"),
+        "qwen_deep_analysis": q_res.as_deref().unwrap_or("Qwen analysis failed"),
+        "snapshot": snapshot_val,
+    });
+    Ok(result.to_string())
 }
 
 #[tauri::command]
@@ -51,11 +229,29 @@ async fn set_google_client_credentials(
 }
 
 #[tauri::command]
-async fn authenticate_google_command() -> Result<String, String> {
-    google_auth::authenticate_google().await.map_err(|e| {
-        error!("Google authentication failed: {}", e);
-        e.to_string()
-    })
+async fn authenticate_google_command(app: tauri::AppHandle) -> Result<String, String> {
+    match google_auth::authenticate_google().await {
+        Ok(token) => {
+            let _ = app.emit_all("google_auth_complete", json!({
+                "status": "success",
+                "provider": "google",
+                "timestamp": std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0),
+            }));
+            Ok(token)
+        }
+        Err(e) => {
+            error!("Google authentication failed: {}", e);
+            let _ = app.emit_all("google_auth_complete", json!({
+                "status": "error",
+                "provider": "google",
+                "message": e.to_string(),
+            }));
+            Err(e.to_string())
+        }
+    }
 }
 
 #[tauri::command]
@@ -154,9 +350,250 @@ async fn handle_user_input_command(
 
 #[tauri::command]
 async fn get_system_status(state: State<'_, AppState>) -> Result<SystemStatus, String> {
+    let system = state.oxide_system.read().await;
+    let system = system.as_ref().ok_or("System not initialized")?;
+    Ok(system.get_system_status())
+}
+
+#[tauri::command]
+async fn scan_file_command(
+    path: String,
+    use_cloud: bool,
+    quarantine: bool,
+    state: State<'_, AppState>,
+) -> Result<FileScanReport, String> {
+    let system = state.oxide_system.read().await;
+    let system = system.as_ref().ok_or("System not initialized")?;
+    system.scan_file(path, use_cloud, quarantine).await
+}
+
+#[tauri::command]
+async fn start_folder_scan(
+    root: String,
+    use_cloud: bool,
+    quarantine: bool,
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> Result<String, String> {
+    // Ensure system exists
+    let system_guard = state.oxide_system.read().await;
+    let Some(system) = system_guard.as_ref() else { return Err("System not initialized".to_string()); };
+    let system_clone = system.clone();
+    drop(system_guard);
+
+    // Resolve config for limits
+    let cfg = system_clone.get_config().await;
+    let max_workers = cfg.guardian.folder_scan_max_workers.unwrap_or(8).max(1);
+    let max_depth = cfg.guardian.folder_scan_max_depth.unwrap_or(usize::MAX);
+    let max_file_size_bytes: Option<u64> = cfg.guardian.max_file_size_mb.map(|mb| (mb as u64) * 1024 * 1024);
+
+    // Create cancel flag and scan id
+    let scan_id = uuid::Uuid::new_v4().to_string();
+    let cancel_flag = Arc::new(AtomicBool::new(false));
+    {
+        let mut cancels = state.folder_scan_cancels.write().await;
+        cancels.insert(scan_id.clone(), cancel_flag.clone());
+    }
+
+    let root_path = PathBuf::from(root.clone());
+    let app_clone = app.clone();
+    let state_clone = AppState {
+        oxide_system: state.oxide_system.clone(),
+        auth_manager: state.auth_manager.clone(),
+        mcp_server: state.mcp_server.clone(),
+        folder_scan_cancels: state.folder_scan_cancels.clone(),
+    };
+
+    // Spawn background task
+    tokio::spawn(async move {
+        let start = Instant::now();
+        let _ = app_clone.emit_all("folder_scan_started", serde_json::json!({
+            "scan_id": scan_id,
+            "root": root,
+        }));
+
+        // Discover files breadth-first up to max_depth, respecting cancellation
+        let mut files: Vec<PathBuf> = Vec::new();
+        let mut q: VecDeque<(PathBuf, usize)> = VecDeque::new();
+        q.push_back((root_path.clone(), 0));
+
+        while let Some((dir, depth)) = q.pop_front() {
+            if cancel_flag.load(Ordering::SeqCst) { break; }
+            match std::fs::read_dir(&dir) {
+                Ok(read_dir) => {
+                    for entry in read_dir.flatten() {
+                        if cancel_flag.load(Ordering::SeqCst) { break; }
+                        let path = entry.path();
+                        match entry.file_type() {
+                            Ok(ft) if ft.is_dir() => {
+                                if depth < max_depth { q.push_back((path, depth + 1)); }
+                            }
+                            Ok(ft) if ft.is_file() => {
+                                // size filter
+                                if let Some(limit) = max_file_size_bytes {
+                                    if let Ok(meta) = entry.metadata() {
+                                        if meta.len() > limit { continue; }
+                                    }
+                                }
+                                files.push(path);
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                Err(e) => {
+                    let _ = app_clone.emit_all("folder_scan_progress", serde_json::json!({
+                        "scan_id": scan_id,
+                        "error": format!("read_dir error at {}: {}", dir.display(), e),
+                    }));
+                }
+            }
+        }
+
+        let total = files.len();
+        let _ = app_clone.emit_all("folder_scan_progress", serde_json::json!({
+            "scan_id": scan_id,
+            "discovered": total,
+        }));
+
+        if cancel_flag.load(Ordering::SeqCst) {
+            let _ = app_clone.emit_all("folder_scan_cancelled", serde_json::json!({
+                "scan_id": scan_id,
+                "scanned": 0,
+                "total": total,
+                "malicious": 0,
+                "errors": 0,
+                "duration_ms": start.elapsed().as_millis(),
+            }));
+            let mut cancels = state_clone.folder_scan_cancels.write().await;
+            cancels.remove(&scan_id);
+            return;
+        }
+
+        // Scan concurrently with a worker pool using mpsc
+        let (tx, rx) = mpsc::channel::<String>(std::cmp::max(1, total));
+        for path in files {
+            if cancel_flag.load(Ordering::SeqCst) { break; }
+            let _ = tx.send(path.to_string_lossy().to_string()).await;
+        }
+        drop(tx);
+
+        let rx = Arc::new(Mutex::new(rx));
+        let scanned_c = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let malicious_c = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let errors_c = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+
+        let mut handles = Vec::new();
+        for _ in 0..max_workers {
+            let rx = rx.clone();
+            let cancel_chk = cancel_flag.clone();
+            let app_emit = app_clone.clone();
+            let sys = system_clone.clone();
+            let scanned_c = scanned_c.clone();
+            let malicious_c = malicious_c.clone();
+            let errors_c = errors_c.clone();
+            let scan_id_cl = scan_id.clone();
+            handles.push(tokio::spawn(async move {
+                loop {
+                    if cancel_chk.load(Ordering::SeqCst) { break; }
+                    let next = {
+                        let mut guard = rx.lock().await;
+                        guard.recv().await
+                    };
+                    let Some(path_str) = next else { break; };
+                    if cancel_chk.load(Ordering::SeqCst) { break; }
+
+                    let res = sys.scan_file(path_str.clone(), use_cloud, quarantine).await;
+                    match res {
+                        Ok(report) => {
+                            let s = scanned_c.fetch_add(1, Ordering::SeqCst) + 1;
+                            if report.malicious { malicious_c.fetch_add(1, Ordering::SeqCst); }
+                            let m = malicious_c.load(Ordering::SeqCst);
+                            let e = errors_c.load(Ordering::SeqCst);
+                            let _ = app_emit.emit_all("folder_scan_progress", serde_json::json!({
+                                "scan_id": scan_id_cl,
+                                "scanned": s,
+                                "total": total,
+                                "malicious": m,
+                                "errors": e,
+                                "current_file": path_str,
+                                "local_match": report.local_match,
+                                "external_verdict": report.external_verdict,
+                            }));
+                        }
+                        Err(err) => {
+                            let s = scanned_c.fetch_add(1, Ordering::SeqCst) + 1;
+                            let e = errors_c.fetch_add(1, Ordering::SeqCst) + 1;
+                            let m = malicious_c.load(Ordering::SeqCst);
+                            let _ = app_emit.emit_all("folder_scan_progress", serde_json::json!({
+                                "scan_id": scan_id_cl,
+                                "scanned": s,
+                                "total": total,
+                                "malicious": m,
+                                "errors": e,
+                                "current_file": path_str,
+                                "error": err,
+                            }));
+                        }
+                    }
+                }
+            }));
+        }
+
+        for h in handles { let _ = h.await; }
+
+        let scanned = scanned_c.load(Ordering::SeqCst);
+        let malicious = malicious_c.load(Ordering::SeqCst);
+        let errors = errors_c.load(Ordering::SeqCst);
+
+        // Emit final event
+        if cancel_flag.load(Ordering::SeqCst) {
+            let _ = app_clone.emit_all("folder_scan_cancelled", serde_json::json!({
+                "scan_id": scan_id,
+                "scanned": scanned,
+                "total": total,
+                "malicious": malicious,
+                "errors": errors,
+                "duration_ms": start.elapsed().as_millis(),
+            }));
+        } else {
+            let _ = app_clone.emit_all("folder_scan_completed", serde_json::json!({
+                "scan_id": scan_id,
+                "scanned": scanned,
+                "total": total,
+                "malicious": malicious,
+                "errors": errors,
+                "duration_ms": start.elapsed().as_millis(),
+            }));
+        }
+
+        // Cleanup cancel flag
+        let mut cancels = state_clone.folder_scan_cancels.write().await;
+        cancels.remove(&scan_id);
+    });
+
+    Ok(scan_id)
+}
+
+#[tauri::command]
+async fn cancel_folder_scan(scan_id: String, state: State<'_, AppState>) -> Result<(), String> {
+    let mut cancels = state.folder_scan_cancels.write().await;
+    if let Some(flag) = cancels.get(&scan_id) {
+        flag.store(true, Ordering::SeqCst);
+        Ok(())
+    } else {
+        Err("Unknown scan_id".to_string())
+    }
+}
+
+#[tauri::command]
+async fn is_virustotal_configured(state: State<'_, AppState>) -> Result<bool, String> {
     let system_guard = state.oxide_system.read().await;
     if let Some(system) = system_guard.as_ref() {
-        Ok(system.get_system_status())
+        // Clone ref to avoid holding lock across await
+        let system_clone = system.clone();
+        drop(system_guard);
+        Ok(system_clone.has_virustotal_key().await)
     } else {
         Err("System not initialized".to_string())
     }
@@ -484,9 +921,7 @@ async fn get_available_models() -> Result<Vec<String>, String> {
 
 #[tauri::command]
 async fn clear_google_auth() -> Result<(), String> {
-    use oxide_core::gemini_auth::GeminiAuth;
-    let auth = GeminiAuth::new();
-    auth.clear_auth().await.map_err(|e| e.to_string())
+    google_auth::clear_auth().await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -560,6 +995,149 @@ async fn qwen_clear_auth() -> Result<(), String> {
     auth.clear_auth().await.map_err(|e| e.to_string())
 }
 
+// Collect a comprehensive snapshot of the current system state for analysis
+#[tauri::command]
+async fn get_system_snapshot(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let system_guard = state.oxide_system.read().await;
+    if let Some(system) = system_guard.as_ref() {
+        let system_clone = system.clone();
+        drop(system_guard);
+
+        // Gather pieces in parallel where possible
+        let status = system_clone.get_system_status();
+        let threats = system_clone.get_threat_history();
+        let (memory_stats, perf_metrics, perf_alerts, op_profiles) = (
+            system_clone.get_memory_stats().await,
+            system_clone.get_performance_metrics().await,
+            system_clone.get_performance_alerts().await,
+            system_clone.get_operation_profiles().await,
+        );
+
+        let perf_metrics_val = serde_json::to_value(perf_metrics).map_err(|e| e.to_string())?;
+        let perf_alerts_val = serde_json::to_value(perf_alerts).map_err(|e| e.to_string())?;
+        let op_profiles_val = serde_json::to_value(op_profiles).map_err(|e| e.to_string())?;
+
+        let snapshot = json!({
+            "status": status,
+            "threats": threats,
+            "memory": memory_stats,
+            "performance": perf_metrics_val,
+            "alerts": perf_alerts_val,
+            "profiles": op_profiles_val,
+            "collected_at_unix": std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0),
+        });
+        Ok(snapshot)
+    } else {
+        Err("System not initialized".to_string())
+    }
+}
+
+// Orchestrate system analysis: collect snapshot and summarize with Gemini
+#[tauri::command]
+async fn run_system_analysis(state: State<'_, AppState>, model: Option<String>) -> Result<String, String> {
+    let snapshot = get_system_snapshot(state).await?;
+
+    // Build an analyst-style prompt for Gemini
+    let prompt = format!(
+        "You are an expert OS performance and security analyst. Given this JSON snapshot, produce a concise analysis with:\n\
+        - Key performance issues and likely root causes\n\
+        - Suspicious processes or threats (if any)\n\
+        - Immediate remediation steps (bulleted)\n\
+        - Risk score (0-100) and confidence.\n\nSnapshot:\n{}",
+        snapshot
+    );
+
+    use oxide_core::gemini_auth::GeminiAuth;
+    let auth = GeminiAuth::new();
+    // Best-effort initialize from environment (API key)
+    let _ = auth.init_from_env().await;
+
+    auth.send_message(&prompt, model.as_deref()).await.map_err(|e| {
+        error!("System analysis via Gemini failed: {}", e);
+        e.to_string()
+    })
+}
+
+#[tauri::command]
+async fn mcp_start(
+    state: State<'_, AppState>,
+    port_override: Option<u16>,
+    password_override: Option<String>,
+) -> Result<String, String> {
+    // If already running, stop and restart with new params
+    {
+        let mut mcp = state.mcp_server.write().await;
+        if let Some(mut handle) = mcp.take() {
+            handle.stop().await;
+        }
+    }
+
+    // Resolve port/password from override or config
+    let (port, password): (u16, Option<String>) = {
+        // Try to read from current system config if available
+        let system_guard = state.oxide_system.read().await;
+        if let Some(system) = system_guard.as_ref() {
+            let cfg = system.get_config().await;
+            let from_cfg = cfg.mcp;
+            let resolved_port = port_override
+                .or_else(|| from_cfg.as_ref().map(|m| m.port))
+                .unwrap_or(7999);
+            let resolved_pwd = if let Some(p) = password_override {
+                Some(p)
+            } else if let Some(enc) = from_cfg.and_then(|m| m.password) {
+                let bytes = system
+                    .decrypt_data(&enc)
+                    .map_err(|e| format!("Failed to decrypt MCP password: {}", e))?;
+                let s = String::from_utf8(bytes)
+                    .map_err(|_| "Decrypted MCP password is not valid UTF-8".to_string())?;
+                Some(s)
+            } else {
+                None
+            };
+            (resolved_port, resolved_pwd)
+        } else {
+            (port_override.unwrap_or(7999), password_override)
+        }
+    };
+
+    let handle = McpServerHandle::start(port, password).await
+        .map_err(|e| e.to_string())?;
+    let addr = handle.addr();
+
+    let mut mcp = state.mcp_server.write().await;
+    *mcp = Some(handle);
+
+    Ok(format!("mcp_started: http://{}", addr))
+}
+
+#[tauri::command]
+async fn mcp_stop(state: State<'_, AppState>) -> Result<String, String> {
+    let mut mcp = state.mcp_server.write().await;
+    if let Some(mut handle) = mcp.take() {
+        handle.stop().await;
+        Ok("mcp_stopped".to_string())
+    } else {
+        Ok("mcp_not_running".to_string())
+    }
+}
+
+#[tauri::command]
+async fn mcp_status(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let mcp = state.mcp_server.read().await;
+    if let Some(handle) = mcp.as_ref() {
+        Ok(serde_json::json!({
+            "running": true,
+            "addr": handle.addr().to_string(),
+            "password_enabled": handle.password_enabled(),
+        }))
+    } else {
+        Ok(serde_json::json!({"running": false}))
+    }
+}
+
 fn main() {
     // Load environment variables from .env file
     dotenv::dotenv().ok();
@@ -573,6 +1151,8 @@ fn main() {
         .manage(AppState {
             oxide_system: Arc::new(RwLock::new(None)),
             auth_manager: Arc::new(RwLock::new(None)),
+            mcp_server: Arc::new(RwLock::new(None)),
+            folder_scan_cancels: Arc::new(RwLock::new(HashMap::new())),
         })
         .invoke_handler(tauri::generate_handler![
             send_notification,
@@ -585,6 +1165,10 @@ fn main() {
             initialize_system,
             handle_user_input_command,
             get_system_status,
+            scan_file_command,
+            start_folder_scan,
+            cancel_folder_scan,
+            is_virustotal_configured,
             get_threat_history,
             get_memory_stats,
             update_system_config,
@@ -615,10 +1199,24 @@ fn main() {
             clear_auth,
             clear_google_auth,
             startup_check,
+            get_system_snapshot,
+            run_system_analysis,
+            run_multi_agent_analysis,
+            // Local LLM (LM Studio) controls
+            local_llm_server_start,
+            local_llm_server_stop,
+            local_llm_server_status,
+            local_llm_ls,
+            local_llm_get,
+            local_llm_load,
+            local_llm_chat,
             qwen_start_device_auth,
             qwen_poll_device_auth,
             qwen_get_auth_status,
-            qwen_clear_auth
+            qwen_clear_auth,
+            mcp_start,
+            mcp_stop,
+            mcp_status
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

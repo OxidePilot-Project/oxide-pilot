@@ -1,2 +1,4 @@
 [build]
-rustflags = ["-C", "instrument-coverage"]
+# Coverage disabled in dev to avoid profraw disk usage and build failures.
+# Re-enable for test runs by setting environment variable:
+#   set RUSTFLAGS=-C instrument-coverage
