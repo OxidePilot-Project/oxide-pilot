@@ -1,6 +1,11 @@
-# Plan de Implementación Final (100%)
+# Plan de Implementación y Estado
 
 Este documento segmenta las tareas restantes para alcanzar el 100% de readiness. Cada sección incluye objetivo, acciones y estado.
+
+> Estado actual del proyecto: **90%**
+>
+> - Funcionalidad completa: autenticación Google OAuth2 y Qwen Device Code, paneles de Seguridad y Rendimiento, y pruebas E2E Playwright para flujos clave.
+> - Pendiente para 100% (release): iconos/branding e integración de firma de código.
 
 ## 1. Endurecimiento de Seguridad Tauri (Hecho  ✅)
 - Objetivo: Minimizar superficie de APIs y definir metadatos de bundle.

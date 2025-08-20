@@ -69,7 +69,7 @@ pwsh -File scripts/build-windows.ps1
 pwsh -File scripts/build-windows.ps1 -UseCognee
 ```
 
-## Plan de implementación (100%)
+## Plan de implementación y estado
 
 Consulta docs/IMPLEMENTATION-TASKS.md para el desglose de tareas, estados y próximos pasos.
 
