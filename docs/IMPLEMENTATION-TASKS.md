@@ -6,6 +6,7 @@ Este documento segmenta las tareas restantes para alcanzar el 100% de readiness.
 >
 > - Funcionalidad completa: autenticación Google OAuth2 y Qwen Device Code, paneles de Seguridad y Rendimiento, y pruebas E2E Playwright para flujos clave.
 > - Pendiente para 100% (release): iconos/branding e integración de firma de código.
+> - Limpieza final: carpetas temporales auditadas y eliminadas (`temp-qwen-code/`), artefactos de Playwright ignorados y corrección de escritura HAR en ejecución paralela.
 
 ## 1. Endurecimiento de Seguridad Tauri (Hecho  ✅)
 - Objetivo: Minimizar superficie de APIs y definir metadatos de bundle.
@@ -91,6 +92,14 @@ Este documento segmenta las tareas restantes para alcanzar el 100% de readiness.
 - Acciones:
   - Añadir job CI de release (GitHub Actions) que suba a Releases los bundles.
   - Firma previa.
+
+## 11. E2E y Artefactos (Hecho  ✅)
+- Objetivo: Estabilizar la suite E2E en Windows y mantener el repo limpio.
+- Acciones realizadas:
+  - Corregido conflicto de escritura HAR en paralelo configurando ruta única por worker en `src-frontend/playwright.config.ts` (`recordHar: path: test-results/network-${process.pid}.har`).
+  - Añadidas reglas en `src-frontend/.gitignore` para ignorar `playwright-report/` y `test-results/`.
+  - Limpieza segura de artefactos E2E (sin tocar código fuente).
+- Estado: Aplicado. Suite E2E pasa completa en paralelo.
 
 ---
 
