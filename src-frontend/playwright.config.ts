@@ -28,7 +28,8 @@ export default defineConfig({
     video: 'retain-on-failure',
     viewport: { width: 1280, height: 800 },
     contextOptions: {
-      recordHar: { path: 'test-results/network.har', content: 'embed' },
+      // Use a unique HAR file per worker process to avoid write contention on Windows
+      recordHar: { path: `test-results/network-${process.pid}.har`, content: 'embed' },
     },
   },
   // Launch/stop Cognee sidecar for the test session
