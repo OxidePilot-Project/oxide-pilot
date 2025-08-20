@@ -100,7 +100,10 @@ Archivo: `src-frontend/src/lib/components/PatternDashboard.svelte`
 - Paginación/Filtrado: Para eventos y errores recientes.
 - Persistencia: Guardar el estado del monitoreo de rendimiento.
 - Gráficas: Mini sparklines de métricas recientes.
-- E2E: Pruebas Playwright para flujos de Security/Performance.
+- E2E: Pruebas Playwright para flujos de Security/Performance. (Hecho ✅)
+  - Ver specs: `src-frontend/tests/security-performance.spec.ts`,
+    `src-frontend/tests/google-oauth-ui.spec.ts`,
+    `src-frontend/tests/qwen-device-flow.spec.ts`.
 - Documentación: Actualizar `src-frontend/README.md` con estas guías y scripts reales.
 - Tauri: Confirmar `resizable: false` o lógica equivalente en configuración de ventana.
 
