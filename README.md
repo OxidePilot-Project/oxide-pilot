@@ -3,14 +3,11 @@
 Oxide Pilot es un asistente agentico con backend en Rust (Tauri) y UI Svelte opcional. Incluye agentes Guardian/Copilot, memoria local (JSON) y soporte opcional para Cognee via sidecar Python.
 
 ## Requisitos
- 
- 
  - Windows 10/11 x64
  - Rust + cargo
  - (Opcional) Node.js para construir la UI
  - (Opcional) Python 3.8–3.12 para sidecar Cognee
- 
- 
+
 ## Desarrollo rápido
 
 PowerShell:
@@ -105,8 +102,7 @@ Para obtener información detallada sobre el proyecto, consulte los siguientes d
 - 🤖 Asistencia Conversacional: Interacción natural por voz con capacidades multimodales
 - 🎮 Control Agéntico: Capacidad de tomar acciones directas en el sistema cuando es necesario
 - 🧠 Memoria Persistente: Aprende de cada interacción para brindar asistencia personalizada
-- **🎮 Control Agéntico**: Capacidad de tomar acciones directas en el sistema cuando es necesario
-- **🧠 Memoria Persistente**: Aprende de cada interacción para brindar asistencia personalizada
+ 
 
 ---
 
