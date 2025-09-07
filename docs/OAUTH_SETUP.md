@@ -2,35 +2,11 @@
 
 ## Overview
 
-Oxide Pilot supports two authentication methods for Google Gemini AI:
+Oxide Pilot uses **🔐 OAuth 2.0 only** for Google Gemini AI. API Key authentication has been disabled in the backend and UI to enforce a single, secure method for production.
 
-1. **🔑 API Key** (Simple, recommended for development)
-2. **🔐 OAuth 2.0** (Secure, recommended for production)
+## API Key Authentication (Deprecated)
 
-## Method 1: API Key Setup (Recommended for Testing)
-
-### Step 1: Get Your API Key
-1. Visit [Google AI Studio](https://aistudio.google.com/apikey)
-2. Sign in with your Google account
-3. Click "Create API Key"
-4. Copy the generated API key
-
-### Step 2: Set Environment Variable
-```bash
-# Windows (PowerShell)
-$env:GEMINI_API_KEY="your-api-key-here"
-
-# Windows (Command Prompt)
-set GEMINI_API_KEY=your-api-key-here
-
-# Linux/macOS
-export GEMINI_API_KEY="your-api-key-here"
-```
-
-### Step 3: Run Oxide Pilot
-The application will automatically detect and use the API key.
-
----
+API Key flow is deprecated and disabled. If you had previously configured `GEMINI_API_KEY` or `GOOGLE_GEMINI_API_KEY`, they will be ignored. Please use the OAuth 2.0 setup below.
 
 ## Method 2: OAuth 2.0 Setup (Production Ready)
 
@@ -107,11 +83,6 @@ Notes:
 
 ## Testing Authentication
 
-### Test API Key Authentication
-```bash
-cargo run --bin test_auth
-```
-
 ### Test OAuth Authentication
 ```bash
 # First, remove API key to force OAuth
@@ -124,6 +95,34 @@ cargo run --bin test_oauth
 ```
 
 ---
+
+## OpenAI (GPT-5) OAuth 2.0
+
+Oxide Pilot supports OpenAI via OAuth 2.0 with PKCE using a local redirect listener.
+
+### Environment Variables
+- `OPENAI_REDIRECT_PATH` (optional): Override the redirect path. Default: `/callback-openai`.
+- `OPENAI_REDIRECT_PORT` (optional): Preferred local port for the redirect listener. If unavailable, the app tries `8081` then falls back to a random free port.
+- `OPENAI_OAUTH_NO_BROWSER` (optional): Set to `1` to suppress auto-opening the browser (headless/CI). The authorization URL is printed to logs.
+- `OPENAI_API_BASE` (optional): Override the API base (for enterprise tenants). Default: `https://api.openai.com/v1`.
+- `OPENAI_MODEL` (optional): Model name. Default: `gpt-5`.
+
+### UI Flow (Settings → OpenAI)
+1. Open the app and go to `Settings` → `Authentication` → `OpenAI (GPT-5)`.
+2. Enter your `Client ID` and `Client Secret` then click `Connect with OpenAI OAuth`.
+3. A browser window opens for login and consent.
+4. After consent, the app captures the redirect and stores tokens securely in the OS keyring.
+5. The OpenAI card shows a live status badge and a “Clear Session” button.
+
+### Troubleshooting
+- Browser does not open:
+  - Set `OPENAI_OAUTH_NO_BROWSER=1` and open the printed URL manually.
+- Redirect mismatch:
+  - Ensure the OAuth client in OpenAI Console allows `http://127.0.0.1:<PORT><PATH>` (e.g., `http://127.0.0.1:8081/callback-openai`). If the port is randomized, use a Desktop application client type which permits loopback.
+- Port conflicts:
+  - Use `OPENAI_REDIRECT_PORT` to request a specific port. The app tries this port, then 8081, then any free port.
+- “Not authenticated” in UI after login:
+  - Verify tokens are present in OS keyring under service `oxide_pilot_openai`. Use “Clear Session” and retry.
 
 ## Authentication Flow
 

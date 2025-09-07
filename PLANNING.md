@@ -14,6 +14,15 @@ Oxide Pilot represents the evolution of traditional system assistants towards a 
 4. **Agent Control**: Direct system actions when necessary
 5. **Persistent Memory**: Learning from every interaction for personalized assistance
 
+## Recent Updates (Sep 2025)
+
+- Settings provider cards now include live status badges for Gemini, Qwen, and OpenAI.
+- OpenAI and Qwen auth components have improved focus/hover states for accessibility.
+- SystemDashboard and AdvancedSettings use consistent surfaces and shadows.
+- Consensus engine logs selected providers, per-provider confidence, and total elapsed time for debugging.
+- Added Playwright E2E to verify Settings statuses and OpenAI clear-session behavior.
+- Extended OpenAI client unit tests for error/JSON parsing.
+
 ## 🏗️ Architecture Overview
 
 ### Philosophy: "Open Core"

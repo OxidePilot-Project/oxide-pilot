@@ -333,11 +333,18 @@
   .title { display: flex; align-items: center; gap: 8px; }
   .icon { font-size: 20px; }
   .clear-btn { background: transparent; border: 1px solid #ddd; padding: 6px 10px; border-radius: 6px; cursor: pointer; }
+  .clear-btn:hover { background: #f3f4f6; }
+  .clear-btn:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
 
   .card { background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 4px 14px rgba(0,0,0,0.08); }
   .actions { display: flex; gap: 10px; margin-bottom: 12px; }
-  .primary { background: #4f46e5; color: #fff; border: none; padding: 10px 14px; border-radius: 8px; cursor: pointer; }
-  .secondary { background: #f3f4f6; color: #111827; border: 1px solid #e5e7eb; padding: 10px 14px; border-radius: 8px; cursor: pointer; }
+  .primary { background: #4f46e5; color: #fff; border: none; padding: 10px 14px; border-radius: 8px; cursor: pointer; transition: transform 0.05s ease, background-color 0.15s ease; }
+  .primary:hover { background: #4338ca; }
+  .primary:active { transform: translateY(1px); }
+  .primary:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
+  .secondary { background: #f3f4f6; color: #111827; border: 1px solid #e5e7eb; padding: 10px 14px; border-radius: 8px; cursor: pointer; transition: background-color 0.15s ease; }
+  .secondary:hover { background: #e5e7eb; }
+  .secondary:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
 
   .device-info { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
   .row { display: grid; grid-template-columns: 140px 1fr; gap: 10px; align-items: center; }

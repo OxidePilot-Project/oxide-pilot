@@ -209,9 +209,10 @@ function resetToDefaults() {
     padding: 30px;
     max-width: 1000px;
     margin: 0 auto;
-    background: white;
+    background: var(--color-surface);
     border-radius: 15px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-md);
+    border: 1px solid rgba(0,0,0,0.06);
   }
 
   .settings-header {
@@ -223,47 +224,32 @@ function resetToDefaults() {
     border-bottom: 2px solid #f1f3f4;
   }
 
-  .settings-header h2 {
-    color: #2c3e50;
-    margin: 0;
-    font-size: 28px;
-    font-weight: 600;
-  }
+  .settings-header h2 { color: var(--color-text); margin: 0; font-size: 28px; font-weight: 600; }
 
   .header-actions {
     display: flex;
     gap: 15px;
   }
 
-  .reset-button, .save-button {
-    padding: 12px 24px;
-    border: none;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.3s ease;
-  }
+  .reset-button, .save-button { padding: 12px 24px; border: none; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; transition: background-color 0.15s ease, transform 0.05s ease; }
 
   .reset-button {
     background: #e74c3c;
     color: white;
   }
 
-  .reset-button:hover {
-    background: #c0392b;
-    transform: translateY(-2px);
-  }
+  .reset-button:hover { background: #c0392b; }
+  .reset-button:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
+  .reset-button:active { transform: translateY(1px); }
 
   .save-button {
     background: #27ae60;
     color: white;
   }
 
-  .save-button:hover:not(:disabled) {
-    background: #229954;
-    transform: translateY(-2px);
-  }
+  .save-button:hover:not(:disabled) { background: #229954; }
+  .save-button:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
+  .save-button:active { transform: translateY(1px); }
 
   .save-button:disabled {
     background: #95a5a6;
@@ -278,23 +264,11 @@ function resetToDefaults() {
     font-weight: 500;
   }
 
-  .status-message.success {
-    background: #d4edda;
-    color: #155724;
-    border: 1px solid #c3e6cb;
-  }
+  .status-message.success { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
 
-  .status-message.error {
-    background: #f8d7da;
-    color: #721c24;
-    border: 1px solid #f5c6cb;
-  }
+  .status-message.error { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
 
-  .status-message.info {
-    background: #d1ecf1;
-    color: #0c5460;
-    border: 1px solid #bee5eb;
-  }
+  .status-message.info { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
 
   .settings-sections {
     display: flex;
@@ -302,19 +276,9 @@ function resetToDefaults() {
     gap: 30px;
   }
 
-  .settings-section {
-    background: #f8f9fa;
-    border-radius: 12px;
-    padding: 25px;
-    border: 1px solid #e9ecef;
-  }
+  .settings-section { background: var(--color-surface); border-radius: 12px; padding: 25px; border: 1px solid rgba(0,0,0,0.06); box-shadow: var(--shadow-sm, 0 2px 6px rgba(0,0,0,0.06)); }
 
-  .settings-section h3 {
-    color: #2c3e50;
-    margin: 0 0 20px 0;
-    font-size: 20px;
-    font-weight: 600;
-  }
+  .settings-section h3 { color: var(--color-text); margin: 0 0 20px 0; font-size: 20px; font-weight: 600; }
 
   .setting-group {
     margin-bottom: 20px;

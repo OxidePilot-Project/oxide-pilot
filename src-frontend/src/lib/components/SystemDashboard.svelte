@@ -270,11 +270,12 @@ function getSeverityColor(severity: string): string {
   }
 
   .status-panel, .memory-panel, .threats-panel {
-    background: white;
-    border-radius: 8px;
+    background: var(--color-surface);
+    border-radius: 12px;
     padding: 20px;
     margin: 20px 0;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    box-shadow: var(--shadow-md);
+    border: 1px solid rgba(0,0,0,0.06);
   }
 
   .status-grid, .memory-grid {
@@ -290,23 +291,11 @@ function getSeverityColor(severity: string): string {
     gap: 5px;
   }
 
-  .label {
-    font-weight: 600;
-    color: #495057;
-    font-size: 14px;
-  }
+  .label { font-weight: 600; color: var(--color-muted); font-size: 14px; }
 
-  .value {
-    font-size: 18px;
-    font-weight: 700;
-    color: #212529;
-  }
+  .value { font-size: 18px; font-weight: 700; color: var(--color-text); }
 
-  .value.small {
-    font-size: 12px;
-    font-weight: 400;
-    color: #6c757d;
-  }
+  .value.small { font-size: 12px; font-weight: 400; color: var(--color-muted); }
 
   .threat-count {
     color: #dc3545;
@@ -342,8 +331,10 @@ function getSeverityColor(severity: string): string {
     border-left: 4px solid;
     padding: 12px;
     margin: 8px 0;
-    background: #f8f9fa;
-    border-radius: 0 4px 4px 0;
+    background: var(--color-surface);
+    border-radius: 10px;
+    box-shadow: var(--shadow-sm, 0 2px 6px rgba(0,0,0,0.06));
+    border: 1px solid rgba(0,0,0,0.06);
   }
 
   .threat-header {
@@ -353,10 +344,7 @@ function getSeverityColor(severity: string): string {
     margin-bottom: 8px;
   }
 
-  .threat-type {
-    font-weight: 600;
-    color: #495057;
-  }
+  .threat-type { font-weight: 600; color: var(--color-text); }
 
   .threat-severity {
     font-weight: 700;
@@ -366,30 +354,17 @@ function getSeverityColor(severity: string): string {
     background: rgba(255,255,255,0.8);
   }
 
-  .threat-time {
-    font-size: 12px;
-    color: #6c757d;
-  }
+  .threat-time { font-size: 12px; color: var(--color-muted); }
 
-  .threat-description {
-    color: #212529;
-    margin-bottom: 4px;
-  }
+  .threat-description { color: var(--color-text); margin-bottom: 4px; }
 
-  .threat-process {
-    font-size: 12px;
-    color: #6c757d;
-    font-family: monospace;
-  }
+  .threat-process { font-size: 12px; color: var(--color-muted); font-family: monospace; }
 
-  h2, h3 {
-    color: #212529;
-    margin-bottom: 15px;
-  }
+  h2, h3 { color: var(--color-text); margin-bottom: 15px; }
 
-  h2 {
-    text-align: center;
-    border-bottom: 2px solid #007bff;
-    padding-bottom: 10px;
-  }
+  h2 { text-align: center; border-bottom: 1px solid rgba(0,0,0,0.08); padding-bottom: 10px; }
+
+  .init-button { transition: background-color 0.15s ease, transform 0.05s ease; }
+  .init-button:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
+  .init-button:active { transform: translateY(1px); }
 </style>
