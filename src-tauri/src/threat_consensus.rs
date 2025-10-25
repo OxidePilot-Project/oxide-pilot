@@ -28,7 +28,7 @@ async fn analyze_with_openai(snapshot: &Value) -> Result<ModelReport, String> {
     snapshot
   );
 
-  let model_name = std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-5".to_string());
+  let model_name = std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o".to_string());
   let messages = vec![
     ChatMessage { role: "system".into(), content: "You are a concise, technical security analyst. JSON output only.".into() },
     ChatMessage { role: "user".into(), content: prompt },
@@ -302,8 +302,8 @@ pub async fn run_consensus(snapshot: Value, grounded: bool) -> Result<ThreatRepo
   let q_available = QwenAuth::new().get_auth_header().await.is_ok() && std::env::var("QWEN_API_BASE").is_ok();
   if q_available { providers.push("qwen"); }
 
-  // OpenAI availability (OAuth only)
-  let o_available = match oxide_core::openai_auth::get_access_token().await { Ok(Some(_)) => true, _ => false };
+  // OpenAI availability (API Key)
+  let o_available = match oxide_core::openai_key::get_api_key().await { Ok(Some(_)) => true, _ => false };
   if o_available { providers.push("openai"); }
 
   info!("Consensus starting with providers: {:?}", providers);

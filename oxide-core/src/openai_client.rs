@@ -1,6 +1,6 @@
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use log::info;
+use log::{info, error};
 use thiserror::Error;
 use crate::openai_key;
 
