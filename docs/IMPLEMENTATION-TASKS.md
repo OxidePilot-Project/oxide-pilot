@@ -118,16 +118,22 @@ Cuando tengamos iconos y certificado, el readiness sube al 100%.
 
 ---
 
-## 12. OpenAI GPT‑5 OAuth (Nuevo 🚧)
+## 12. OpenAI GPT-4o Integration (Completado ✅)
 
-- Objetivo: Integrar GPT‑5 mediante OAuth 2.0 (sin API keys), con soporte en backend, UI y consenso de amenazas.
-- Documento de plan: `docs/OPENAI_GPT5_OAUTH_PLAN.md`
+- Objetivo: Integrar GPT-4o mediante API Key (no OAuth), con soporte en backend, UI y consenso de amenazas.
+- Documento: `docs/OPENAI_INTEGRATION.md`
 
-### Tareas
-- [ ] Backend: `oxide_core/openai_auth.rs` (PKCE, token exchange/refresh en keyring)
-- [ ] Tauri cmds: `openai_start_oauth`, `openai_get_auth_status`, `openai_clear_auth`
-- [ ] Cliente REST: `openai_chat_completions(...)` con bearer token
-- [ ] Orquestador/consenso: registrar OpenAI como proveedor
-- [ ] UI: `OpenAIAuthSetup.svelte` + ajustes de Settings/provider
-- [ ] E2E: flujo de autenticación y enrutamiento de proveedor
-- [ ] Docs: `docs/OPENAI_GPT5_OAUTH.md` y cross-link en `OAUTH_SETUP.md`
+### Tareas Completadas
+- [x] Backend: `oxide_core/openai_client.rs` con API Key authentication
+- [x] Backend: `oxide_core/openai_key.rs` para manejo seguro de API keys
+- [x] Tauri cmds: `openai_set_api_key`, `openai_get_auth_status`, `openai_clear_auth`
+- [x] Cliente REST: `chat_completion(...)` con bearer token (API key)
+- [x] Orquestador: `CollaborativeOpenAI` provider en `collaborative_providers.rs`
+- [x] UI: `OpenAIAuthSetup.svelte` con entrada de API key
+- [x] Docs: `docs/OPENAI_INTEGRATION.md` con guía completa
+
+### Tareas Pendientes
+- [ ] Consenso: Integrar OpenAI en `threat_consensus.rs` para análisis dual
+- [ ] E2E: Tests de Playwright para flujo de API key y enrutamiento
+- [ ] Optimización: Implementar caché de respuestas
+- [ ] Métricas: Tracking de uso y costos

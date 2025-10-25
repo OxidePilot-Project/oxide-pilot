@@ -1,8 +1,8 @@
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use log::{error, info};
+use log::info;
 use thiserror::Error;
-use crate::{openai_auth, openai_key};
+use crate::openai_key;
 
 #[derive(Error, Debug)]
 pub enum OpenAIClientError {
@@ -42,34 +42,21 @@ struct Choice {
     message: ChatMessage,
 }
 
-/// Send a chat completion request to OpenAI API using OAuth bearer token
+/// Send a chat completion request to OpenAI API using API Key
+/// Default model: gpt-4o (can be overridden)
 pub async fn chat_completion(
     model: &str,
     messages: Vec<ChatMessage>,
     temperature: Option<f32>,
     max_tokens: Option<u32>,
 ) -> Result<String, OpenAIClientError> {
-    // Resolve credential: prefer API key (env or keyring), fallback to OAuth access token
-    let bearer = match openai_key::get_api_key().await {
-        Ok(Some(api_key)) => {
-            info!("Using OpenAI API Key from env/keyring");
-            api_key
-        },
-        Ok(None) => {
-            info!("OpenAI API Key not found; falling back to OAuth access token");
-            openai_auth::get_access_token()
-                .await
-                .map_err(|e| OpenAIClientError::Auth(e.to_string()))?
-                .ok_or_else(|| OpenAIClientError::Auth("No OpenAI API key or OAuth token configured".to_string()))?
-        },
-        Err(e) => {
-            error!("Failed to read OpenAI API key: {e}");
-            openai_auth::get_access_token()
-                .await
-                .map_err(|e| OpenAIClientError::Auth(e.to_string()))?
-                .ok_or_else(|| OpenAIClientError::Auth("No OpenAI API key or OAuth token configured".to_string()))?
-        }
-    };
+    // Get API key from env or keyring
+    let api_key = openai_key::get_api_key()
+        .await
+        .map_err(|e| OpenAIClientError::Auth(e.to_string()))?
+        .ok_or_else(|| OpenAIClientError::Auth("No OpenAI API key configured. Please set OPENAI_API_KEY or use the UI to configure.".to_string()))?;
+
+    info!("Using OpenAI API Key for model: {}", model);
 
     // Default base URL (can be overridden via env for enterprise tenants)
     let base_url = std::env::var("OPENAI_API_BASE")
@@ -86,7 +73,7 @@ pub async fn chat_completion(
 
     let response = client
         .post(&url)
-        .bearer_auth(&bearer)
+        .bearer_auth(&api_key)
         .json(&request_body)
         .send()
         .await?;

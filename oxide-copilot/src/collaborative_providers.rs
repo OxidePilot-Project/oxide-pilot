@@ -1,11 +1,10 @@
 use crate::errors::CopilotError;
 use crate::llm_orchestrator::{CollaborativeLLM, CollaborativeContext, LLMRole};
-use crate::functions::FunctionRegistry;
 use async_trait::async_trait;
-use log::{info, warn};
+use log::info;
 use oxide_core::gemini_auth::GeminiAuth;
 use oxide_core::qwen_auth::QwenAuth;
-use serde_json::json;
+use oxide_core::openai_client::{self, ChatMessage};
 
 /// Gemini implementation for collaborative tasks
 pub struct CollaborativeGemini {
@@ -210,6 +209,122 @@ impl CollaborativeLLM for CollaborativeQwen {
     }
 }
 
+/// OpenAI implementation for collaborative tasks (API Key based)
+pub struct CollaborativeOpenAI {
+    role: LLMRole,
+    model: String,
+}
+
+impl CollaborativeOpenAI {
+    pub fn new(role: LLMRole, model: Option<String>) -> Self {
+        Self {
+            role,
+            model: model.unwrap_or_else(|| "gpt-4o".to_string()),
+        }
+    }
+
+    async fn ensure_authenticated(&self) -> Result<(), CopilotError> {
+        // Check if API key is available
+        match oxide_core::openai_key::get_api_key().await {
+            Ok(Some(_)) => Ok(()),
+            Ok(None) => Err(CopilotError::Authentication(
+                "OpenAI API key not configured. Please set OPENAI_API_KEY or configure via UI.".to_string()
+            )),
+            Err(e) => Err(CopilotError::Authentication(format!(
+                "Failed to check OpenAI API key: {}", e
+            ))),
+        }
+    }
+}
+
+#[async_trait]
+impl CollaborativeLLM for CollaborativeOpenAI {
+    fn name(&self) -> &str {
+        "OpenAI"
+    }
+
+    fn role(&self) -> LLMRole {
+        self.role.clone()
+    }
+
+    async fn generate_response(
+        &self,
+        prompt: &str,
+        context: &CollaborativeContext,
+    ) -> Result<String, CopilotError> {
+        self.ensure_authenticated().await?;
+
+        // Enhance prompt with context
+        let enhanced_prompt = format!(
+            "{}\n\nContext:\n- Task Type: {}\n- System State: {}\n- Available Functions: {}\n- Constraints: {}",
+            prompt,
+            context.task_type,
+            context.system_state,
+            context.available_functions.join(", "),
+            serde_json::to_string_pretty(&context.constraints).unwrap_or_default()
+        );
+
+        info!("OpenAI ({}): Generating response with model {}", self.role(), self.model);
+
+        let messages = vec![
+            ChatMessage {
+                role: "system".to_string(),
+                content: "You are an intelligent system assistant helping with system analysis and automation.".to_string(),
+            },
+            ChatMessage {
+                role: "user".to_string(),
+                content: enhanced_prompt,
+            },
+        ];
+
+        openai_client::chat_completion(&self.model, messages, Some(0.7), Some(2000))
+            .await
+            .map_err(|e| CopilotError::AIProvider(format!("OpenAI error: {}", e)))
+    }
+
+    async fn analyze_with_role(
+        &self,
+        task: &str,
+        context: &CollaborativeContext,
+        role_specific_prompt: &str,
+    ) -> Result<String, CopilotError> {
+        self.ensure_authenticated().await?;
+
+        // Create role-specific system prompt
+        let system_prompt = match self.role() {
+            LLMRole::Coordinator => "You are the primary coordinator for system tasks. You analyze requests, create execution plans, and coordinate with other AI agents.",
+            LLMRole::Analyst => "You are a technical analyst specializing in deep system analysis, performance optimization, and security assessment.",
+            LLMRole::Executor => "You are a system executor responsible for carrying out system operations, commands, and automated tasks.",
+            LLMRole::Innovator => "You are an innovator who provides creative solutions, alternative approaches, and optimization strategies.",
+            LLMRole::Validator => "You are a validator who reviews and validates AI responses, ensuring quality, consistency, and safety.",
+        };
+
+        let full_prompt = format!(
+            "{}\n\nTask: {}\nUser Input: {}",
+            role_specific_prompt,
+            task,
+            context.user_input
+        );
+
+        info!("OpenAI ({}): Analyzing with role-specific prompt", self.role());
+
+        let messages = vec![
+            ChatMessage {
+                role: "system".to_string(),
+                content: system_prompt.to_string(),
+            },
+            ChatMessage {
+                role: "user".to_string(),
+                content: full_prompt,
+            },
+        ];
+
+        openai_client::chat_completion(&self.model, messages, Some(0.7), Some(2000))
+            .await
+            .map_err(|e| CopilotError::AIProvider(format!("OpenAI analysis error: {}", e)))
+    }
+}
+
 /// Factory for creating collaborative LLM providers
 pub struct CollaborativeProviderFactory;
 
@@ -217,6 +332,11 @@ impl CollaborativeProviderFactory {
     /// Create a Gemini provider with specified role
     pub fn create_gemini(role: LLMRole, model: Option<String>) -> Box<dyn CollaborativeLLM> {
         Box::new(CollaborativeGemini::new(role, model))
+    }
+
+    /// Create an OpenAI provider with specified role (uses API Key)
+    pub fn create_openai(role: LLMRole, model: Option<String>) -> Box<dyn CollaborativeLLM> {
+        Box::new(CollaborativeOpenAI::new(role, model))
     }
 
     /// Create a Qwen provider with specified role
