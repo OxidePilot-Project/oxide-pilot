@@ -290,6 +290,7 @@ impl SecurityManager {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn log_security_event(
         &self,
         event_type: SecurityEventType,

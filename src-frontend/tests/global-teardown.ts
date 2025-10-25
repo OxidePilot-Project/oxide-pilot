@@ -33,11 +33,19 @@ export default async function globalTeardown() {
 
     if (pid && Number.isFinite(pid)) {
       try {
-        // Politely kill the process tree on Windows
-        console.log(`[global-teardown] Stopping sidecar PID=${pid} ...`);
-        execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' });
-      } catch (err) {
-        console.warn(`[global-teardown] Failed to stop sidecar: ${(err as Error).message}`);
+        // Check if PID exists before attempting to kill (locale-agnostic match by PID string)
+        const out = execFileSync('tasklist', ['/FI', `PID eq ${pid}`], { encoding: 'utf-8' });
+        const exists = out && out.includes(String(pid));
+        if (exists) {
+          console.log(`[global-teardown] Stopping sidecar PID=${pid} ...`);
+          execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' });
+        } else {
+          // Sidecar already stopped; keep logs clean
+          console.log(`[global-teardown] Sidecar PID=${pid} not found; nothing to stop.`);
+        }
+      } catch {
+        // Keep teardown quiet on any errors
+        console.log(`[global-teardown] Teardown completed (no-op or already stopped).`);
       }
     }
 

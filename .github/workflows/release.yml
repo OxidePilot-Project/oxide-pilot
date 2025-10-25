@@ -35,6 +35,11 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
       - name: Install Tauri CLI
         run: cargo install tauri-cli
 
@@ -70,6 +75,25 @@ jobs:
         run: |
           echo "bundle_dir=src-tauri/target/release/bundle" >> "$GITHUB_OUTPUT"
           ls -la src-tauri/target/release/bundle || true
+
+      # Optional code signing if secrets are provided
+      - name: Code sign installers (optional)
+        if: ${{ secrets.SIGN_PFX_BASE64 != '' && secrets.SIGN_PFX_PASSWORD != '' }}
+        shell: pwsh
+        env:
+          SIGN_PFX_BASE64: ${{ secrets.SIGN_PFX_BASE64 }}
+          SIGN_PFX_PASSWORD: ${{ secrets.SIGN_PFX_PASSWORD }}
+          SIGN_TS_URL: ${{ secrets.SIGN_TS_URL }}
+          BUNDLE_DIR: ${{ steps.collect.outputs.bundle_dir }}
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGN_PFX_BASE64))
+          $ts = if ($env:SIGN_TS_URL) { $env:SIGN_TS_URL } else { 'http://timestamp.digicert.com' }
+          Write-Host "Signing binaries under $env:BUNDLE_DIR"
+          Get-ChildItem -Path $env:BUNDLE_DIR -Include *.exe,*.msi -Recurse | ForEach-Object {
+            Write-Host "Signing $($_.FullName)"
+            signtool sign /f $pfx /p $env:SIGN_PFX_PASSWORD /tr $ts /td sha256 /fd sha256 $_.FullName
+          }
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

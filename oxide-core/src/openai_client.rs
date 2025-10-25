@@ -63,7 +63,7 @@ pub async fn chat_completion(
                 .ok_or_else(|| OpenAIClientError::Auth("No OpenAI API key or OAuth token configured".to_string()))?
         },
         Err(e) => {
-            error!("Failed to read OpenAI API key: {}", e);
+            error!("Failed to read OpenAI API key: {e}");
             openai_auth::get_access_token()
                 .await
                 .map_err(|e| OpenAIClientError::Auth(e.to_string()))?
@@ -74,7 +74,7 @@ pub async fn chat_completion(
     // Default base URL (can be overridden via env for enterprise tenants)
     let base_url = std::env::var("OPENAI_API_BASE")
         .unwrap_or_else(|_| "https://api.openai.com/v1".to_string());
-    let url = format!("{}/chat/completions", base_url);
+    let url = format!("{base_url}/chat/completions");
 
     let client = Client::new();
     let request_body = ChatCompletionRequest {
@@ -94,8 +94,8 @@ pub async fn chat_completion(
     if !response.status().is_success() {
         let status = response.status();
         let error_text = response.text().await.unwrap_or_default();
-        error!("OpenAI API request failed: {} - {}", status, error_text);
-        return Err(OpenAIClientError::Api(format!("{} - {}", status, error_text)));
+        error!("OpenAI API request failed: {status} - {error_text}");
+        return Err(OpenAIClientError::Api(format!("{status} - {error_text}")));
     }
 
     let completion_response: ChatCompletionResponse = response.json().await?;
@@ -129,13 +129,13 @@ mod tests {
     fn parse_empty_choices_is_noresponse() {
         let sample = r#"{ "choices": [] }"#;
         let parsed = serde_json::from_str::<ChatCompletionResponse>(sample).expect("should parse");
-        assert!(parsed.choices.first().is_none());
+        assert!(parsed.choices.is_empty());
     }
 
     #[test]
     fn invalid_json_is_serialization_error() {
         let bad = "{ not-json }";
-        let err = serde_json::from_str::<ChatCompletionResponse>(bad).err().expect("should error");
+        let err = serde_json::from_str::<ChatCompletionResponse>(bad).expect_err("should error");
         // Ensure we get a serde error kind
         let _ = err;
     }

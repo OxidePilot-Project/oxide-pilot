@@ -305,6 +305,7 @@ impl InputValidator {
         }
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn check_json_depth(&self, value: &serde_json::Value, current_depth: usize, max_depth: usize) -> bool {
         if current_depth > max_depth {
             return false;

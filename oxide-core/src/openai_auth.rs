@@ -211,11 +211,11 @@ pub async fn authenticate_openai() -> Result<String, OpenAIAuthError> {
             }
         }
     };
-    let local_addr: SocketAddr = listener.local_addr().map_err(|e| OpenAIAuthError::TcpBind(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+    let local_addr: SocketAddr = listener.local_addr().map_err(|e| OpenAIAuthError::TcpBind(std::io::Error::other(e)))?;
     let redirect_origin = format!("http://127.0.0.1:{}", local_addr.port());
     // Allow overriding the redirect path; default to "/callback-openai" to align with docs
     let redirect_path = std::env::var("OPENAI_REDIRECT_PATH").unwrap_or_else(|_| "/callback-openai".to_string());
-    let redirect_url_full = format!("{}{}", redirect_origin, redirect_path);
+    let redirect_url_full = format!("{redirect_origin}{redirect_path}");
 
     let client = BasicClient::new(
         openai_client_id,
@@ -246,11 +246,10 @@ pub async fn authenticate_openai() -> Result<String, OpenAIAuthError> {
         .unwrap_or(false);
     if no_browser {
         info!(
-            "NO-BROWSER mode: Please open the following URL manually to complete OpenAI authentication: {}",
-            authorize_url
+            "NO-BROWSER mode: Please open the following URL manually to complete OpenAI authentication: {authorize_url}"
         );
     } else {
-        info!("Opening browser for OpenAI authentication at {}", authorize_url);
+        info!("Opening browser for OpenAI authentication at {authorize_url}");
         if let Err(e) = webbrowser::open(authorize_url.as_str()) {
             return Err(OpenAIAuthError::BrowserOpen(e.to_string()));
         }
@@ -325,7 +324,7 @@ pub async fn get_auth_status() -> Result<String, OpenAIAuthError> {
         },
         Ok(None) => Ok("Not authenticated".to_string()),
         Err(e) => {
-            warn!("Error checking OpenAI auth status: {}", e);
+            warn!("Error checking OpenAI auth status: {e}");
             Ok("Auth Error".to_string())
         }
     }
@@ -354,7 +353,7 @@ mod tests {
         // Best-effort: try to clear by storing an already expired token without refresh
         let past = 1u64; // seconds, will be interpreted relative to now inside store_tokens
         store_tokens("EXPIRED", None, Some(past)).await.expect("store ok");
-        let status = get_auth_status().await.unwrap_or_else(|e| format!("Auth Error: {}", e));
+        let status = get_auth_status().await.unwrap_or_else(|e| format!("Auth Error: {e}"));
         assert!(status.to_lowercase().contains("not") || status.to_lowercase().contains("error"));
     }
 }

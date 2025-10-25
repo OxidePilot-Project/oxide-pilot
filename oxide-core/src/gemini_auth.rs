@@ -88,8 +88,8 @@ impl GeminiAuth {
 
     /// Get API key from environment variable or keyring
     pub async fn get_api_key_from_env_or_store(&self) -> Result<Option<String>, GeminiAuthError> {
-        // First try environment variable
-        if let Ok(api_key) = env::var("GOOGLE_GEMINI_API_KEY") {
+        // First try environment variables (support both names)
+        if let Ok(api_key) = env::var("GEMINI_API_KEY").or_else(|_| env::var("GOOGLE_GEMINI_API_KEY")) {
             if !api_key.is_empty() && api_key.starts_with("AIza") {
                 info!("Using API key from environment variable");
                 return Ok(Some(api_key));
@@ -102,7 +102,7 @@ impl GeminiAuth {
 
     /// Initialize from environment variables if available
     pub async fn init_from_env(&self) -> Result<bool, GeminiAuthError> {
-        if let Ok(api_key) = env::var("GOOGLE_GEMINI_API_KEY") {
+        if let Ok(api_key) = env::var("GEMINI_API_KEY").or_else(|_| env::var("GOOGLE_GEMINI_API_KEY")) {
             if !api_key.is_empty() && api_key.starts_with("AIza") {
                 info!("Initializing from environment variable");
                 self.store_api_key(&api_key).await?;
@@ -259,17 +259,21 @@ impl GeminiAuth {
         self.get_auth_config().await.is_ok_and(|config| config.is_some())
     }
 
-    /// Get available models (requires authentication)
+    /// Get available models (requires OAuth access token)
     pub async fn get_available_models(&self) -> Result<Vec<String>, GeminiAuthError> {
-        let api_key = self.get_api_key_from_env_or_store().await?
+        // Prefer OAuth via google_auth
+        let access_token = crate::google_auth::get_access_token().await
+            .map_err(|e| GeminiAuthError::AuthFailed(format!("OAuth access token error: {e}")))?
             .ok_or(GeminiAuthError::NoAuthMethod)?;
 
         let client = reqwest::Client::new();
-        let url = format!(
-            "https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
-        );
+        let url = "https://generativelanguage.googleapis.com/v1beta/models";
 
-        let response = client.get(&url).send().await?;
+        let response = client
+            .get(url)
+            .bearer_auth(&access_token)
+            .send()
+            .await?;
 
         if !response.status().is_success() {
             return Err(GeminiAuthError::AuthFailed(
@@ -294,7 +298,7 @@ impl GeminiAuth {
             .into_iter()
             .map(|m| {
                 // Extract just the model name (e.g., "gemini-1.5-pro" from "models/gemini-1.5-pro")
-                let name = m.name.split('/').last().unwrap_or(&m.name).to_string();
+                let name = m.name.split('/').next_back().unwrap_or(&m.name).to_string();
                 m.display_name.unwrap_or(name)
             })
             .collect();
@@ -302,15 +306,17 @@ impl GeminiAuth {
         Ok(model_names)
     }
 
-    /// Send a message to Gemini API (similar to gemini-cli)
+    /// Send a message to Gemini API using OAuth (no API key)
     pub async fn send_message(&self, message: &str, model: Option<&str>) -> Result<String, GeminiAuthError> {
-        let api_key = self.get_api_key_from_env_or_store().await?
+        // Prefer OAuth via google_auth
+        let access_token = crate::google_auth::get_access_token().await
+            .map_err(|e| GeminiAuthError::AuthFailed(format!("OAuth access token error: {e}")))?
             .ok_or(GeminiAuthError::NoAuthMethod)?;
 
         let model_name = model.unwrap_or("gemini-1.5-flash");
         let client = reqwest::Client::new();
         let url = format!(
-            "https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+            "https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
         );
 
         #[derive(Serialize)]
@@ -338,6 +344,7 @@ impl GeminiAuth {
 
         let response = client
             .post(&url)
+            .bearer_auth(&access_token)
             .json(&request_body)
             .send()
             .await?;

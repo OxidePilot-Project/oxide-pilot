@@ -10,10 +10,10 @@ export default defineConfig({
   testDir: './tests',
   timeout: 30_000,
   expect: { timeout: 5_000 },
-  fullyParallel: true,
+  fullyParallel: false, // Run tests sequentially to avoid resource conflicts
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 2 : undefined,
+  workers: 1, // Use only 1 worker to avoid multiple browser instances
   reporter: [
     ['list'],
     ['junit', { outputFile: 'test-results/junit/results.xml' }],
@@ -22,10 +22,10 @@ export default defineConfig({
   ],
   use: {
     baseURL: `http://localhost:${PORT}`,
-    headless: true,
-    trace: process.env.CI ? 'on' : 'retain-on-failure',
-    screenshot: 'on',
-    video: 'retain-on-failure',
+    headless: true, // Always run headless to avoid opening windows
+    trace: 'retain-on-failure', // Only trace on failure to reduce overhead
+    screenshot: 'only-on-failure', // Only take screenshots on failure
+    video: 'retain-on-failure', // Only record video on failure
     viewport: { width: 1280, height: 800 },
     contextOptions: {
       // Use a unique HAR file per worker process to avoid write contention on Windows
@@ -44,11 +44,15 @@ export default defineConfig({
     // other app already running on the same port.
     reuseExistingServer: false,
     timeout: 120_000,
+    // Propagate COVERAGE flag to Vite process so vite-plugin-istanbul instruments code
+    env: process.env.COVERAGE ? { COVERAGE: '1', ...process.env } : { ...process.env },
   },
   outputDir: 'test-results',
   projects: [
+    // Only test on Chromium to reduce resource usage and avoid multiple windows
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
-    { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
-    { name: 'webkit', use: { ...devices['Desktop Safari'] } },
+    // Uncomment these if you need cross-browser testing
+    // { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
+    // { name: 'webkit', use: { ...devices['Desktop Safari'] } },
   ],
 });

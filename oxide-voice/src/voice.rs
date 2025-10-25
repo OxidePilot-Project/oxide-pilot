@@ -15,7 +15,7 @@ pub struct WakeWordDetector {
     wake_words: Vec<String>,
     sensitivity: f32,
     audio_manager: Arc<AudioManager>,
-    vad: VoiceActivityDetector,
+    _vad: VoiceActivityDetector,
 }
 
 impl WakeWordDetector {
@@ -28,7 +28,7 @@ impl WakeWordDetector {
             wake_words,
             sensitivity: 0.5,
             audio_manager,
-            vad,
+            _vad: vad,
         })
     }
 

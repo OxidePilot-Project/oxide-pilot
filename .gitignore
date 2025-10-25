@@ -16,6 +16,11 @@
 src-frontend/.svelte-kit/
 src-frontend/dist/
 
+# Test artifacts
+**/playwright-report/
+**/test-results/
+**/.playwright/
+
 # Python venvs
 **/.venv/
 

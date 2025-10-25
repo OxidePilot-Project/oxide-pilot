@@ -25,7 +25,7 @@ const AUTH_CONFIG_ENTRY: &str = "auth_config";
 pub struct QwenAuthConfig {
     pub access_token: String,
     pub refresh_token: Option<String>,
-    pub expires_at: Option<chrono::DateTime<chrono::Utc>>, 
+    pub expires_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,9 +47,15 @@ pub struct QwenAuth {
     keyring_service: String,
 }
 
+impl Default for QwenAuth {
+    fn default() -> Self {
+        Self { keyring_service: QWEN_AUTH_SERVICE.to_string() }
+    }
+}
+
 impl QwenAuth {
     pub fn new() -> Self {
-        Self { keyring_service: QWEN_AUTH_SERVICE.to_string() }
+        Self::default()
     }
 
     fn get_env(name: &str) -> Result<String, QwenAuthError> {
@@ -68,7 +74,7 @@ impl QwenAuth {
         match entry.get_password() {
             Ok(json) => {
                 let cfg: QwenAuthConfig = serde_json::from_str(&json)?;
-                if let Some(exp) = cfg.expires_at { 
+                if let Some(exp) = cfg.expires_at {
                     if chrono::Utc::now() < exp { return Ok("OAuth Token".into()); }
                     else { return Ok("OAuth Token Expired".into()); }
                 }
@@ -88,9 +94,18 @@ impl QwenAuth {
 
     // Start OAuth2 Device Authorization flow
     pub async fn start_device_auth(&self) -> Result<DeviceAuthStart, QwenAuthError> {
-        let device_url = Self::get_env("QWEN_DEVICE_AUTH_URL")?; // e.g., https://provider.example.com/oauth2/device/code
-        let client_id = Self::get_env("QWEN_CLIENT_ID")?;
-        let scope = env::var("QWEN_SCOPE").unwrap_or_else(|_| "openid profile email".to_string());
+        // Check for required environment variables with helpful error messages
+        let device_url = Self::get_env("QWEN_DEVICE_AUTH_URL")
+            .map_err(|_| QwenAuthError::Auth(
+                "QWEN_DEVICE_AUTH_URL environment variable is required. Please configure it in src-tauri/.env file. See docs/ENVIRONMENT_SETUP.md for setup instructions.".to_string()
+            ))?;
+
+        let client_id = Self::get_env("QWEN_CLIENT_ID")
+            .map_err(|_| QwenAuthError::Auth(
+                "QWEN_CLIENT_ID environment variable is required. Please configure it in src-tauri/.env file. See docs/ENVIRONMENT_SETUP.md for setup instructions.".to_string()
+            ))?;
+
+        let scope = env::var("QWEN_SCOPE").unwrap_or_else(|_| "openid,profile,email".to_string());
 
         #[derive(Serialize)]
         struct Req<'a> { client_id: &'a str, scope: &'a str }
@@ -115,8 +130,8 @@ impl QwenAuth {
 
         if !res.status().is_success() {
             let t = res.text().await.unwrap_or_default();
-            error!("Device auth start failed: {}", t);
-            return Err(QwenAuthError::Auth(format!("device start failed: {}", t)));
+            error!("Device auth start failed: {t}");
+            return Err(QwenAuthError::Auth(format!("device start failed: {t}")));
         }
 
         let resp: Resp = res.json().await?;
@@ -133,8 +148,16 @@ impl QwenAuth {
 
     // Poll the token endpoint once; do not loop to keep UI responsive.
     pub async fn poll_device_once(&self, device_code: &str) -> Result<PollResult, QwenAuthError> {
-        let token_url = Self::get_env("QWEN_DEVICE_TOKEN_URL")?; // e.g., https://provider.example.com/oauth2/token
-        let client_id = Self::get_env("QWEN_CLIENT_ID")?;
+        let token_url = Self::get_env("QWEN_DEVICE_TOKEN_URL")
+            .map_err(|_| QwenAuthError::Auth(
+                "QWEN_DEVICE_TOKEN_URL environment variable is required. Please configure it in src-tauri/.env file. See docs/ENVIRONMENT_SETUP.md for setup instructions.".to_string()
+            ))?;
+
+        let client_id = Self::get_env("QWEN_CLIENT_ID")
+            .map_err(|_| QwenAuthError::Auth(
+                "QWEN_CLIENT_ID environment variable is required. Please configure it in src-tauri/.env file. See docs/ENVIRONMENT_SETUP.md for setup instructions.".to_string()
+            ))?;
+
         let client_secret = env::var("QWEN_CLIENT_SECRET").ok();
 
         #[derive(Serialize)]
@@ -142,7 +165,7 @@ impl QwenAuth {
             grant_type: &'a str,
             device_code: &'a str,
             client_id: &'a str,
-            #[serde(skip_serializing_if = "Option::is_none")] 
+            #[serde(skip_serializing_if = "Option::is_none")]
             client_secret: Option<&'a str>,
         }
 
@@ -151,6 +174,7 @@ impl QwenAuth {
             access_token: String,
             #[serde(default)]
             refresh_token: Option<String>,
+            #[allow(dead_code)]
             token_type: String,
             #[serde(default)]
             expires_in: Option<u64>,
@@ -194,7 +218,7 @@ impl QwenAuth {
                 _ => return Ok(PollResult { status: "error".into(), message: Some(e.error_description.unwrap_or(e.error)) }),
             }
         }
-        warn!("Unexpected token error: {}", text);
+        warn!("Unexpected token error: {text}");
         Ok(PollResult { status: "error".into(), message: Some(text) })
     }
 }
@@ -221,6 +245,6 @@ impl QwenAuth {
     /// Build the Authorization header value using the stored access token
     pub async fn get_auth_header(&self) -> Result<String, QwenAuthError> {
         let token = self.get_access_token().await?;
-        Ok(format!("Bearer {}", token))
+        Ok(format!("Bearer {token}"))
     }
 }

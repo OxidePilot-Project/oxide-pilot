@@ -5,3 +5,5 @@ pub mod auth_manager;
 pub mod errors;
 pub mod functions;
 pub mod gemini_api;
+pub mod llm_orchestrator;
+pub mod collaborative_providers;

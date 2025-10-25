@@ -3,7 +3,7 @@ import { writable } from "svelte/store";
 import { isTauri } from "$lib/utils/env";
 import { tauriInvoke } from "$lib/utils/tauri";
 
-export let provider: "gemini" | "qwen" | "local" = "gemini";
+export let provider: "gemini" | "qwen" | "openai" | "local" = "gemini";
 
 interface Message {
   id: string;
@@ -18,9 +18,10 @@ let inputText = "";
 let isProcessing = false;
 let charCount = 0;
 
-const PROVIDER_LABELS: Record<"gemini"|"qwen"|"local", string> = {
+const PROVIDER_LABELS: Record<"gemini"|"qwen"|"openai"|"local", string> = {
   gemini: "Gemini",
   qwen: "Qwen",
+  openai: "OpenAI",
   local: "Local",
 };
 function providerLabel() { return PROVIDER_LABELS[provider] ?? provider; }

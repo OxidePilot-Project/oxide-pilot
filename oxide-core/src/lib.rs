@@ -9,5 +9,8 @@ pub mod metrics;
 pub mod google_auth;
 pub mod gemini_auth;
 pub mod qwen_auth;
+pub mod openai_auth;
+pub mod openai_key;
+pub mod openai_client;
 pub mod performance;
 pub mod encryption;

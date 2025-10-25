@@ -8,13 +8,16 @@ mod oxide_system;
 mod cognee_supervisor;
 mod mcp_server;
 mod local_llm;
+mod threat_consensus;
 
 use error_handler::{ErrorHandler, OxideError, RetryConfig, retry_with_backoff, GLOBAL_ERROR_MONITOR};
-use log::{error, info};
+use log::{error, info, warn};
 use serde_json::json;
 use oxide_core::config::OxidePilotConfig;
 use oxide_core::google_auth;
 use oxide_core::qwen_auth::{QwenAuth, DeviceAuthStart, PollResult};
+use oxide_core::openai_auth;
+use oxide_core::openai_key;
 use oxide_guardian::guardian::{SystemStatus, ThreatEvent};
 use oxide_guardian::scanner::FileScanReport;
 use oxide_memory::memory::MemoryStats;
@@ -158,7 +161,84 @@ async fn qwen_chat_completion(prompt: &str, model: Option<String>) -> Result<Str
     Err("Unexpected Qwen response format".to_string())
 }
 
-// Multi-agent orchestration: Gemini planning + Qwen deep analysis
+// Enhanced collaborative LLM analysis using the new orchestrator
+#[tauri::command]
+async fn run_collaborative_analysis(
+    state: State<'_, AppState>,
+    user_input: String,
+    task_type: Option<String>,
+) -> Result<String, String> {
+    let snapshot_val = get_system_snapshot(state).await?;
+
+    // Create collaborative context
+    let context = oxide_copilot::llm_orchestrator::CollaborativeContext {
+        task_type: task_type.unwrap_or_else(|| "system_analysis".to_string()),
+        system_state: snapshot_val,
+        user_input,
+        conversation_history: vec![],
+        available_functions: vec![
+            "scan_file".to_string(),
+            "get_system_status".to_string(),
+            "run_system_analysis".to_string(),
+            "get_threat_history".to_string(),
+        ],
+        constraints: serde_json::json!({
+            "max_execution_time": 300,
+            "security_level": "high",
+            "performance_impact": "minimal"
+        }),
+    };
+
+    // Create and configure the orchestrator
+    let mut orchestrator = oxide_copilot::llm_orchestrator::LLMOrchestrator::new();
+
+    // Add collaborative providers
+    use oxide_copilot::collaborative_providers::CollaborativeProviderFactory;
+    use oxide_copilot::llm_orchestrator::{LLMRole, LLMConfig};
+
+    let providers = CollaborativeProviderFactory::create_default_setup();
+    for (name, provider, role) in providers {
+        let config = LLMConfig {
+            provider: name.clone(),
+            model: Some("default".to_string()),
+            role: role.clone(),
+            temperature: match role {
+                LLMRole::Coordinator => 0.3,
+                LLMRole::Analyst => 0.1,
+                LLMRole::Executor => 0.2,
+                LLMRole::Innovator => 0.7,
+                LLMRole::Validator => 0.1,
+            },
+            max_tokens: Some(2048),
+            system_prompt: format!("You are a {} for the Oxide Pilot system.", role),
+        };
+        orchestrator.add_provider(name, provider, config);
+    }
+
+    // Execute collaborative task
+    let task = "Analyze system performance and security, provide recommendations, and create an execution plan";
+
+    match orchestrator.execute_collaborative_task(task, context).await {
+        Ok(result) => {
+            let response = serde_json::json!({
+                "success": true,
+                "primary_response": result.primary_response,
+                "secondary_responses": result.secondary_responses,
+                "consensus_score": result.consensus_score,
+                "confidence": result.confidence,
+                "execution_plan": result.execution_plan,
+                "timestamp": chrono::Utc::now().to_rfc3339()
+            });
+            Ok(serde_json::to_string_pretty(&response).unwrap_or_else(|_| "Serialization error".to_string()))
+        }
+        Err(e) => {
+            error!("Collaborative analysis failed: {}", e);
+            Err(format!("Collaborative analysis failed: {}", e))
+        }
+    }
+}
+
+// Legacy multi-agent orchestration (kept for backward compatibility)
 #[tauri::command]
 async fn run_multi_agent_analysis(
     state: State<'_, AppState>,
@@ -207,12 +287,10 @@ async fn run_multi_agent_analysis(
 
 #[tauri::command]
 async fn set_google_api_key(api_key: String) -> Result<(), String> {
-    use oxide_core::gemini_auth::GeminiAuth;
-    let auth = GeminiAuth::new();
-    auth.store_api_key(&api_key).await.map_err(|e| {
-        error!("Failed to store Google API key: {}", e);
-        e.to_string()
-    })
+    // API key-based authentication is disabled. Use OAuth 2.0 instead.
+    let msg = "Gemini API key authentication is disabled. Please use OAuth 2.0 via Google credentials.";
+    error!("{}", msg);
+    Err(msg.to_string())
 }
 
 #[tauri::command]
@@ -308,6 +386,22 @@ async fn handle_user_input_command(
     user_input: String,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
+    // First, try to use the collaborative LLM system if available
+    if let Ok(collaborative_result) = run_collaborative_analysis(
+        state.clone(),
+        user_input.clone(),
+        Some("user_query".to_string()),
+    ).await {
+        // Parse the collaborative result and extract the primary response
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&collaborative_result) {
+            if let Some(primary_response) = parsed.get("primary_response").and_then(|v| v.as_str()) {
+                info!("Using collaborative LLM response for user input");
+                return Ok(primary_response.to_string());
+            }
+        }
+    }
+
+    // Fallback to the original system if collaborative analysis fails
     let system_guard = state.oxide_system.read().await;
     if let Some(system) = system_guard.as_ref() {
         // Clone the system reference to avoid holding the lock across await
@@ -404,12 +498,16 @@ async fn start_folder_scan(
         folder_scan_cancels: state.folder_scan_cancels.clone(),
     };
 
+    // Clone scan_id for the async task
+    let scan_id_for_task = scan_id.clone();
+    let root_for_task = root.clone();
+
     // Spawn background task
     tokio::spawn(async move {
         let start = Instant::now();
         let _ = app_clone.emit_all("folder_scan_started", serde_json::json!({
-            "scan_id": scan_id,
-            "root": root,
+            "scan_id": scan_id_for_task,
+            "root": root_for_task,
         }));
 
         // Discover files breadth-first up to max_depth, respecting cancellation
@@ -443,7 +541,7 @@ async fn start_folder_scan(
                 }
                 Err(e) => {
                     let _ = app_clone.emit_all("folder_scan_progress", serde_json::json!({
-                        "scan_id": scan_id,
+                        "scan_id": scan_id_for_task,
                         "error": format!("read_dir error at {}: {}", dir.display(), e),
                     }));
                 }
@@ -452,13 +550,13 @@ async fn start_folder_scan(
 
         let total = files.len();
         let _ = app_clone.emit_all("folder_scan_progress", serde_json::json!({
-            "scan_id": scan_id,
+            "scan_id": scan_id_for_task,
             "discovered": total,
         }));
 
         if cancel_flag.load(Ordering::SeqCst) {
             let _ = app_clone.emit_all("folder_scan_cancelled", serde_json::json!({
-                "scan_id": scan_id,
+                "scan_id": scan_id_for_task,
                 "scanned": 0,
                 "total": total,
                 "malicious": 0,
@@ -466,7 +564,7 @@ async fn start_folder_scan(
                 "duration_ms": start.elapsed().as_millis(),
             }));
             let mut cancels = state_clone.folder_scan_cancels.write().await;
-            cancels.remove(&scan_id);
+            cancels.remove(&scan_id_for_task);
             return;
         }
 
@@ -492,7 +590,7 @@ async fn start_folder_scan(
             let scanned_c = scanned_c.clone();
             let malicious_c = malicious_c.clone();
             let errors_c = errors_c.clone();
-            let scan_id_cl = scan_id.clone();
+            let scan_id_cl = scan_id_for_task.clone();
             handles.push(tokio::spawn(async move {
                 loop {
                     if cancel_chk.load(Ordering::SeqCst) { break; }
@@ -549,7 +647,7 @@ async fn start_folder_scan(
         // Emit final event
         if cancel_flag.load(Ordering::SeqCst) {
             let _ = app_clone.emit_all("folder_scan_cancelled", serde_json::json!({
-                "scan_id": scan_id,
+                "scan_id": scan_id_for_task,
                 "scanned": scanned,
                 "total": total,
                 "malicious": malicious,
@@ -558,7 +656,7 @@ async fn start_folder_scan(
             }));
         } else {
             let _ = app_clone.emit_all("folder_scan_completed", serde_json::json!({
-                "scan_id": scan_id,
+                "scan_id": scan_id_for_task,
                 "scanned": scanned,
                 "total": total,
                 "malicious": malicious,
@@ -569,7 +667,7 @@ async fn start_folder_scan(
 
         // Cleanup cancel flag
         let mut cancels = state_clone.folder_scan_cancels.write().await;
-        cancels.remove(&scan_id);
+        cancels.remove(&scan_id_for_task);
     });
 
     Ok(scan_id)
@@ -577,7 +675,7 @@ async fn start_folder_scan(
 
 #[tauri::command]
 async fn cancel_folder_scan(scan_id: String, state: State<'_, AppState>) -> Result<(), String> {
-    let mut cancels = state.folder_scan_cancels.write().await;
+    let cancels = state.folder_scan_cancels.write().await;
     if let Some(flag) = cancels.get(&scan_id) {
         flag.store(true, Ordering::SeqCst);
         Ok(())
@@ -995,6 +1093,58 @@ async fn qwen_clear_auth() -> Result<(), String> {
     auth.clear_auth().await.map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn openai_start_oauth(
+    client_id: String,
+    client_secret: String,
+) -> Result<String, String> {
+    // Store credentials first
+    openai_auth::store_client_credentials(&client_id, &client_secret)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Start OAuth flow
+    match openai_auth::authenticate_openai().await {
+        Ok(token) => Ok(token),
+        Err(e) => {
+            error!("OpenAI OAuth failed: {}", e);
+            Err(e.to_string())
+        }
+    }
+}
+
+#[tauri::command]
+async fn openai_set_api_key(api_key: String) -> Result<(), String> {
+    match openai_key::store_api_key(&api_key).await {
+        Ok(()) => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[tauri::command]
+async fn openai_get_auth_status() -> Result<String, String> {
+    // Prefer API key if present (env or keyring)
+    match openai_key::get_api_key().await {
+        Ok(Some(key)) if !key.trim().is_empty() => return Ok("API Key".to_string()),
+        Ok(_) => { /* fall through */ }
+        Err(e) => warn!("Failed to read OpenAI API key: {}", e),
+    }
+
+    // Fallback to OAuth status
+    openai_auth::get_auth_status().await.map_err(|e| {
+        error!("OpenAI auth status check failed: {}", e);
+        e.to_string()
+    })
+}
+
+#[tauri::command]
+async fn openai_clear_auth() -> Result<(), String> {
+    let mut errors: Vec<String> = Vec::new();
+    if let Err(e) = openai_key::clear_api_key().await { errors.push(format!("key: {}", e)); }
+    if let Err(e) = openai_auth::clear_auth().await { errors.push(format!("oauth: {}", e)); }
+    if errors.is_empty() { Ok(()) } else { Err(format!("Failed to clear some OpenAI auth items: {}", errors.join(", "))) }
+}
+
 // Collect a comprehensive snapshot of the current system state for analysis
 #[tauri::command]
 async fn get_system_snapshot(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
@@ -1052,13 +1202,36 @@ async fn run_system_analysis(state: State<'_, AppState>, model: Option<String>) 
 
     use oxide_core::gemini_auth::GeminiAuth;
     let auth = GeminiAuth::new();
-    // Best-effort initialize from environment (API key)
-    let _ = auth.init_from_env().await;
-
     auth.send_message(&prompt, model.as_deref()).await.map_err(|e| {
         error!("System analysis via Gemini failed: {}", e);
         e.to_string()
     })
+}
+
+// Run autonomous threat consensus without external VT. Uses both LLMs if available; if only one is available, uses that one.
+// Gemini search will be always enabled when Gemini is used (no env toggles).
+#[tauri::command]
+async fn run_threat_consensus(state: State<'_, AppState>) -> Result<String, String> {
+    let snapshot = get_system_snapshot(state).await?;
+    let report = threat_consensus::run_consensus(snapshot, true)
+        .await
+        .map_err(|e| {
+            error!("Threat consensus failed: {}", e);
+            e
+        })?;
+    serde_json::to_string(&report).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn get_threat_recommendations(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    let snapshot = get_system_snapshot(state).await?;
+    let report = threat_consensus::run_consensus(snapshot, true)
+        .await
+        .map_err(|e| {
+            error!("Threat consensus (recommendations) failed: {}", e);
+            e
+        })?;
+    Ok(threat_consensus::recommendations_from_report(&report))
 }
 
 #[tauri::command]
@@ -1164,6 +1337,10 @@ fn main() {
             check_auth_from_env,
             initialize_system,
             handle_user_input_command,
+            run_collaborative_analysis,
+            run_multi_agent_analysis,
+            run_threat_consensus,
+            get_threat_recommendations,
             get_system_status,
             scan_file_command,
             start_folder_scan,
@@ -1214,6 +1391,11 @@ fn main() {
             qwen_poll_device_auth,
             qwen_get_auth_status,
             qwen_clear_auth,
+            openai_set_api_key,
+            openai_start_oauth,
+            openai_get_auth_status,
+            openai_clear_auth,
+            open_url,
             mcp_start,
             mcp_stop,
             mcp_status
@@ -1227,4 +1409,19 @@ fn send_notification(title: String, body: String) {
     // For Tauri 2.x, notifications are handled differently
     // This is a placeholder implementation
     log::info!("Notification: {} - {}", title, body);
+}
+
+#[tauri::command]
+async fn open_url(url: String, app_handle: tauri::AppHandle) -> Result<(), String> {
+    use tauri::api::shell;
+    match shell::open(&app_handle.shell_scope(), &url, None) {
+        Ok(_) => {
+            log::info!("Opened URL: {}", url);
+            Ok(())
+        }
+        Err(e) => {
+            log::error!("Failed to open URL {}: {}", url, e);
+            Err(format!("Failed to open URL: {}", e))
+        }
+    }
 }

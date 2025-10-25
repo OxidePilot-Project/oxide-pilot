@@ -115,3 +115,19 @@ Este documento segmenta las tareas restantes para alcanzar el 100% de readiness.
 - [ ] (Opcional) Estrategia de packaging de sidecar
 
 Cuando tengamos iconos y certificado, el readiness sube al 100%.
+
+---
+
+## 12. OpenAI GPT‑5 OAuth (Nuevo 🚧)
+
+- Objetivo: Integrar GPT‑5 mediante OAuth 2.0 (sin API keys), con soporte en backend, UI y consenso de amenazas.
+- Documento de plan: `docs/OPENAI_GPT5_OAUTH_PLAN.md`
+
+### Tareas
+- [ ] Backend: `oxide_core/openai_auth.rs` (PKCE, token exchange/refresh en keyring)
+- [ ] Tauri cmds: `openai_start_oauth`, `openai_get_auth_status`, `openai_clear_auth`
+- [ ] Cliente REST: `openai_chat_completions(...)` con bearer token
+- [ ] Orquestador/consenso: registrar OpenAI como proveedor
+- [ ] UI: `OpenAIAuthSetup.svelte` + ajustes de Settings/provider
+- [ ] E2E: flujo de autenticación y enrutamiento de proveedor
+- [ ] Docs: `docs/OPENAI_GPT5_OAUTH.md` y cross-link en `OAUTH_SETUP.md`

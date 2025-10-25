@@ -6,6 +6,7 @@ Welcome to the unified documentation hub. This folder consolidates project docs 
 
 - Project Cleanup & Build Artifacts: [REPO_CLEANUP.md](REPO_CLEANUP.md)
 - Release Notes: [RELEASE_NOTES.md](RELEASE_NOTES.md)
+- Release Process: [RELEASE_PROCESS.md](RELEASE_PROCESS.md)
 - OAuth Setup: [OAUTH_SETUP.md](OAUTH_SETUP.md)
 - QWEN OAuth Device Flow: [QWEN.md](QWEN.md)
 - Windows Build Guide: [README-WINDOWS-BUILD.md](README-WINDOWS-BUILD.md)

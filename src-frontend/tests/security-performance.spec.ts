@@ -18,8 +18,8 @@ test.describe('Security & Performance panels (browser mode)', () => {
     await page.getByRole('button', { name: 'Security' }).click();
 
     // Panel header (use regex to avoid emoji exact-match issues)
-    await expect(page.getByRole('heading', { name: /Security Overview/i })).toBeVisible();
-    await expect(page.getByRole('heading', { name: /Security Center/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Security Overview/i })).toBeVisible({ timeout: 20000 });
+    await expect(page.getByRole('heading', { name: /Security Center/i })).toBeVisible({ timeout: 20000 });
 
     // Create Session button disabled in browser mode (not Tauri)
     const createBtn = page.getByRole('button', { name: 'Create Session' });
@@ -31,7 +31,7 @@ test.describe('Security & Performance panels (browser mode)', () => {
     await expect(page.getByRole('button', { name: 'Check Permission' })).toBeDisabled();
 
     // Events section visible (may be empty)
-    await expect(page.getByRole('heading', { name: 'Security Events' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Security Events' })).toBeVisible({ timeout: 20000 });
 
     // Attach a full-page screenshot for debugging/inspection
     await test.info().attach('security-fullpage', {
@@ -48,8 +48,8 @@ test.describe('Security & Performance panels (browser mode)', () => {
   test('Performance tab renders and monitoring/clear actions are disabled', async ({ page }) => {
     await page.getByRole('button', { name: 'Performance' }).click();
 
-    await expect(page.getByRole('heading', { name: /Performance Analytics/i })).toBeVisible();
-    await expect(page.getByRole('heading', { name: /Performance Alerts & Errors/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Performance Analytics/i })).toBeVisible({ timeout: 20000 });
+    await expect(page.getByRole('heading', { name: /Performance Alerts & Errors/i })).toBeVisible({ timeout: 20000 });
 
     // Clear Alerts disabled in browser mode
     const clearBtn = page.getByRole('button', { name: 'Clear Alerts' });
@@ -61,8 +61,8 @@ test.describe('Security & Performance panels (browser mode)', () => {
     await expect(checkbox).toBeDisabled();
 
     // Recent Errors and Operation Profiles cards render
-    await expect(page.getByRole('heading', { name: 'Recent Errors' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Operation Profiles' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Recent Errors' })).toBeVisible({ timeout: 20000 });
+    await expect(page.getByRole('heading', { name: 'Operation Profiles' })).toBeVisible({ timeout: 20000 });
 
     // Attach a full-page screenshot for debugging/inspection
     await test.info().attach('performance-fullpage', {

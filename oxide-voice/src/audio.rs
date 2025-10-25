@@ -38,7 +38,7 @@ pub struct AudioManager {
 struct AudioWorker {
     host: Host,
     input_device: Option<Device>,
-    output_device: Option<Device>,
+    _output_device: Option<Device>,
     command_receiver: mpsc::UnboundedReceiver<AudioCommand>,
 }
 
@@ -61,7 +61,7 @@ impl AudioManager {
         let worker = AudioWorker {
             host,
             input_device,
-            output_device,
+            _output_device: output_device,
             command_receiver,
         };
 
@@ -107,6 +107,7 @@ impl AudioManager {
 
     }
 
+    #[allow(dead_code)]
     fn samples_to_wav(
         &self,
         samples: &[f32],

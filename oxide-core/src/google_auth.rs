@@ -211,11 +211,11 @@ pub async fn authenticate_google() -> Result<String, AuthError> {
             }
         }
     };
-    let local_addr: SocketAddr = listener.local_addr().map_err(|e| AuthError::TcpBind(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+    let local_addr: SocketAddr = listener.local_addr().map_err(|e| AuthError::TcpBind(std::io::Error::other(e)))?;
     let redirect_origin = format!("http://127.0.0.1:{}", local_addr.port());
     // Allow overriding the redirect path; default to "/callback" to align with docs
     let redirect_path = std::env::var("GOOGLE_REDIRECT_PATH").unwrap_or_else(|_| "/callback".to_string());
-    let redirect_url_full = format!("{}{}", redirect_origin, redirect_path);
+    let redirect_url_full = format!("{redirect_origin}{redirect_path}");
 
     let client = BasicClient::new(
         google_client_id,
@@ -245,11 +245,10 @@ pub async fn authenticate_google() -> Result<String, AuthError> {
         .unwrap_or(false);
     if no_browser {
         info!(
-            "NO-BROWSER mode: Please open the following URL manually to complete Google authentication: {}",
-            authorize_url
+            "NO-BROWSER mode: Please open the following URL manually to complete Google authentication: {authorize_url}"
         );
     } else {
-        info!("Opening browser for Google authentication at {}", authorize_url);
+        info!("Opening browser for Google authentication at {authorize_url}");
         if let Err(e) = webbrowser::open(authorize_url.as_str()) {
             return Err(AuthError::BrowserOpen(e.to_string()));
         }

@@ -63,6 +63,42 @@
   let folderProgress: any = null; // { discovered, scanned, total, malicious, errors, current_file, local_match, external_verdict, cancelled, completed, duration_ms }
   const folderUnsubs: Array<() => void> = [];
 
+  // Autonomous Threat Consensus state
+  let threatReport: any = null;
+  let threatRecs: string[] = [];
+  let consensusLoading = false;
+  let consensusError: string | null = null;
+
+  async function runThreatConsensus() {
+    if (!isTauri) {
+      error.set("Desktop runtime required.");
+      return;
+    }
+    consensusLoading = true;
+    consensusError = null;
+    threatReport = null;
+    threatRecs = [];
+    try {
+      const jsonStr = await tauriInvoke<string>("run_threat_consensus");
+      try {
+        threatReport = JSON.parse(jsonStr || "null");
+      } catch (e) {
+        consensusError = "Failed to parse threat report JSON.";
+      }
+      // fetch recommendations
+      try {
+        threatRecs = await tauriInvoke<string[]>("get_threat_recommendations");
+      } catch (e) {
+        // non-fatal
+      }
+      status.set("Threat consensus completed.");
+    } catch (e: any) {
+      consensusError = e?.message ?? String(e);
+    } finally {
+      consensusLoading = false;
+    }
+  }
+
   async function pickFolder() {
     if (!isTauri) {
       error.set("Desktop runtime required for folder picker.");
@@ -346,6 +382,33 @@
       <button class="btn primary" on:click={createSession} disabled={$loading || !isTauri}>Create Session</button>
       {#if $createdSessionId}
         <div class="note">Session ID: <code>{$createdSessionId}</code></div>
+      {/if}
+    </div>
+
+    <div class="card">
+      <h3>Autonomous Threat Analysis (No External VT)</h3>
+      <div class="row">
+        <button class="btn primary" on:click={runThreatConsensus} disabled={consensusLoading || !isTauri}>
+          {#if consensusLoading}Running…{/if}{#if !consensusLoading}Run Threat Consensus{/if}
+        </button>
+      </div>
+      {#if consensusError}
+        <div class="note warn">{consensusError}</div>
+      {/if}
+      {#if threatReport}
+        <div class="note">Mode: <code>{threatReport.mode}</code> | Risk: <strong>{threatReport.risk_score?.toFixed?.(1) ?? threatReport.risk_score}</strong> | Confidence: {threatReport.confidence}</div>
+        {#if threatRecs?.length}
+          <div class="note"><strong>Recommendations</strong></div>
+          <ul>
+            {#each threatRecs as r}
+              <li>{r}</li>
+            {/each}
+          </ul>
+        {/if}
+        <details>
+          <summary>Show full report JSON</summary>
+          <pre class="payload">{JSON.stringify(threatReport, null, 2)}</pre>
+        </details>
       {/if}
     </div>
 
