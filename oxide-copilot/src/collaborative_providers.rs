@@ -108,6 +108,7 @@ impl CollaborativeLLM for CollaborativeGemini {
 pub struct CollaborativeQwen {
     auth: QwenAuth,
     role: LLMRole,
+    #[allow(dead_code)]
     model: Option<String>,
 }
 

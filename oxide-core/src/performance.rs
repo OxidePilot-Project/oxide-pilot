@@ -105,8 +105,40 @@ impl PerformanceMonitor {
         *misses += 1;
     }
 
-    /// Update system resource metrics
-    pub async fn update_system_metrics(&self) {
+    /// Update system resource metrics (overload with optional parameters)
+    pub async fn update_system_metrics(&self, cpu_usage: f32, memory_usage_mb: f32) {
+        let mut metrics = self.metrics.write().await;
+
+        metrics.cpu_usage_percent = cpu_usage;
+        metrics.memory_usage_mb = memory_usage_mb;
+
+        // Calculate memory percentage (assuming 16GB total as default)
+        let total_memory = 16.0 * 1024.0; // 16GB in MB
+        metrics.memory_usage_percent = (memory_usage_mb / total_memory) * 100.0;
+
+        // Count active threads
+        metrics.active_threads = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
+
+        // Log warning if exceeding targets
+        if metrics.memory_usage_mb > 100.0 {
+            warn!(
+                "Memory usage ({:.1} MB) exceeds target of 100 MB",
+                metrics.memory_usage_mb
+            );
+        }
+
+        if metrics.cpu_usage_percent > 5.0 {
+            warn!(
+                "CPU usage ({:.1}%) exceeds target of 5%",
+                metrics.cpu_usage_percent
+            );
+        }
+    }
+
+    /// Update system resource metrics (auto-detect version)
+    pub async fn update_system_metrics_auto(&self) {
         use sysinfo::System;
 
         let mut sys = System::new_all();
@@ -161,6 +193,33 @@ impl PerformanceMonitor {
         let cpu_ok = metrics.cpu_usage_percent < 5.0;
 
         memory_ok && cpu_ok
+    }
+
+    /// Get overall performance score (0-100, higher is better)
+    pub async fn get_performance_score(&self) -> f32 {
+        let metrics = self.get_metrics().await;
+
+        // Calculate score based on multiple factors
+        let mut score = 100.0;
+
+        // Penalize high CPU usage (target: < 5%)
+        if metrics.cpu_usage_percent > 5.0 {
+            score -= (metrics.cpu_usage_percent - 5.0).min(50.0);
+        }
+
+        // Penalize high memory usage (target: < 100MB)
+        if metrics.memory_usage_mb > 100.0 {
+            let excess = (metrics.memory_usage_mb - 100.0) / 10.0;
+            score -= excess.min(30.0);
+        }
+
+        // Penalize slow response times (target: < 100ms)
+        if metrics.avg_response_time_ms > 100.0 {
+            let excess = (metrics.avg_response_time_ms - 100.0) / 50.0;
+            score -= excess.min(20.0);
+        }
+
+        score.clamp(0.0, 100.0)
     }
 
     /// Get performance report as string
