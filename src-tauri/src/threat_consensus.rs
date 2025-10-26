@@ -144,7 +144,7 @@ fn aggregate(mut reports: Vec<ModelReport>, evidence: Value) -> ThreatReport {
     findings.extend(r.findings);
     for ind in r.indicators { if !indicators.iter().any(|x| x.kind==ind.kind && x.value==ind.value) { indicators.push(ind); } }
     for rec in r.recommendations { if !recommendations.contains(&rec) { recommendations.push(rec); } }
-    for cit in r.citations { if !citations.iter().any(|c| c.url==cit.url) { citations.push(cit); } }
+    for cit in r.citations { if !citations.iter().any(|c: &Citation| c.url==cit.url) { citations.push(cit); } }
   }
 
   // Simple disagreement heuristic: if findings > threshold and providers >=2
@@ -221,23 +221,24 @@ async fn analyze_with_gemini(snapshot: &Value, grounded: bool) -> Result<ModelRe
     }
     Err(e) => {
       error!("Gemini analysis error: {}", e);
-      Err(e)
+      Err(e.to_string())
     }
   }
 }
 
 async fn analyze_with_qwen(snapshot: &Value) -> Result<ModelReport, String> {
   // Build prompt for JSON-only output
+  let snapshot_str = serde_json::to_string_pretty(snapshot).unwrap_or_else(|_| snapshot.to_string());
   let prompt = format!(
-    """
+    r#"
     You are a security threat analyst. Analyze the JSON system snapshot and return STRICT JSON with:
     risk_score, confidence, findings[], indicators[], recommendations[], citations[]
     No prose, JSON only.
 
     Snapshot:
     {}
-    """,
-    snapshot
+    "#,
+    snapshot_str
   );
 
   // Get auth header via QwenAuth helper

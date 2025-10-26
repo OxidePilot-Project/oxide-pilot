@@ -11,6 +11,9 @@ mod local_llm;
 mod threat_consensus;
 mod rpa_commands;
 
+#[cfg(test)]
+mod rpa_integration_test;
+
 use error_handler::{ErrorHandler, OxideError, RetryConfig, retry_with_backoff, GLOBAL_ERROR_MONITOR};
 use log::{error, info, warn};
 use serde_json::json;
@@ -185,11 +188,13 @@ async fn run_collaborative_analysis(
             "run_system_analysis".to_string(),
             "get_threat_history".to_string(),
         ],
-        constraints: serde_json::json!({
-            "max_execution_time": 300,
-            "security_level": "high",
-            "performance_impact": "minimal"
-        }),
+        constraints: {
+            let mut map = std::collections::HashMap::new();
+            map.insert("max_execution_time".to_string(), serde_json::json!(300));
+            map.insert("security_level".to_string(), serde_json::json!("high"));
+            map.insert("performance_impact".to_string(), serde_json::json!("minimal"));
+            map
+        },
     };
 
     // Create and configure the orchestrator

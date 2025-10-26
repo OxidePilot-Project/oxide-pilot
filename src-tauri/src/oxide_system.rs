@@ -495,8 +495,9 @@ impl OxideSystem {
     pub async fn get_performance_metrics(&self) -> oxide_core::performance::PerformanceMetrics {
         // Update system metrics
         let system_status = self.guardian.get_system_status();
+        let memory_usage_mb = (system_status.memory_usage.0 as f32) / (1024.0 * 1024.0);
         self.performance_monitor
-            .update_system_metrics(system_status.cpu_usage, system_status.memory_usage.0)
+            .update_system_metrics(system_status.cpu_usage, memory_usage_mb)
             .await;
 
         self.performance_monitor.get_metrics().await
