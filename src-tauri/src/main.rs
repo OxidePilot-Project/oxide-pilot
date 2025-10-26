@@ -818,16 +818,15 @@ async fn get_performance_metrics(state: State<'_, AppState>) -> Result<serde_jso
     }
 }
 
-// TODO: Implement get_performance_score in OxideSystem
-// #[tauri::command]
-// async fn get_performance_score(state: State<'_, AppState>) -> Result<f32, String> {
-//     let system_guard = state.oxide_system.read().await;
-//     if let Some(system) = system_guard.as_ref() {
-//         Ok(system.get_performance_score().await)
-//     } else {
-//         Err("System not initialized".to_string())
-//     }
-// }
+#[tauri::command]
+async fn get_performance_score(state: State<'_, AppState>) -> Result<f32, String> {
+    let system_guard = state.oxide_system.read().await;
+    if let Some(system) = system_guard.as_ref() {
+        Ok(system.get_performance_score().await)
+    } else {
+        Err("System not initialized".to_string())
+    }
+}
 
 #[tauri::command]
 async fn optimize_performance(state: State<'_, AppState>) -> Result<Vec<String>, String> {
@@ -1355,7 +1354,7 @@ fn main() {
             get_audio_devices,
             get_input_volume,
             get_performance_metrics,
-            // get_performance_score, // TODO: Implement missing methods
+            get_performance_score,
             optimize_performance,
             get_error_statistics,
             get_recent_errors,
