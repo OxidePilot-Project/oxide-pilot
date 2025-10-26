@@ -12,10 +12,12 @@ import AdvancedSettings from "./AdvancedSettings.svelte";
 import ConversationInterface from "./ConversationInterface.svelte";
 import PatternDashboard from "./PatternDashboard.svelte";
 import CollaborativeAnalysis from "./CollaborativeAnalysis.svelte";
+import RPAConfirmationDialog from "./RPAConfirmationDialog.svelte";
+import RPADashboard from "./RPADashboard.svelte";
 import { isTauri } from "$lib/utils/env";
 import { tauriInvoke } from "$lib/utils/tauri";
 
-type ActiveTab = "dashboard" | "conversation" | "analysis" | "collaborative" | "settings" | "advanced";
+type ActiveTab = "dashboard" | "conversation" | "analysis" | "collaborative" | "rpa" | "settings" | "advanced";
 
 const activeTab = writable<ActiveTab>("dashboard");
 let isAuthSetupComplete = false;
@@ -188,6 +190,13 @@ $: if ($activeTab === 'settings') {
           </button>
           <button
             class="tab-button"
+            class:active={$activeTab === 'rpa'}
+            on:click={() => setActiveTab('rpa')}
+          >
+            🤖 RPA
+          </button>
+          <button
+            class="tab-button"
             class:active={$activeTab === 'settings'}
             on:click={() => setActiveTab('settings')}
           >
@@ -289,6 +298,8 @@ $: if ($activeTab === 'settings') {
         <SystemAnalysisPanel />
       {:else if $activeTab === 'collaborative'}
         <CollaborativeAnalysis />
+      {:else if $activeTab === 'rpa'}
+        <RPADashboard />
       {:else if $activeTab === 'settings'}
         <div class="settings-container">
           <h2>⚙️ Settings</h2>
@@ -371,6 +382,11 @@ $: if ($activeTab === 'settings') {
     </div>
   </footer>
 </div>
+
+<!-- Global RPA Confirmation Dialog -->
+{#if isAuthSetupComplete && isTauri}
+  <RPAConfirmationDialog />
+{/if}
 
 <style>
   :global(html, body) {
