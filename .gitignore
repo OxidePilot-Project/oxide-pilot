@@ -61,3 +61,22 @@ pattern-craft/
 # Coverage
 coverage/
 .target-workspace
+
+# Markdown files (ignore all except README.md)
+*.md
+!README.md
+
+# Additional sensitive files
+*.key
+*.pem
+*.crt
+*.p12
+*.keystore
+*.jks
+*.p8
+*.pfx
+secrets/
+config/secrets/
+
+# Archive docs with sensitive data
+docs/archive/
