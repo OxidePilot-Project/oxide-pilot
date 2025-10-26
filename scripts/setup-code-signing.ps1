@@ -101,9 +101,17 @@ Write-Host ""
 $passwordOption = Read-Host "Selecciona opción (1/2)"
 
 if ($passwordOption -eq '1') {
-    # Generar contraseña aleatoria
-    Add-Type -AssemblyName 'System.Web'
-    $passwordText = [System.Web.Security.Membership]::GeneratePassword(32, 8)
+    # Generar contraseña aleatoria de forma segura
+    try {
+        # Método 1: Usar System.Web si está disponible
+        Add-Type -AssemblyName 'System.Web' -ErrorAction Stop
+        $passwordText = [System.Web.Security.Membership]::GeneratePassword(32, 8)
+    } catch {
+        # Método 2: Fallback - generar manualmente con caracteres aleatorios
+        $chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-="
+        $passwordText = -join ((1..32) | ForEach-Object { $chars[(Get-Random -Maximum $chars.Length)] })
+    }
+    
     $password = ConvertTo-SecureString -String $passwordText -AsPlainText -Force
     $passwordGenerated = $true
     
