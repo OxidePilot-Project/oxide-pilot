@@ -3860,6 +3860,7 @@ dependencies = [
 name = "oxide-rpa"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "image 0.24.9",
  "log",
  "oxide-core",
@@ -3869,6 +3870,7 @@ dependencies = [
  "serde_json",
  "thiserror 1.0.69",
  "tokio",
+ "uuid",
 ]
 
 [[package]]

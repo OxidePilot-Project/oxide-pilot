@@ -56,7 +56,7 @@ pub async fn chat_completion(
         .map_err(|e| OpenAIClientError::Auth(e.to_string()))?
         .ok_or_else(|| OpenAIClientError::Auth("No OpenAI API key configured. Please set OPENAI_API_KEY or use the UI to configure.".to_string()))?;
 
-    info!("Using OpenAI API Key for model: {}", model);
+    info!("Using OpenAI API Key for model: {model}");
 
     // Default base URL (can be overridden via env for enterprise tenants)
     let base_url = std::env::var("OPENAI_API_BASE")
