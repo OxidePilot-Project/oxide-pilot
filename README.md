@@ -124,6 +124,75 @@ Para obtener información detallada sobre el proyecto, consulte los siguientes d
 
 ---
 
+## 🛠️ Resumen de Herramientas y Funcionalidades
+
+Oxide Pilot ofrece un conjunto completo de herramientas para la gestión inteligente de tu sistema Windows. Aquí un resumen de sus principales funcionalidades:
+
+### 👁️ Monitoreo y Seguridad (Agente Guardián)
+
+- Vigilancia continua de procesos y recursos del sistema
+- Detección automática de amenazas y anomalías
+- Optimización proactiva del rendimiento del equipo
+- Aplicación de políticas de seguridad personalizadas
+
+### 🗣️ Asistencia Conversacional (Agente Copiloto)
+
+- Interacción natural por voz con comandos como "Hey Oxide"
+- Respuestas inteligentes a preguntas sobre el estado del sistema
+- Análisis de problemas técnicos con sugerencias de solución
+- Control directo del sistema mediante comandos de voz
+
+### 📸 Análisis Visual Inteligente
+
+- Captura y análisis automático de pantallas para diagnóstico
+- Identificación de errores visuales en aplicaciones
+- Comprensión contextual de interfaces y problemas en pantalla
+- Asistencia visual para resolución de incidencias
+
+### 🎯 Automatización de Tareas (RPA)
+
+- Ejecución automática de tareas repetitivas
+- Control preciso de mouse y teclado para workflows complejos
+- Aprendizaje de patrones de uso personalizados
+- Automatización de procesos administrativos
+
+### 🧠 Memoria y Aprendizaje
+
+- Historial completo de interacciones y preferencias
+- Aprendizaje continuo de hábitos del usuario
+- Correlación de eventos del sistema a lo largo del tiempo
+- Personalización de respuestas basada en contexto histórico
+
+### 🔊 Procesamiento de Voz
+
+- Reconocimiento de voz de alta precisión
+- Síntesis de voz natural para respuestas
+- Detección de palabras clave para activación
+- Soporte multimodal (voz + texto + imágenes)
+
+### ⚙️ Gestión de Configuración
+
+- Configuración sencilla de proveedores de IA (Gemini, Qwen)
+- Gestión segura de credenciales y tokens
+- Personalización de parámetros de seguridad y rendimiento
+- Sincronización de configuraciones entre dispositivos
+
+### 📊 Dashboards y Reportes
+
+- Paneles visuales de estado del sistema
+- Reportes de rendimiento y seguridad
+- Métricas de uso y optimización
+- Visualización de amenazas detectadas y acciones tomadas
+
+### 🔄 Integraciones Externas
+
+- Conexión con servicios de IA en la nube
+- Integración con herramientas de desarrollo
+- Soporte para memoria cognitiva avanzada (Cognee)
+- Compatibilidad con múltiples proveedores de IA
+
+---
+
 ## 🤖 Sistema de Agentes Dual
 
 ### 👁️ Agente Guardián (Guardian Agent)
@@ -263,8 +332,21 @@ El núcleo open source será liberado una vez completado el MVP.
 
 ## Licencia
 
-- **Núcleo Open Source**: MIT License (próximamente)
-- **Funcionalidades Premium**: Licencia Comercial
+Este proyecto está licenciado bajo la **GNU Affero General Public License (AGPL) 3.0**.
+
+### ¿Qué significa esto?
+
+- **Uso Libre para Propósitos No Comerciales**: Puedes usar, modificar y distribuir el software libremente para uso personal, educativo o no comercial sin costo alguno.
+- **Obligaciones para Uso Comercial**: Si utilizas este software en un producto o servicio comercial, debes liberar el código fuente completo de tus modificaciones bajo la misma licencia AGPL 3.0. Esto asegura que las mejoras y lógicas desarrolladas beneficien a la comunidad.
+- **Protección de la Tecnología**: La AGPL garantiza que cualquier despliegue en red (como servicios web o aplicaciones SaaS) que incorpore este código deba proporcionar acceso al código fuente modificado.
+
+Para más detalles, consulta el archivo [LICENSE](LICENSE) completo.
+
+### Modelo de Negocio
+
+- **Núcleo Open Source**: Gratuito y accesible para todos.
+- **Servicios Empresariales**: Soporte premium, hosting gestionado, integraciones personalizadas y funcionalidades avanzadas disponibles bajo acuerdos comerciales.
+- **Contacto**: Para licencias comerciales o soporte empresarial, contacta al equipo de desarrollo.
 
 ### Contacto
 
