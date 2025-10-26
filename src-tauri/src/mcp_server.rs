@@ -11,6 +11,7 @@ use tokio::{sync::oneshot, task::JoinHandle};
 use std::convert::Infallible;
 
 #[derive(Clone)]
+#[allow(dead_code)] // Reserved for future use
 pub struct McpServerConfig {
     pub addr: SocketAddr,
     pub password: Option<String>,
@@ -23,6 +24,7 @@ pub struct McpServerHandle {
     password_set: bool,
 }
 
+#[allow(dead_code)] // Some methods reserved for future use
 impl McpServerHandle {
     pub async fn start(port: u16, password: Option<String>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let addr: SocketAddr = SocketAddr::from(([127, 0, 0, 1], port));

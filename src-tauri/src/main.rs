@@ -294,7 +294,7 @@ async fn run_multi_agent_analysis(
 }
 
 #[tauri::command]
-async fn set_google_api_key(api_key: String) -> Result<(), String> {
+async fn set_google_api_key(_api_key: String) -> Result<(), String> {
     // API key-based authentication is disabled. Use OAuth 2.0 instead.
     let msg = "Gemini API key authentication is disabled. Please use OAuth 2.0 via Google credentials.";
     error!("{}", msg);

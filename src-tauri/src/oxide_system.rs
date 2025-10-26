@@ -1,5 +1,5 @@
 use chrono::Utc;
-use log::{error, info, warn};
+use log::{error, info};
 use oxide_copilot::ai::AIOrchestrator;
 use oxide_copilot::copilot::CopilotAgent;
 use oxide_copilot::functions::FunctionRegistry;
@@ -19,8 +19,8 @@ use oxide_voice::voice::{GoogleSTTProvider, GoogleTTSProvider, VoiceProcessor};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, Mutex};
-use std::env;
-use crate::cognee_supervisor::CogneeSupervisor;
+// use std::env; // Reserved for future use
+// use crate::cognee_supervisor::CogneeSupervisor; // Reserved for future use
 
 #[derive(Clone)]
 pub struct OxideSystem {
@@ -37,6 +37,7 @@ pub struct OxideSystem {
     is_running: Arc<Mutex<bool>>,
 }
 
+#[allow(dead_code)] // Some methods reserved for future use
 impl OxideSystem {
     pub async fn new(config: OxidePilotConfig) -> Result<Self, String> {
         info!("Initializing Oxide Pilot System...");

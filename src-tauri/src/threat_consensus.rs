@@ -103,7 +103,7 @@ struct ModelReport {
 fn normalize_score(v: f32) -> f32 { v.clamp(0.0, 100.0) }
 fn normalize_conf(v: f32) -> f32 { v.clamp(0.0, 1.0) }
 
-fn aggregate(mut reports: Vec<ModelReport>, evidence: Value) -> ThreatReport {
+fn aggregate(reports: Vec<ModelReport>, evidence: Value) -> ThreatReport {
   if reports.is_empty() {
     return ThreatReport {
       risk_score: 0.0,
@@ -293,7 +293,7 @@ async fn analyze_with_qwen(snapshot: &Value) -> Result<ModelReport, String> {
   }
 }
 
-pub async fn run_consensus(snapshot: Value, grounded: bool) -> Result<ThreatReport, String> {
+pub async fn run_consensus(snapshot: Value, _grounded: bool) -> Result<ThreatReport, String> {
   let t0 = std::time::Instant::now();
   // Availability: Gemini, Qwen and OpenAI if authenticated
   let mut providers: Vec<&str> = vec![];

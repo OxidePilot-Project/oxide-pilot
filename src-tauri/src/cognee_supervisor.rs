@@ -1,4 +1,4 @@
-use log::{info, warn};
+// use log::{info, warn}; // Reserved for future use
 
 #[cfg(feature = "cognee")]
 pub struct CogneeSupervisor {
@@ -123,9 +123,11 @@ impl CogneeSupervisor {
 }
 
 #[cfg(not(feature = "cognee"))]
+#[allow(dead_code)] // Reserved for future use
 pub struct CogneeSupervisor;
 
 #[cfg(not(feature = "cognee"))]
+#[allow(dead_code)] // Reserved for future use
 impl CogneeSupervisor {
     pub fn new(_base_url: String, _token: Option<String>) -> Result<Self, String> { Ok(Self) }
     pub async fn health_check(&self) -> Result<(), String> { Ok(()) }

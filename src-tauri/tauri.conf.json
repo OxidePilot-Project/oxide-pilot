@@ -31,11 +31,39 @@
       "copyright": "© 2025 Oxide Systems",
       "targets": [
         "nsis",
-        "msi"
+        "msi",
+        "app",
+        "dmg",
+        "deb",
+        "appimage"
       ],
       "windows": {
         "nsis": {
-          "displayLanguageSelector": false
+          "displayLanguageSelector": false,
+          "installMode": "perMachine",
+          "allowDowngrades": false,
+          "createDesktopShortcut": true,
+          "createStartMenuShortcut": true
+        },
+        "msi": {
+          "displayLanguageSelector": false,
+          "installMode": "perMachine"
+        },
+        "certificateThumbprint": null,
+        "digestAlgorithm": "sha256",
+        "timestampUrl": null
+      },
+      "macOS": {
+        "frameworks": [],
+        "minimumSystemVersion": "10.15",
+        "exceptionDomain": "",
+        "signingIdentity": null,
+        "providerShortName": null,
+        "entitlements": null
+      },
+      "linux": {
+        "deb": {
+          "depends": ["libwebkit2gtk-4.0-37", "libgtk-3-0"]
         }
       }
     },

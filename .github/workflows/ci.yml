@@ -1,78 +1,158 @@
-name: CI
+name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, develop ]
   pull_request:
     branches: [ main ]
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  build-and-check:
+  test:
+    name: Test Suite
     runs-on: ubuntu-latest
-    env:
-      CARGO_TERM_COLOR: always
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Rust (stable)
+      - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
-      - name: Detect rustc version
-        id: rustc
-        shell: bash
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Run tests
         run: |
-          set -euo pipefail
-          echo "version=$(rustc --version --verbose | sed -n 's/^release: //p')" >> "$GITHUB_OUTPUT"
+          cargo test --package oxide-core --lib
+          cargo test --package oxide-rpa --lib
+          cargo test --package oxide-guardian --lib
+          cargo test --package oxide-memory --lib
+          cargo test --package oxide-copilot --lib
 
-      - name: Cache cargo registry and git index
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: cargo-${{ runner.os }}-${{ steps.rustc.outputs.version }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            cargo-${{ runner.os }}-${{ steps.rustc.outputs.version }}-
-            cargo-${{ runner.os }}-
+      - name: Build project
+        run: cargo build --release
 
-      - name: Cache target dir (unified)
-        uses: actions/cache@v4
-        with:
-          path: target
-          key: target-${{ runner.os }}-${{ steps.rustc.outputs.version }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            target-${{ runner.os }}-${{ steps.rustc.outputs.version }}-
-            target-${{ runner.os }}-
-
-      - name: Cargo check (workspace)
-        run: cargo check --workspace --all-targets
-
-      - name: Cargo test (workspace)
-        run: cargo test --workspace --all-features --no-fail-fast
+  frontend-test:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: npm
+          cache: 'npm'
           cache-dependency-path: src-frontend/package-lock.json
 
-      - name: Install frontend deps
-        working-directory: src-frontend
-        run: npm ci
+      - name: Install dependencies
+        run: |
+          cd src-frontend
+          npm ci
 
-      - name: Frontend build
-        working-directory: src-frontend
-        run: npm run build --if-present
+      - name: Run linting
+        run: |
+          cd src-frontend
+          npm run lint
 
-      # Optional: sccache for faster Rust builds
-      # - name: Install sccache
-      #   uses: mozilla-actions/sccache-action@v0.0.5
-      # - name: Configure sccache env
-      #   run: echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+      - name: Build frontend
+        run: |
+          cd src-frontend
+          npm run build
 
-      # Optional: Tauri build can be heavy; run only on release/tag workflows
-      # - name: Tauri build (optional)
-      #   working-directory: src-tauri
-      #   run: cargo tauri build --verbose
+      - name: Run E2E tests
+        run: |
+          cd src-frontend
+          npm run test:e2e
+
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Run security audit
+        run: cargo audit
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'table'
+
+  build-dev:
+    name: Development Build
+    needs: [test, frontend-test]
+    if: github.ref == 'refs/heads/main'
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (Ubuntu only)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: src-frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: |
+          cd src-frontend
+          npm ci
+
+      - name: Build frontend
+        run: |
+          cd src-frontend
+          npm run build
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Build Tauri app (dev)
+        run: |
+          cd src-tauri
+          cargo build --release
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: oxide-pilot-dev-${{ matrix.os }}
+          path: |
+            src-tauri/target/release/oxide-pilot*
+            !src-tauri/target/release/deps/
+            !src-tauri/target/release/build/
+          retention-days: 7

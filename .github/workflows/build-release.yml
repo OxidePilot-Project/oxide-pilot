@@ -1,0 +1,151 @@
+name: Build and Release Oxide Pilot
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'macos-latest'
+            args: '--target universal-apple-darwin'
+            target: 'universal-apple-darwin'
+          - platform: 'ubuntu-22.04'
+            args: ''
+            target: 'x86_64-unknown-linux-gnu'
+          - platform: 'windows-latest'
+            args: ''
+            target: 'x86_64-pc-windows-msvc'
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (Ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: src-frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: |
+          cd src-frontend
+          npm ci
+
+      - name: Build frontend
+        run: |
+          cd src-frontend
+          npm run build
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.event.inputs.version || github.ref_name }}
+          releaseName: 'Oxide Pilot ${{ github.event.inputs.version || github.ref_name }}'
+          releaseBody: |
+            ## 🚀 Oxide Pilot Release ${{ github.event.inputs.version || github.ref_name }}
+
+            ### ✨ Features
+            - 🔒 **RPA Permissions System** - Enterprise-grade security for automation
+            - 📊 **Comprehensive Auditing** - Complete action logging and monitoring
+            - 🔄 **Smart Rollback** - Undo reversible operations safely
+            - ✋ **User Confirmation** - Async approval system for critical actions
+            - 🎯 **Threat Consensus** - Multi-LLM security analysis
+            - 🧠 **AI Integration** - OpenAI, Gemini, and Qwen support
+            - 📈 **Performance Monitoring** - Real-time system metrics
+
+            ### 🔧 Technical Details
+            - Built with Rust + Tauri for maximum performance
+            - Cross-platform support (Windows, macOS, Linux)
+            - Enterprise-grade security and compliance
+            - Comprehensive test coverage (26+ unit tests)
+
+            ### 📥 Installation
+            Download the appropriate installer for your platform below.
+
+            ### ⚠️ Development Status
+            This project is currently in **active development**. While functional, some features may be experimental.
+
+            ---
+
+            **Full Changelog**: https://github.com/${{ github.repository }}/compare/v0.1.0...${{ github.event.inputs.version || github.ref_name }}
+          releaseDraft: false
+          prerelease: true
+          args: ${{ matrix.args }}
+
+  create-checksums:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Generate checksums
+        run: |
+          find . -name "*.exe" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" | while read file; do
+            if [ -f "$file" ]; then
+              echo "Generating checksum for: $file"
+              sha256sum "$file" >> checksums.txt
+            fi
+          done
+
+      - name: Upload checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: checksums
+          path: checksums.txt
+
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'

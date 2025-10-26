@@ -60,10 +60,10 @@ pub async fn rpa_grant_permission(
     permission: String,
     state: State<'_, crate::AppState>,
 ) -> Result<(), String> {
-    let perm = parse_permission(&permission)?;
+    let _perm = parse_permission(&permission)?;
 
     let state_lock = state.rpa_state.read().await;
-    let controller = state_lock.as_ref().ok_or("RPA not initialized")?;
+    let _controller = state_lock.as_ref().ok_or("RPA not initialized")?;
 
     // Note: This requires making policy mutable - for now return info
     Ok(())
@@ -74,10 +74,10 @@ pub async fn rpa_check_permission(
     permission: String,
     state: State<'_, crate::AppState>,
 ) -> Result<bool, String> {
-    let perm = parse_permission(&permission)?;
+    let _perm = parse_permission(&permission)?;
 
     let state_lock = state.rpa_state.read().await;
-    let controller = state_lock.as_ref().ok_or("RPA not initialized")?;
+    let _controller = state_lock.as_ref().ok_or("RPA not initialized")?;
 
     // Access policy through controller (would need getter method)
     Ok(true) // Placeholder

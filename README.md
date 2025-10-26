@@ -1,12 +1,60 @@
 # Oxide Pilot
 
-Oxide Pilot es un asistente agentico con backend en Rust (Tauri) y UI Svelte opcional. Incluye agentes Guardian/Copilot, memoria local (JSON) y soporte opcional para Cognee via sidecar Python.
+> ⚠️ **ESTADO DE DESARROLLO**: Este proyecto está actualmente en **fase de desarrollo activo**. Aunque funcional, algunas características pueden ser experimentales o estar sujetas a cambios.
 
-## Requisitos
- - Windows 10/11 x64
- - Rust + cargo
- - (Opcional) Node.js para construir la UI
- - (Opcional) Python 3.8–3.12 para sidecar Cognee
+[![CI/CD Pipeline](https://github.com/yourusername/oxide-pilot/actions/workflows/ci.yml/badge.svg)](https://github.com/yourusername/oxide-pilot/actions/workflows/ci.yml)
+[![Build Release](https://github.com/yourusername/oxide-pilot/actions/workflows/build-release.yml/badge.svg)](https://github.com/yourusername/oxide-pilot/actions/workflows/build-release.yml)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+
+Oxide Pilot es un **asistente de automatización empresarial** con backend en Rust (Tauri) y UI Svelte. Incluye un sistema avanzado de permisos RPA, agentes Guardian/Copilot, memoria local y soporte para múltiples LLMs.
+
+## 🚀 Características Principales
+
+- 🔒 **Sistema de Permisos RPA** - Control granular de automatización con seguridad enterprise
+- 📊 **Auditoría Completa** - Logging automático y monitoreo de todas las acciones
+- 🔄 **Rollback Inteligente** - Deshacer operaciones reversibles de forma segura
+- ✋ **Confirmación de Usuario** - Sistema asíncrono de aprobación para acciones críticas
+- 🧠 **Integración Multi-LLM** - Soporte para OpenAI, Gemini, Qwen y modelos locales
+- 🛡️ **Análisis de Amenazas** - Consenso multi-agente para detección de seguridad
+- 📈 **Monitoreo de Performance** - Métricas en tiempo real del sistema
+
+## 📋 Requisitos del Sistema
+
+### Mínimos
+- **OS**: Windows 10/11 x64, macOS 10.15+, Ubuntu 20.04+
+- **Rust**: 1.70+ con cargo
+- **Node.js**: 18+ (para construir la UI)
+- **Memoria**: 4GB RAM mínimo, 8GB recomendado
+
+### Opcionales
+- **Python**: 3.8–3.12 (para sidecar Cognee)
+- **GPU**: Para aceleración de modelos locales
+
+## 📥 Descarga e Instalación
+
+### Releases Oficiales
+
+Descarga la última versión desde [GitHub Releases](https://github.com/yourusername/oxide-pilot/releases):
+
+- **Windows**: `oxide-pilot-setup.exe` (Instalador MSI)
+- **macOS**: `oxide-pilot.dmg` (Universal Binary)
+- **Linux**: `oxide-pilot.AppImage` o `oxide-pilot.deb`
+
+### Verificación de Integridad
+
+Cada release incluye checksums SHA256 para verificar la integridad:
+
+```bash
+# Verificar checksum (Linux/macOS)
+sha256sum -c checksums.txt
+
+# Verificar checksum (Windows PowerShell)
+Get-FileHash oxide-pilot-setup.exe -Algorithm SHA256
+```
+
+### Instalación desde Código Fuente
+
+Si prefieres compilar desde el código fuente:
 
 ## Desarrollo rápido
 
@@ -45,7 +93,7 @@ npm run test:e2e
 ```
 
 Notas:
- 
+
 - Configuración: `src-frontend/playwright.config.ts` (levanta Vite dev y prueba en Chromium/Firefox/WebKit).
 - Prueba de humo: `src-frontend/tests/smoke.spec.ts`.
 
@@ -102,7 +150,7 @@ Para obtener información detallada sobre el proyecto, consulte los siguientes d
 - 🤖 Asistencia Conversacional: Interacción natural por voz con capacidades multimodales
 - 🎮 Control Agéntico: Capacidad de tomar acciones directas en el sistema cuando es necesario
 - 🧠 Memoria Persistente: Aprende de cada interacción para brindar asistencia personalizada
- 
+
 
 ---
 

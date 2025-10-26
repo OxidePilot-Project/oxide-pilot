@@ -8,6 +8,7 @@ use oxide_core::google_auth::AuthError;
 
 /// Centralized error type for the Oxide Pilot application
 #[derive(Error, Debug)]
+#[allow(dead_code)] // Some variants reserved for future use
 pub enum OxideError {
     #[error("System initialization failed: {0}")]
     SystemInit(String),
