@@ -32,24 +32,40 @@ Oxide Pilot es un **asistente de automatización empresarial** con backend en Ru
 
 ## 📥 Descarga e Instalación
 
-### Releases Oficiales
+### Releases Oficiales (Automáticas)
 
-Descarga la última versión desde [GitHub Releases](https://github.com/yourusername/oxide-pilot/releases):
+Las releases se generan automáticamente en cada push a `main` y están disponibles en [GitHub Releases](https://github.com/yourusername/oxide-pilot/releases):
 
-- **Windows**: `oxide-pilot-setup.exe` (Instalador MSI)
-- **macOS**: `oxide-pilot.dmg` (Universal Binary)
-- **Linux**: `oxide-pilot.AppImage` o `oxide-pilot.deb`
+- **Windows x64**: Descarga el instalador `.msi` o `.exe`
+- **Etiquetado Automático**: Cada release incluye timestamp y commit SHA
+- **Pre-releases**: Las builds de `main` se marcan como pre-release
+- **Releases Estables**: Las versiones etiquetadas con `v*` son releases estables
+
+#### Formatos de Etiquetas
+
+- `v1.0.0` - Release estable con versionado semántico
+- `bootstrap-YYYYMMDD-HHmmss-commit` - Build automática desde main
+- `bootstrap-*` - Build específica con etiqueta personalizada
 
 ### Verificación de Integridad
 
-Cada release incluye checksums SHA256 para verificar la integridad:
+Cada release incluye múltiples checksums para verificar la integridad de los archivos:
+
+```powershell
+# Verificar checksum SHA256 (Windows PowerShell)
+Get-FileHash oxide-pilot-setup.exe -Algorithm SHA256
+# Comparar con CHECKSUMS-sha256.txt
+
+# También disponibles: MD5, SHA512
+Get-FileHash oxide-pilot-setup.exe -Algorithm MD5
+Get-FileHash oxide-pilot-setup.exe -Algorithm SHA512
+```
 
 ```bash
 # Verificar checksum (Linux/macOS)
-sha256sum -c checksums.txt
-
-# Verificar checksum (Windows PowerShell)
-Get-FileHash oxide-pilot-setup.exe -Algorithm SHA256
+sha256sum -c CHECKSUMS-sha256.txt
+md5sum -c CHECKSUMS-md5.txt
+sha512sum -c CHECKSUMS-sha512.txt
 ```
 
 ### Instalación desde Código Fuente

@@ -10,10 +10,6 @@ default-run = "oxide-pilot"
 name = "oxide-pilot"
 path = "src/main.rs"
 
-[features]
-default = []
-cognee = []
-
 [dependencies]
 tauri = { version = "1.5", features = [
   "app-all",
@@ -75,6 +71,7 @@ tauri-build = { version = "1.5", features = [] }
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
+cognee = []
 
 [[test]]
 name = "async_concurrency_tests"

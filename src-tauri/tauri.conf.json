@@ -39,19 +39,8 @@
       ],
       "windows": {
         "nsis": {
-          "displayLanguageSelector": false,
-          "installMode": "perMachine",
-          "allowDowngrades": false,
-          "createDesktopShortcut": true,
-          "createStartMenuShortcut": true
-        },
-        "msi": {
-          "displayLanguageSelector": false,
-          "installMode": "perMachine"
-        },
-        "certificateThumbprint": null,
-        "digestAlgorithm": "sha256",
-        "timestampUrl": null
+          "displayLanguageSelector": false
+        }
       },
       "macOS": {
         "frameworks": [],
@@ -61,10 +50,8 @@
         "providerShortName": null,
         "entitlements": null
       },
-      "linux": {
-        "deb": {
-          "depends": ["libwebkit2gtk-4.0-37", "libgtk-3-0"]
-        }
+      "deb": {
+        "depends": ["libwebkit2gtk-4.0-37", "libgtk-3-0"]
       }
     },
     "security": {
