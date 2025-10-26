@@ -24,6 +24,8 @@ tauri = { version = "1.0", features = ["api-all"], optional = true }
 regex = "1.10"
 base64 = "0.21"
 webbrowser = "0.8"
+sysinfo = "0.30"
+lru = "0.12"
 
 [features]
 default = []

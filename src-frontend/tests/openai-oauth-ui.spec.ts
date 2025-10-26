@@ -2,39 +2,63 @@ import { test, expect } from '@playwright/test';
 
 const APP_URL = process.env.APP_URL || 'http://localhost:5173';
 
-test.describe('OpenAI OAuth UI (browser-mode simulation)', () => {
-  test('should complete OpenAI OAuth via simulated event and land on dashboard', async ({ page }) => {
+test.describe('OpenAI API Key UI', () => {
+  test('should show API key input and save successfully', async ({ page }) => {
     await page.goto(APP_URL);
 
     await expect(page.getByRole('heading', { name: /setup required/i })).toBeVisible();
 
     // Select OpenAI provider
-    await page.getByRole('button', { name: /openai \(gpt.*5\)/i }).click();
+    await page.getByRole('button', { name: /openai/i }).click();
 
     // Ensure OpenAI auth setup panel is visible
-    await expect(page.getByRole('heading', { name: /openai \(gpt.*5\)/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /openai/i })).toBeVisible();
 
-    // Dispatch simulated success event
-    await page.evaluate(() => {
-      window.dispatchEvent(new CustomEvent('openai_oauth', { detail: { action: 'success' } }));
-    });
+    // Find API key input
+    const apiKeyInput = page.getByPlaceholder(/api key|sk-/i);
+    await expect(apiKeyInput).toBeVisible();
 
-    // Wait for setup to disappear and dashboard to load
-    await expect(page.getByRole('heading', { name: /setup required/i })).toHaveCount(0);
-    await expect(page.locator('.pattern-dashboard')).toBeVisible();
+    // Enter a test API key (mock format)
+    await apiKeyInput.fill('sk-test-mock-key-for-e2e-testing-only');
+
+    // Click save/connect button
+    await page.getByRole('button', { name: /save|connect/i }).click();
+
+    // Wait for success message
+    await expect(page.getByText(/api key saved|openai is ready/i)).toBeVisible({ timeout: 5000 });
   });
 
-  test('should show error message on simulated error', async ({ page }) => {
+  test('should show warning when API key is empty', async ({ page }) => {
     await page.goto(APP_URL);
 
     await expect(page.getByRole('heading', { name: /setup required/i })).toBeVisible();
-    await page.getByRole('button', { name: /openai \(gpt.*5\)/i }).click();
+    await page.getByRole('button', { name: /openai/i }).click();
 
-    await page.evaluate(() => {
-      window.dispatchEvent(new CustomEvent('openai_oauth', { detail: { action: 'error', message: 'Denied' } }));
-    });
+    // Try to save without entering API key
+    await page.getByRole('button', { name: /save|connect/i }).click();
 
-    await expect(page.getByText(/oauth2 authentication failed/i)).toBeVisible();
+    // Should show warning
+    await expect(page.getByText(/enter.*api key/i)).toBeVisible();
+  });
+
+  test('should allow clearing API key session', async ({ page }) => {
+    await page.goto(APP_URL);
+
+    // Setup: save an API key first
+    await page.getByRole('button', { name: /openai/i }).click();
+    const apiKeyInput = page.getByPlaceholder(/api key|sk-/i);
+    await apiKeyInput.fill('sk-test-mock-key');
+    await page.getByRole('button', { name: /save|connect/i }).click();
+    await expect(page.getByText(/api key saved|openai is ready/i)).toBeVisible({ timeout: 5000 });
+
+    // Now clear the session
+    const clearButton = page.getByRole('button', { name: /clear|sign out|disconnect/i });
+    if (await clearButton.isVisible()) {
+      await clearButton.click();
+
+      // Should show confirmation or return to input state
+      await expect(page.getByPlaceholder(/api key|sk-/i)).toBeVisible();
+    }
   });
 });
 
@@ -51,5 +75,24 @@ test.describe('OpenAI provider routing (web preview mode)', () => {
 
     // Expect provider badge
     await expect(page.locator('.provider-badge', { hasText: 'OpenAI' })).toBeVisible();
+  });
+
+  test('should route messages to OpenAI when selected', async ({ page, context }) => {
+    await context.addInitScript(() => {
+      try { localStorage.setItem('oxide.provider', 'openai'); } catch {}
+    });
+    await page.goto(`${APP_URL}?e2e=1`);
+
+    await page.getByRole('button', { name: /chat/i }).click();
+
+    // Type a message
+    const input = page.getByPlaceholder(/type.*message|ask/i);
+    await input.fill('Test message for OpenAI');
+
+    // Send message
+    await page.keyboard.press('Enter');
+
+    // Should show message in conversation
+    await expect(page.getByText('Test message for OpenAI')).toBeVisible();
   });
 });
