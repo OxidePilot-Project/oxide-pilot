@@ -9,6 +9,7 @@ mod cognee_supervisor;
 mod mcp_server;
 mod local_llm;
 mod threat_consensus;
+mod rpa_commands;
 
 use error_handler::{ErrorHandler, OxideError, RetryConfig, retry_with_backoff, GLOBAL_ERROR_MONITOR};
 use log::{error, info, warn};
@@ -39,6 +40,8 @@ pub struct AppState {
     mcp_server: Arc<RwLock<Option<McpServerHandle>>>,
     // Track folder scan cancellation flags by scan_id
     folder_scan_cancels: Arc<RwLock<HashMap<String, Arc<AtomicBool>>>>,
+    // RPA controller state
+    rpa_state: Arc<RwLock<Option<oxide_rpa::secure_rpa::SecureRPAController>>>,
 }
 
 // ==============================
@@ -496,6 +499,7 @@ async fn start_folder_scan(
         auth_manager: state.auth_manager.clone(),
         mcp_server: state.mcp_server.clone(),
         folder_scan_cancels: state.folder_scan_cancels.clone(),
+        rpa_state: state.rpa_state.clone(),
     };
 
     // Clone scan_id for the async task
@@ -814,15 +818,16 @@ async fn get_performance_metrics(state: State<'_, AppState>) -> Result<serde_jso
     }
 }
 
-#[tauri::command]
-async fn get_performance_score(state: State<'_, AppState>) -> Result<f32, String> {
-    let system_guard = state.oxide_system.read().await;
-    if let Some(system) = system_guard.as_ref() {
-        Ok(system.get_performance_score().await)
-    } else {
-        Err("System not initialized".to_string())
-    }
-}
+// TODO: Implement get_performance_score in OxideSystem
+// #[tauri::command]
+// async fn get_performance_score(state: State<'_, AppState>) -> Result<f32, String> {
+//     let system_guard = state.oxide_system.read().await;
+//     if let Some(system) = system_guard.as_ref() {
+//         Ok(system.get_performance_score().await)
+//     } else {
+//         Err("System not initialized".to_string())
+//     }
+// }
 
 #[tauri::command]
 async fn optimize_performance(state: State<'_, AppState>) -> Result<Vec<String>, String> {
@@ -850,15 +855,16 @@ async fn get_recent_errors(limit: Option<usize>) -> Result<Vec<error_handler::Er
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-async fn get_performance_alerts(state: State<'_, AppState>) -> Result<Vec<oxide_core::performance::PerformanceAlert>, String> {
-    let system_guard = state.oxide_system.read().await;
-    if let Some(system) = system_guard.as_ref() {
-        Ok(system.get_performance_alerts().await)
-    } else {
-        Err("System not initialized".to_string())
-    }
-}
+// TODO: Implement PerformanceAlert type and get_performance_alerts method
+// #[tauri::command]
+// async fn get_performance_alerts(state: State<'_, AppState>) -> Result<Vec<oxide_core::performance::PerformanceAlert>, String> {
+//     let system_guard = state.oxide_system.read().await;
+//     if let Some(system) = system_guard.as_ref() {
+//         Ok(system.get_performance_alerts().await)
+//     } else {
+//         Err("System not initialized".to_string())
+//     }
+// }
 
 #[tauri::command]
 async fn clear_performance_alerts(state: State<'_, AppState>) -> Result<(), String> {
@@ -871,16 +877,17 @@ async fn clear_performance_alerts(state: State<'_, AppState>) -> Result<(), Stri
     }
 }
 
-#[tauri::command]
-async fn get_operation_profiles(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
-    let system_guard = state.oxide_system.read().await;
-    if let Some(system) = system_guard.as_ref() {
-        let profiles = system.get_operation_profiles().await;
-        serde_json::to_value(profiles).map_err(|e| e.to_string())
-    } else {
-        Err("System not initialized".to_string())
-    }
-}
+// TODO: Implement get_operation_profiles method
+// #[tauri::command]
+// async fn get_operation_profiles(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+//     let system_guard = state.oxide_system.read().await;
+//     if let Some(system) = system_guard.as_ref() {
+//         let profiles = system.get_operation_profiles().await;
+//         serde_json::to_value(profiles).map_err(|e| e.to_string())
+//     } else {
+//         Err("System not initialized".to_string())
+//     }
+// }
 
 #[tauri::command]
 async fn set_performance_monitoring(state: State<'_, AppState>, enabled: bool) -> Result<(), String> {
@@ -1156,24 +1163,16 @@ async fn get_system_snapshot(state: State<'_, AppState>) -> Result<serde_json::V
         // Gather pieces in parallel where possible
         let status = system_clone.get_system_status();
         let threats = system_clone.get_threat_history();
-        let (memory_stats, perf_metrics, perf_alerts, op_profiles) = (
-            system_clone.get_memory_stats().await,
-            system_clone.get_performance_metrics().await,
-            system_clone.get_performance_alerts().await,
-            system_clone.get_operation_profiles().await,
-        );
+        let memory_stats = system_clone.get_memory_stats().await;
+        let perf_metrics = system_clone.get_performance_metrics().await;
 
         let perf_metrics_val = serde_json::to_value(perf_metrics).map_err(|e| e.to_string())?;
-        let perf_alerts_val = serde_json::to_value(perf_alerts).map_err(|e| e.to_string())?;
-        let op_profiles_val = serde_json::to_value(op_profiles).map_err(|e| e.to_string())?;
 
         let snapshot = json!({
             "status": status,
             "threats": threats,
             "memory": memory_stats,
             "performance": perf_metrics_val,
-            "alerts": perf_alerts_val,
-            "profiles": op_profiles_val,
             "collected_at_unix": std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_secs())
@@ -1326,6 +1325,7 @@ fn main() {
             auth_manager: Arc::new(RwLock::new(None)),
             mcp_server: Arc::new(RwLock::new(None)),
             folder_scan_cancels: Arc::new(RwLock::new(HashMap::new())),
+            rpa_state: Arc::new(RwLock::new(None)),
         })
         .invoke_handler(tauri::generate_handler![
             send_notification,
@@ -1355,13 +1355,13 @@ fn main() {
             get_audio_devices,
             get_input_volume,
             get_performance_metrics,
-            get_performance_score,
+            // get_performance_score, // TODO: Implement missing methods
             optimize_performance,
             get_error_statistics,
             get_recent_errors,
-            get_performance_alerts,
+            // get_performance_alerts, // TODO: Implement missing methods
             clear_performance_alerts,
-            get_operation_profiles,
+            // get_operation_profiles, // TODO: Implement missing methods
             set_performance_monitoring,
             validate_input,
             create_security_session,
@@ -1398,7 +1398,27 @@ fn main() {
             open_url,
             mcp_start,
             mcp_stop,
-            mcp_status
+            mcp_status,
+            // RPA Commands
+            rpa_commands::rpa_initialize,
+            rpa_commands::rpa_shutdown,
+            rpa_commands::rpa_grant_permission,
+            rpa_commands::rpa_check_permission,
+            rpa_commands::rpa_move_mouse,
+            rpa_commands::rpa_click_mouse,
+            rpa_commands::rpa_scroll_mouse,
+            rpa_commands::rpa_type_text,
+            rpa_commands::rpa_press_key,
+            rpa_commands::rpa_capture_screen,
+            rpa_commands::rpa_get_audit_entries,
+            rpa_commands::rpa_get_audit_stats,
+            rpa_commands::rpa_get_failed_actions,
+            rpa_commands::rpa_get_rollback_history,
+            rpa_commands::rpa_rollback_last,
+            rpa_commands::rpa_get_reversible_count,
+            rpa_commands::rpa_get_pending_confirmations,
+            rpa_commands::rpa_respond_confirmation,
+            rpa_commands::rpa_add_auto_approve
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,6 +1,7 @@
 use image::{ImageBuffer, Rgba};
 use log::{error, info};
-use rdev::{simulate, Button, EventType, Key};
+use rdev::{simulate, EventType};
+pub use rdev::{Button, Key};
 use screenshots::Screen;
 use std::time::Duration;
 use thiserror::Error;

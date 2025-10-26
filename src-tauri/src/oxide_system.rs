@@ -6,7 +6,9 @@ use oxide_copilot::functions::FunctionRegistry;
 use oxide_core::config::{
     OxidePilotConfig,
 };
-use oxide_core::performance::{PerformanceMonitor, PerformanceTimer, ResourceOptimizer};
+use oxide_core::performance::PerformanceMonitor;
+// TODO: Implement PerformanceTimer and ResourceOptimizer
+// use oxide_core::performance::{PerformanceTimer, ResourceOptimizer};
 use oxide_core::security_manager::{SecurityManager, SecurityEvent, SecurityPolicy};
 use oxide_core::input_validation::InputValidator;
 use oxide_core::types::{Context, Interaction};
@@ -28,7 +30,8 @@ pub struct OxideSystem {
     memory_manager: Arc<MemoryManager>,
     voice_processor: Arc<VoiceProcessor>,
     performance_monitor: Arc<PerformanceMonitor>,
-    resource_optimizer: Arc<Mutex<ResourceOptimizer>>,
+    // TODO: Implement ResourceOptimizer
+    // resource_optimizer: Arc<Mutex<ResourceOptimizer>>,
     security_manager: Arc<SecurityManager>,
     input_validator: Arc<InputValidator>,
     is_running: Arc<Mutex<bool>>,
@@ -213,9 +216,10 @@ impl OxideSystem {
 
         // Initialize Performance Monitor
         let performance_monitor = Arc::new(PerformanceMonitor::new());
-        let resource_optimizer = Arc::new(Mutex::new(ResourceOptimizer::new(Arc::clone(
-            &performance_monitor,
-        ))));
+        // TODO: Implement ResourceOptimizer
+        // let resource_optimizer = Arc::new(Mutex::new(ResourceOptimizer::new(Arc::clone(
+        //     &performance_monitor,
+        // ))));
 
         // Initialize security components
         let encryption_key = oxide_core::encryption::EncryptionManager::generate_key();
@@ -230,7 +234,7 @@ impl OxideSystem {
             memory_manager,
             voice_processor,
             performance_monitor,
-            resource_optimizer,
+            // resource_optimizer,
             security_manager,
             input_validator,
             is_running: Arc::new(Mutex::new(false)),
@@ -389,10 +393,11 @@ impl OxideSystem {
     }
 
     pub async fn handle_text_input(&self, input: String) -> Result<String, String> {
-        let _timer = PerformanceTimer::new(
-            "handle_text_input".to_string(),
-            Arc::clone(&self.performance_monitor),
-        );
+        // TODO: Implement PerformanceTimer
+        // let _timer = PerformanceTimer::new(
+        //     "handle_text_input".to_string(),
+        //     Arc::clone(&self.performance_monitor),
+        // );
         info!("Handling text input: {}", input);
 
         // Build context from memory
@@ -502,24 +507,29 @@ impl OxideSystem {
     }
 
     pub async fn optimize_performance(&self) -> Vec<String> {
-        let optimizer = self.resource_optimizer.lock().await;
-        optimizer.optimize_if_needed().await
+        // TODO: Implement ResourceOptimizer
+        // let optimizer = self.resource_optimizer.lock().await;
+        // optimizer.optimize_if_needed().await
+        vec!["Performance optimization not yet implemented".to_string()]
     }
 
-    pub async fn get_performance_alerts(&self) -> Vec<oxide_core::performance::PerformanceAlert> {
-        self.performance_monitor.get_alerts().await
-    }
+    // TODO: Implement PerformanceAlert and PerformanceProfile types
+    // pub async fn get_performance_alerts(&self) -> Vec<oxide_core::performance::PerformanceAlert> {
+    //     self.performance_monitor.get_alerts().await
+    // }
 
     pub async fn clear_performance_alerts(&self) {
-        self.performance_monitor.clear_alerts().await
+        // TODO: Implement clear_alerts method
+        // self.performance_monitor.clear_alerts().await
     }
 
-    pub async fn get_operation_profiles(&self) -> std::collections::HashMap<String, oxide_core::performance::PerformanceProfile> {
-        self.performance_monitor.get_operation_profiles().await
-    }
+    // pub async fn get_operation_profiles(&self) -> std::collections::HashMap<String, oxide_core::performance::PerformanceProfile> {
+    //     self.performance_monitor.get_operation_profiles().await
+    // }
 
-    pub async fn set_performance_monitoring(&self, enabled: bool) {
-        self.performance_monitor.set_monitoring_enabled(enabled).await
+    pub async fn set_performance_monitoring(&self, _enabled: bool) {
+        // TODO: Implement set_monitoring_enabled method
+        // self.performance_monitor.set_monitoring_enabled(enabled).await
     }
 
     // File scanning API plumbing for frontend commands

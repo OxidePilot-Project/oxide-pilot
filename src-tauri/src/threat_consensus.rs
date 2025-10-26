@@ -174,8 +174,11 @@ async fn analyze_with_gemini(snapshot: &Value, grounded: bool) -> Result<ModelRe
   let auth = GeminiAuth::new();
 
   // Enforce JSON output. If grounding no está realmente disponible, el modelo debe seguir la instrucción.
+  let grounding_text = if grounded { "When possible," } else { "" };
+  let snapshot_str = serde_json::to_string_pretty(snapshot).unwrap_or_else(|_| snapshot.to_string());
+
   let prompt = format!(
-    """
+    r#"
     You are a security threat analyst. Analyze the following JSON system snapshot and produce a STRICT JSON object with this shape:
     {{
       "risk_score": number (0-100),
@@ -192,9 +195,9 @@ async fn analyze_with_gemini(snapshot: &Value, grounded: bool) -> Result<ModelRe
 
     Snapshot:
     {}
-    """,
-    if grounded { "When possible," } else { "" },
-    snapshot
+    "#,
+    grounding_text,
+    snapshot_str
   );
 
   match auth.send_message(&prompt, Some("gemini-1.5-pro")).await {
