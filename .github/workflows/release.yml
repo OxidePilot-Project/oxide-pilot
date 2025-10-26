@@ -108,14 +108,14 @@ jobs:
           $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
           $version = (Get-Content src-tauri/Cargo.toml | Select-String 'version = "(.+)"').Matches.Groups[1].Value
           $commitShort = git rev-parse --short HEAD
-          
+
           # If triggered by tag, use it; otherwise generate bootstrap tag
           if ($env:GITHUB_REF -like "refs/tags/*") {
             $tag = $env:GITHUB_REF -replace "refs/tags/", ""
           } else {
             $tag = "bootstrap-$timestamp-$commitShort"
           }
-          
+
           echo "tag=$tag" >> $env:GITHUB_OUTPUT
           echo "version=$version" >> $env:GITHUB_OUTPUT
           echo "Generated tag: $tag"
@@ -125,7 +125,7 @@ jobs:
         run: |
           $bundleDir = "src-tauri/target/release/bundle"
           $checksumFile = Join-Path $bundleDir "CHECKSUMS.txt"
-          
+
           # MD5 checksums
           $md5File = Join-Path $bundleDir "CHECKSUMS-md5.txt"
           Get-ChildItem -Path $bundleDir -Include *.exe,*.msi -Recurse | ForEach-Object {
@@ -133,7 +133,7 @@ jobs:
             $relativePath = $_.FullName.Replace("$bundleDir\", "")
             "$hash  $relativePath" | Out-File -Append -Encoding utf8 $md5File
           }
-          
+
           # SHA256 checksums
           $sha256File = Join-Path $bundleDir "CHECKSUMS-sha256.txt"
           Get-ChildItem -Path $bundleDir -Include *.exe,*.msi -Recurse | ForEach-Object {
@@ -141,7 +141,7 @@ jobs:
             $relativePath = $_.FullName.Replace("$bundleDir\", "")
             "$hash  $relativePath" | Out-File -Append -Encoding utf8 $sha256File
           }
-          
+
           # SHA512 checksums
           $sha512File = Join-Path $bundleDir "CHECKSUMS-sha512.txt"
           Get-ChildItem -Path $bundleDir -Include *.exe,*.msi -Recurse | ForEach-Object {
@@ -149,7 +149,7 @@ jobs:
             $relativePath = $_.FullName.Replace("$bundleDir\", "")
             "$hash  $relativePath" | Out-File -Append -Encoding utf8 $sha512File
           }
-          
+
           Write-Host "Checksums generated successfully"
 
       - name: Create GitHub Release
@@ -162,29 +162,29 @@ jobs:
           generate_release_notes: true
           body: |
             # Oxide Pilot - Automated Release
-            
+
             **Version:** ${{ steps.tag.outputs.version }}
             **Tag:** ${{ steps.tag.outputs.tag }}
             **Commit:** ${{ github.sha }}
-            
+
             ## Installation
-            
+
             Download the appropriate installer for your platform:
             - **Windows x64**: Download the `.msi` or `.exe` installer
-            
+
             ## Verification
-            
+
             Verify the integrity of downloaded files using the provided checksums:
             - `CHECKSUMS-md5.txt` - MD5 hashes
-            - `CHECKSUMS-sha256.txt` - SHA256 hashes  
+            - `CHECKSUMS-sha256.txt` - SHA256 hashes
             - `CHECKSUMS-sha512.txt` - SHA512 hashes
-            
+
             ## What's Changed
-            
+
             This release was automatically generated from the latest commit to the main branch.
-            
+
             ---
-            
+
             **Full Changelog**: https://github.com/${{ github.repository }}/commits/${{ steps.tag.outputs.tag }}
           files: |
             src-tauri/target/release/bundle/nsis/*.exe

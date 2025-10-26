@@ -70,10 +70,10 @@ Los usuarios pueden verificar la integridad de los archivos descargados:
 # Windows PowerShell - Verificar SHA256
 $expectedHash = (Get-Content CHECKSUMS-sha256.txt | Select-String "oxide-pilot").Line.Split()[0]
 $actualHash = (Get-FileHash oxide-pilot-setup.exe -Algorithm SHA256).Hash.ToLower()
-if ($expectedHash -eq $actualHash) { 
-    Write-Host "✓ Checksum verificado correctamente" -ForegroundColor Green 
-} else { 
-    Write-Host "✗ Checksum NO coincide - Archivo corrupto o manipulado" -ForegroundColor Red 
+if ($expectedHash -eq $actualHash) {
+    Write-Host "✓ Checksum verificado correctamente" -ForegroundColor Green
+} else {
+    Write-Host "✗ Checksum NO coincide - Archivo corrupto o manipulado" -ForegroundColor Red
 }
 ```
 
