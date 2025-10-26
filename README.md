@@ -130,6 +130,42 @@ pwsh -File scripts/build-windows.ps1
 pwsh -File scripts/build-windows.ps1 -UseCognee
 ```
 
+## 🏷️ Crear una Release
+
+El proyecto incluye un sistema automatizado de releases. Usa el script helper para crear releases fácilmente:
+
+### Release de Desarrollo (Automática)
+
+```powershell
+# Simplemente push a main - se crea automáticamente
+git push origin main
+
+# O usa el script helper
+pwsh -File scripts/create-release.ps1 -Type dev
+```
+
+### Release Estable (Versionada)
+
+```powershell
+# Crear release estable con nueva versión
+pwsh -File scripts/create-release.ps1 -Type stable -Version 1.0.0
+
+# El script automáticamente:
+# 1. Actualiza la versión en Cargo.toml
+# 2. Crea commit de versión
+# 3. Crea tag v1.0.0
+# 4. Push para trigger el workflow
+```
+
+### Release Personalizada
+
+```powershell
+# Crear release con tag personalizado
+pwsh -File scripts/create-release.ps1 -Type custom -CustomTag bootstrap-feature-xyz
+```
+
+Para más detalles sobre el sistema de releases, consulta [.github/RELEASE_AUTOMATION.md](.github/RELEASE_AUTOMATION.md).
+
 ## Plan de implementación y estado
 
 Consulta docs/IMPLEMENTATION-TASKS.md para el desglose de tareas, estados y próximos pasos.
