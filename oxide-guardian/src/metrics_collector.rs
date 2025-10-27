@@ -21,7 +21,7 @@ use chrono::Utc;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use sysinfo::{CpuExt, NetworkExt, ProcessExt, System, SystemExt};
+use sysinfo::{CpuExt, NetworkExt, NetworksExt, PidExt, ProcessExt, System, SystemExt};
 use tokio::sync::RwLock;
 use tokio::time::interval;
 use tracing::{debug, error, info, warn};
@@ -77,10 +77,10 @@ impl Default for MetricsConfig {
 /// async fn main() -> anyhow::Result<()> {
 ///     let backend = Arc::new(SurrealBackend::new("./data/oxide.db").await?);
 ///     let mut collector = MetricsCollector::new(backend, Default::default());
-///     
+///
 ///     // Start background collection (runs forever)
 ///     collector.start().await?;
-///     
+///
 ///     Ok(())
 /// }
 /// ```
@@ -105,10 +105,10 @@ impl MetricsCollector {
     /// * `config` - Collector configuration
     pub fn new(backend: Arc<SurrealBackend>, config: MetricsConfig) -> Self {
         info!("Initializing metrics collector with interval={}s", config.interval_secs);
-        
+
         let mut system = System::new_all();
         system.refresh_all();
-        
+
         Self {
             backend,
             system: Arc::new(RwLock::new(system)),
@@ -128,10 +128,10 @@ impl MetricsCollector {
     pub async fn start(&mut self) -> Result<()> {
         info!("Starting metrics collection loop");
         let mut ticker = interval(Duration::from_secs(self.config.interval_secs));
-        
+
         loop {
             ticker.tick().await;
-            
+
             if let Err(e) = self.collect_and_store().await {
                 error!("Failed to collect metrics: {:#}", e);
                 // Continue loop despite errors
@@ -143,32 +143,32 @@ impl MetricsCollector {
     async fn collect_and_store(&mut self) -> Result<()> {
         let timestamp = Utc::now();
         debug!("Collecting metrics at {}", timestamp);
-        
+
         // Refresh system info
         {
             let mut sys = self.system.write().await;
             sys.refresh_all();
         }
-        
+
         // Collect system-level metrics
         let metric = self.collect_system_metrics(timestamp).await?;
-        
+
         // Store in database
         self.backend
             .insert_system_metric(metric.clone())
             .await
             .context("Failed to store system metric")?;
-        
+
         // Check for alerts
         self.check_alerts(&metric).await;
-        
+
         // Optionally collect process tree
         if self.config.collect_processes {
             if let Err(e) = self.collect_process_tree().await {
                 warn!("Failed to collect process tree: {:#}", e);
             }
         }
-        
+
         debug!("Metrics collection completed successfully");
         Ok(())
     }
@@ -176,23 +176,23 @@ impl MetricsCollector {
     /// Collect system-level performance metrics
     async fn collect_system_metrics(&self, timestamp: chrono::DateTime<Utc>) -> Result<SystemMetric> {
         let sys = self.system.read().await;
-        
+
         // CPU usage (global average)
         let cpu_usage = sys.global_cpu_info().cpu_usage() as f64;
-        
+
         // Memory usage
         let total_memory = sys.total_memory();
         let used_memory = sys.used_memory();
         let available_memory = sys.available_memory();
         let memory_percent = (used_memory as f64 / total_memory as f64) * 100.0;
-        
+
         let memory_usage = MemoryUsage {
             total_mb: total_memory as f64 / 1024.0 / 1024.0,
             used_mb: used_memory as f64 / 1024.0 / 1024.0,
             available_mb: available_memory as f64 / 1024.0 / 1024.0,
             percent: memory_percent,
         };
-        
+
         // Disk I/O (aggregate across all disks)
         let disk_io = if self.config.collect_disk_io {
             self.collect_disk_io_stats(&sys).await
@@ -203,7 +203,7 @@ impl MetricsCollector {
                 iops: 0,
             }
         };
-        
+
         // Network statistics
         let network_stats = if self.config.collect_network {
             self.collect_network_stats(&sys).await
@@ -214,7 +214,7 @@ impl MetricsCollector {
                 connections_active: 0,
             }
         };
-        
+
         // Metadata
         let metadata = Some(serde_json::json!({
             "hostname": hostname::get()
@@ -226,7 +226,7 @@ impl MetricsCollector {
             "kernel_version": sys.kernel_version().unwrap_or_else(|| "unknown".to_string()),
             "oxide_version": env!("CARGO_PKG_VERSION"),
         }));
-        
+
         Ok(SystemMetric {
             timestamp,
             cpu_usage,
@@ -238,15 +238,15 @@ impl MetricsCollector {
     }
 
     /// Collect disk I/O statistics
-    async fn collect_disk_io_stats(&self, sys: &System) -> DiskIO {
+    async fn collect_disk_io_stats(&self, _sys: &System) -> DiskIO {
         // Note: sysinfo 0.29 doesn't provide real-time I/O rates
         // For production, consider using Windows Performance Counters or Linux /proc/diskstats
         // For now, returning placeholder values
-        
+
         // TODO: Implement actual disk I/O monitoring
         // Windows: Use Performance Data Helper (PDH) API
         // Linux: Parse /proc/diskstats
-        
+
         DiskIO {
             read_mb_per_sec: 0.0,
             write_mb_per_sec: 0.0,
@@ -257,24 +257,24 @@ impl MetricsCollector {
     /// Collect network statistics
     async fn collect_network_stats(&self, sys: &System) -> NetworkStats {
         let networks = sys.networks();
-        
+
         let mut total_sent = 0u64;
         let mut total_recv = 0u64;
-        
+
         for (_name, network) in networks.iter() {
             total_sent += network.transmitted();
             total_recv += network.received();
         }
-        
+
         // Convert bytes to MB (divide by sample interval for per-second rate)
         let sent_mb_per_sec = (total_sent as f64) / 1024.0 / 1024.0 / (self.config.interval_secs as f64);
         let recv_mb_per_sec = (total_recv as f64) / 1024.0 / 1024.0 / (self.config.interval_secs as f64);
-        
+
         // Note: Connection count requires OS-specific API
         // TODO: Implement TCP connection counting
         // Windows: GetExtendedTcpTable
         // Linux: Parse /proc/net/tcp
-        
+
         NetworkStats {
             sent_mb_per_sec,
             recv_mb_per_sec,
@@ -287,24 +287,24 @@ impl MetricsCollector {
         let sys = self.system.read().await;
         let mut process_map = self.process_map.write().await;
         let now = Utc::now();
-        
+
         debug!("Collecting process tree ({} processes)", sys.processes().len());
-        
+
         for (pid, process) in sys.processes() {
             let pid_i32 = pid.as_u32() as i32;
-            
+
             // Skip if we've seen this process recently (avoid duplicates)
             if let Some(last_seen) = process_map.get(&pid_i32) {
                 if now.signed_duration_since(*last_seen).num_seconds() < 60 {
                     continue;
                 }
             }
-            
+
             // Create ProcessInfo
             let process_info = ProcessInfo {
                 pid: pid_i32,
                 name: process.name().to_string(),
-                exe_path: process.exe().map(|p| p.display().to_string()),
+                exe_path: Some(process.exe().display().to_string()),
                 cmd: process.cmd().to_vec(),
                 start_time: chrono::DateTime::from_timestamp(process.start_time() as i64, 0)
                     .unwrap_or(now),
@@ -314,17 +314,17 @@ impl MetricsCollector {
                 threads: 1, // sysinfo doesn't expose thread count directly
                 status: self.map_process_status(process.status()),
             };
-            
+
             // Store process (TODO: implement process storage in SurrealBackend)
             // For now, just track in memory
             process_map.insert(pid_i32, now);
-            
+
             // TODO: Create graph edges for parent-child relationships
             // if let Some(parent_pid) = process.parent() {
             //     self.backend.create_spawns_relation(parent_pid, pid_i32).await?;
             // }
         }
-        
+
         Ok(())
     }
 
@@ -347,7 +347,7 @@ impl MetricsCollector {
                 "High CPU usage detected: {:.2}% (threshold: {:.2}%)",
                 metric.cpu_usage, self.config.cpu_alert_threshold
             );
-            
+
             // Create agent memory for future analysis
             if let Err(e) = self.create_alert_memory(
                 &format!("High CPU usage: {:.2}%", metric.cpu_usage),
@@ -356,14 +356,14 @@ impl MetricsCollector {
                 error!("Failed to create alert memory: {:#}", e);
             }
         }
-        
+
         // High memory alert
         if metric.memory_usage.percent > self.config.memory_alert_threshold {
             warn!(
                 "High memory usage detected: {:.2}% (threshold: {:.2}%)",
                 metric.memory_usage.percent, self.config.memory_alert_threshold
             );
-            
+
             if let Err(e) = self.create_alert_memory(
                 &format!("High memory usage: {:.2}%", metric.memory_usage.percent),
                 metric.timestamp,
@@ -377,7 +377,7 @@ impl MetricsCollector {
     async fn create_alert_memory(&self, content: &str, timestamp: chrono::DateTime<Utc>) -> Result<()> {
         // TODO: Generate real embeddings
         let embedding = vec![0.0; 1536];
-        
+
         let memory = AgentMemory {
             agent_type: AgentType::Guardian,
             content: content.to_string(),
@@ -389,7 +389,7 @@ impl MetricsCollector {
                 "auto_generated": true,
             })),
         };
-        
+
         self.backend.insert_agent_memory(memory).await?;
         Ok(())
     }
@@ -404,7 +404,7 @@ impl MetricsCollector {
     pub fn new(_backend: (), _config: MetricsConfig) -> Self {
         Self
     }
-    
+
     pub async fn start(&mut self) -> Result<()> {
         warn!("MetricsCollector disabled (surrealdb-metrics feature not enabled)");
         Ok(())
@@ -415,7 +415,7 @@ impl MetricsCollector {
 mod tests {
     use super::*;
     use tempfile::TempDir;
-    
+
     #[tokio::test]
     #[cfg(feature = "surrealdb-metrics")]
     async fn test_metrics_collection() {
@@ -425,18 +425,18 @@ mod tests {
                 .await
                 .unwrap()
         );
-        
+
         let config = MetricsConfig {
             interval_secs: 1,
             collect_processes: false, // Disable for test
             ..Default::default()
         };
-        
+
         let mut collector = MetricsCollector::new(backend.clone(), config);
-        
+
         // Collect once
         collector.collect_and_store().await.unwrap();
-        
+
         // Query metrics
         let metrics = backend
             .query_metrics_by_time(
@@ -445,7 +445,7 @@ mod tests {
             )
             .await
             .unwrap();
-        
+
         assert!(metrics.len() > 0);
         assert!(metrics[0].cpu_usage >= 0.0 && metrics[0].cpu_usage <= 100.0);
     }

@@ -1,8 +1,7 @@
 //! SurrealDB Backend Implementation for Oxide Pilot Memory System
 //!
 //! This module provides a high-performance, Rust-native memory backend using SurrealDB
-//! embedded mode with RocksDB storage. It replaces the Python-based Cognee system with
-//! a multi-model database supporting:
+//! embedded mode with RocksDB storage. It provides a multi-model database supporting:
 //! - Document storage (JSON-like records)
 //! - Graph relationships (process trees, threat chains)
 //! - Vector search (HNSW for semantic similarity)
@@ -48,11 +47,10 @@ use serde_json::Value;
 use std::path::Path;
 use std::sync::Arc;
 use surrealdb::engine::local::{Db, RocksDb};
-use surrealdb::opt::auth::Root;
 use surrealdb::sql::Thing;
 use surrealdb::Surreal;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info};
 
 use crate::backend::{BackendSearchItem, MemoryBackend};
 
@@ -280,13 +278,13 @@ pub enum MemorySource {
 /// #[tokio::main]
 /// async fn main() -> anyhow::Result<()> {
 ///     let backend = SurrealBackend::new("./data/oxide-memory.db").await?;
-///     
+///
 ///     // Insert system metric
 ///     backend.insert_system_metric(metric).await?;
-///     
+///
 ///     // Query high CPU processes
 ///     let processes = backend.query_high_cpu_processes(80.0, 24).await?;
-///     
+///
 ///     Ok(())
 /// }
 /// ```
@@ -324,13 +322,8 @@ impl SurrealBackend {
             .await
             .context("Failed to initialize SurrealDB")?;
 
-        debug!("Authenticating with root credentials");
-        db.signin(Root {
-            username: "root",
-            password: "root",
-        })
-        .await
-        .context("Failed to authenticate")?;
+        // Note: Embedded RocksDB doesn't require authentication in SurrealDB 2.x
+        // Credentials are only needed for network connections (WS/HTTP)
 
         debug!("Selecting namespace '{}' and database '{}'", NAMESPACE, DATABASE);
         db.use_ns(NAMESPACE).use_db(DATABASE).await.context("Failed to select namespace/database")?;
@@ -354,35 +347,35 @@ impl SurrealBackend {
             r#"
             DEFINE TABLE IF NOT EXISTS system_metrics SCHEMAFULL
                 COMMENT "System performance metrics captured every 5 seconds";
-            
+
             DEFINE FIELD IF NOT EXISTS timestamp ON system_metrics TYPE datetime
                 ASSERT $value != NONE
                 COMMENT "UTC timestamp of metric capture";
-            
+
             DEFINE FIELD IF NOT EXISTS cpu_usage ON system_metrics TYPE float
                 ASSERT $value >= 0 AND $value <= 100
                 COMMENT "CPU usage percentage (0-100)";
-            
+
             DEFINE FIELD IF NOT EXISTS memory_usage ON system_metrics TYPE object;
             DEFINE FIELD IF NOT EXISTS memory_usage.total_mb ON system_metrics TYPE float;
             DEFINE FIELD IF NOT EXISTS memory_usage.used_mb ON system_metrics TYPE float;
             DEFINE FIELD IF NOT EXISTS memory_usage.available_mb ON system_metrics TYPE float;
             DEFINE FIELD IF NOT EXISTS memory_usage.percent ON system_metrics TYPE float;
-            
+
             DEFINE FIELD IF NOT EXISTS disk_io ON system_metrics TYPE object;
             DEFINE FIELD IF NOT EXISTS disk_io.read_mb_per_sec ON system_metrics TYPE float;
             DEFINE FIELD IF NOT EXISTS disk_io.write_mb_per_sec ON system_metrics TYPE float;
             DEFINE FIELD IF NOT EXISTS disk_io.iops ON system_metrics TYPE int;
-            
+
             DEFINE FIELD IF NOT EXISTS network_stats ON system_metrics TYPE object;
             DEFINE FIELD IF NOT EXISTS network_stats.sent_mb_per_sec ON system_metrics TYPE float;
             DEFINE FIELD IF NOT EXISTS network_stats.recv_mb_per_sec ON system_metrics TYPE float;
             DEFINE FIELD IF NOT EXISTS network_stats.connections_active ON system_metrics TYPE int;
-            
+
             DEFINE FIELD IF NOT EXISTS metadata ON system_metrics TYPE option<object>;
-            
+
             DEFINE INDEX IF NOT EXISTS idx_timestamp ON system_metrics FIELDS timestamp;
-            DEFINE INDEX IF NOT EXISTS idx_high_cpu ON system_metrics FIELDS cpu_usage WHERE cpu_usage > 80;
+            DEFINE INDEX IF NOT EXISTS idx_high_cpu ON system_metrics FIELDS cpu_usage;
             "#,
         )
         .await
@@ -393,7 +386,7 @@ impl SurrealBackend {
             r#"
             DEFINE TABLE IF NOT EXISTS process SCHEMAFULL
                 COMMENT "System processes with snapshot metrics";
-            
+
             DEFINE FIELD IF NOT EXISTS pid ON process TYPE int ASSERT $value > 0;
             DEFINE FIELD IF NOT EXISTS name ON process TYPE string ASSERT $value != "";
             DEFINE FIELD IF NOT EXISTS exe_path ON process TYPE option<string>;
@@ -405,7 +398,7 @@ impl SurrealBackend {
             DEFINE FIELD IF NOT EXISTS threads ON process TYPE int;
             DEFINE FIELD IF NOT EXISTS status ON process TYPE string
                 ASSERT $value INSIDE ['running', 'sleeping', 'stopped', 'zombie'];
-            
+
             DEFINE INDEX IF NOT EXISTS idx_pid ON process FIELDS pid UNIQUE;
             DEFINE INDEX IF NOT EXISTS idx_name ON process FIELDS name;
             DEFINE INDEX IF NOT EXISTS idx_start_time ON process FIELDS start_time;
@@ -419,11 +412,11 @@ impl SurrealBackend {
             r#"
             DEFINE TABLE IF NOT EXISTS spawns SCHEMAFULL TYPE RELATION IN process OUT process
                 COMMENT "Parent-child process relationships";
-            
+
             DEFINE FIELD IF NOT EXISTS spawn_time ON spawns TYPE datetime;
             DEFINE FIELD IF NOT EXISTS exit_code ON spawns TYPE option<int>;
             DEFINE FIELD IF NOT EXISTS duration ON spawns TYPE option<duration>;
-            
+
             DEFINE INDEX IF NOT EXISTS idx_spawn_time ON spawns FIELDS spawn_time;
             "#,
         )
@@ -435,7 +428,7 @@ impl SurrealBackend {
             r#"
             DEFINE TABLE IF NOT EXISTS threat SCHEMAFULL
                 COMMENT "Threats detected by Guardian Agent";
-            
+
             DEFINE FIELD IF NOT EXISTS severity ON threat TYPE string
                 ASSERT $value INSIDE ['low', 'medium', 'high', 'critical']
                 DEFAULT 'medium';
@@ -447,7 +440,7 @@ impl SurrealBackend {
             DEFINE FIELD IF NOT EXISTS mitigation_status ON threat TYPE string
                 ASSERT $value INSIDE ['detected', 'quarantined', 'deleted', 'whitelisted', 'investigating']
                 DEFAULT 'detected';
-            
+
             DEFINE INDEX IF NOT EXISTS idx_severity ON threat FIELDS severity;
             DEFINE INDEX IF NOT EXISTS idx_timestamp ON threat FIELDS timestamp;
             "#,
@@ -460,7 +453,7 @@ impl SurrealBackend {
             r#"
             DEFINE TABLE IF NOT EXISTS incident SCHEMAFULL
                 COMMENT "System crashes, errors, exceptions";
-            
+
             DEFINE FIELD IF NOT EXISTS description ON incident TYPE string;
             DEFINE FIELD IF NOT EXISTS timestamp ON incident TYPE datetime;
             DEFINE FIELD IF NOT EXISTS severity ON incident TYPE string
@@ -471,7 +464,7 @@ impl SurrealBackend {
                 ASSERT $value INSIDE ['open', 'investigating', 'resolved', 'ignored']
                 DEFAULT 'open';
             DEFINE FIELD IF NOT EXISTS related_processes ON incident TYPE array<record<process>>;
-            
+
             DEFINE INDEX IF NOT EXISTS idx_timestamp ON incident FIELDS timestamp;
             DEFINE INDEX IF NOT EXISTS idx_severity ON incident FIELDS severity;
             DEFINE INDEX IF NOT EXISTS idx_status ON incident FIELDS resolution_status;
@@ -485,7 +478,7 @@ impl SurrealBackend {
             r#"
             DEFINE TABLE IF NOT EXISTS agent_memory SCHEMAFULL
                 COMMENT "Agent memory with semantic search via HNSW";
-            
+
             DEFINE FIELD IF NOT EXISTS agent_type ON agent_memory TYPE string
                 ASSERT $value INSIDE ['guardian', 'copilot'];
             DEFINE FIELD IF NOT EXISTS content ON agent_memory TYPE string;
@@ -494,7 +487,7 @@ impl SurrealBackend {
             DEFINE FIELD IF NOT EXISTS source ON agent_memory TYPE string
                 ASSERT $value INSIDE ['system_log', 'user_query', 'threat_report', 'performance_analysis'];
             DEFINE FIELD IF NOT EXISTS metadata ON agent_memory TYPE option<object>;
-            
+
             DEFINE INDEX IF NOT EXISTS idx_agent_type ON agent_memory FIELDS agent_type;
             "#,
         )
@@ -540,9 +533,9 @@ impl SurrealBackend {
     /// backend.insert_system_metric(metric).await?;
     /// ```
     pub async fn insert_system_metric(&self, metric: SystemMetric) -> Result<Thing> {
-        debug!("Inserting system metric: cpu={:.2}%, mem={:.2}%", 
+        debug!("Inserting system metric: cpu={:.2}%, mem={:.2}%",
                metric.cpu_usage, metric.memory_usage.percent);
-        
+
         let db = self.db.read().await;
         let created: Option<Thing> = db
             .create("system_metrics")
@@ -567,12 +560,12 @@ impl SurrealBackend {
         end: DateTime<Utc>,
     ) -> Result<Vec<SystemMetric>> {
         debug!("Querying metrics from {} to {}", start, end);
-        
+
         let db = self.db.read().await;
         let mut result = db
             .query(
-                "SELECT * FROM system_metrics 
-                 WHERE timestamp >= $start AND timestamp <= $end 
+                "SELECT * FROM system_metrics
+                 WHERE timestamp >= $start AND timestamp <= $end
                  ORDER BY timestamp DESC",
             )
             .bind(("start", start))
@@ -603,7 +596,7 @@ impl SurrealBackend {
         hours: i64,
     ) -> Result<Vec<Value>> {
         debug!("Querying processes with CPU >{}% in last {} hours", threshold, hours);
-        
+
         let db = self.db.read().await;
         let mut result = db
             .query(
@@ -636,7 +629,7 @@ impl SurrealBackend {
     /// Process info with parent and child processes
     pub async fn get_process_tree(&self, pid: i32) -> Result<Value> {
         debug!("Getting process tree for PID {}", pid);
-        
+
         let db = self.db.read().await;
         let mut result = db
             .query(
@@ -676,7 +669,7 @@ impl SurrealBackend {
         limit: usize,
     ) -> Result<Vec<BackendSearchItem>> {
         debug!("Vector search for agent_type={}, limit={}", agent_type, limit);
-        
+
         if query_embedding.len() != EMBEDDING_DIM {
             anyhow::bail!(
                 "Invalid embedding dimension: expected {}, got {}",
@@ -685,8 +678,9 @@ impl SurrealBackend {
             );
         }
 
+        let agent_type_owned = agent_type.to_string();
         let db = self.db.read().await;
-        
+
         // Note: Using manual cosine similarity until HNSW index is stable
         // TODO: Switch to native vector search when SurrealDB 2.3+ HNSW is production-ready
         let mut result = db
@@ -703,7 +697,7 @@ impl SurrealBackend {
                 "#,
             )
             .bind(("query_vec", query_embedding))
-            .bind(("agent_type", agent_type))
+            .bind(("agent_type", agent_type_owned))
             .bind(("limit", limit))
             .await
             .context("Failed to execute vector search")?;
@@ -717,8 +711,8 @@ impl SurrealBackend {
         }
 
         let results: Vec<SearchResult> = result.take(0).context("Failed to extract search results")?;
-        
-        let items = results
+
+        let items: Vec<BackendSearchItem> = results
             .into_iter()
             .map(|r| BackendSearchItem {
                 text: r.content,
@@ -742,9 +736,9 @@ impl SurrealBackend {
             );
         }
 
-        debug!("Inserting agent memory: agent_type={:?}, source={:?}", 
+        debug!("Inserting agent memory: agent_type={:?}, source={:?}",
                memory.agent_type, memory.source);
-        
+
         let db = self.db.read().await;
         let created: Option<Thing> = db
             .create("agent_memory")
@@ -768,13 +762,13 @@ impl MemoryBackend for SurrealBackend {
         metadata: Value,
     ) -> Result<(), String> {
         debug!("Adding {} text items to agent memory", items.len());
-        
-        for (source, texts) in items {
+
+        for (_source, texts) in items {
             for text in texts {
                 // TODO: Generate real embeddings using text-embeddings-inference or OpenAI API
                 // For now, using zero vector as placeholder
                 let embedding = vec![0.0; EMBEDDING_DIM];
-                
+
                 let memory = AgentMemory {
                     agent_type: AgentType::Guardian,
                     content: text.clone(),
@@ -783,22 +777,22 @@ impl MemoryBackend for SurrealBackend {
                     source: MemorySource::SystemLog,
                     metadata: Some(metadata.clone()),
                 };
-                
+
                 self.insert_agent_memory(memory)
                     .await
                     .map_err(|e| format!("Failed to insert agent memory: {}", e))?;
             }
         }
-        
+
         Ok(())
     }
 
     async fn search(&self, query: String, top_k: usize) -> Result<Vec<BackendSearchItem>, String> {
         debug!("Searching for: '{}' (top_k={})", query, top_k);
-        
+
         // TODO: Generate real query embedding
         let query_embedding = vec![0.0; EMBEDDING_DIM];
-        
+
         self.vector_search(query_embedding, "guardian", top_k)
             .await
             .map_err(|e| format!("Vector search failed: {}", e))
@@ -820,9 +814,10 @@ mod tests {
         let backend = SurrealBackend::new(temp_dir.path().join("test.db"))
             .await
             .expect("Failed to initialize backend");
-        
-        // Backend should be ready to use
-        assert!(backend.db.read().await.is_ok());
+
+        // Backend should be ready to use (just verify we can acquire the lock)
+        let _db = backend.db.read().await;
+        // If we get here without panicking, the backend initialized successfully
     }
 
     #[tokio::test]
@@ -831,7 +826,7 @@ mod tests {
         let backend = SurrealBackend::new(temp_dir.path().join("test.db"))
             .await
             .unwrap();
-        
+
         // Insert test metric
         let metric = SystemMetric {
             timestamp: Utc::now(),
@@ -854,9 +849,9 @@ mod tests {
             },
             metadata: None,
         };
-        
+
         backend.insert_system_metric(metric.clone()).await.unwrap();
-        
+
         // Query metrics
         let metrics = backend
             .query_metrics_by_time(
@@ -865,7 +860,7 @@ mod tests {
             )
             .await
             .unwrap();
-        
+
         assert_eq!(metrics.len(), 1);
         assert!((metrics[0].cpu_usage - 75.5).abs() < 0.01);
     }
@@ -876,7 +871,7 @@ mod tests {
         let backend = SurrealBackend::new(temp_dir.path().join("test.db"))
             .await
             .unwrap();
-        
+
         // Test add_texts
         backend
             .add_texts(
@@ -885,7 +880,7 @@ mod tests {
             )
             .await
             .unwrap();
-        
+
         // Test search (should return the added text with zero-vector similarity)
         let results = backend.search("query".to_string(), 5).await.unwrap();
         assert_eq!(results.len(), 1);
@@ -898,12 +893,12 @@ mod tests {
         let backend = SurrealBackend::new(temp_dir.path().join("test.db"))
             .await
             .unwrap();
-        
+
         // Invalid dimension should fail
         let result = backend
             .vector_search(vec![0.0; 128], "guardian", 5)
             .await;
-        
+
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Invalid embedding dimension"));
     }

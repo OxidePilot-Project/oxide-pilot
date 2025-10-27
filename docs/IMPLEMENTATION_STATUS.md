@@ -292,7 +292,7 @@ cargo test -p oxide-guardian --features surrealdb-metrics
 **Solución**: Ver `docs/LLVM_SETUP.md` - Instalar LLVM y configurar `LIBCLANG_PATH`
 
 ### Tests Failing
-**Causa**: SurrealDB no puede inicializar sin LLVM  
+**Causa**: SurrealDB no puede inicializar sin LLVM
 **Solución**: Compilar con `--no-default-features` temporalmente
 
 ### Feature Flag Confusion
@@ -325,6 +325,6 @@ cargo build --features surrealdb
 
 ---
 
-**Última Actualización**: 26 de Octubre, 2025 - 19:45  
-**Implementado por**: GitHub Copilot + Team  
+**Última Actualización**: 26 de Octubre, 2025 - 19:45
+**Implementado por**: GitHub Copilot + Team
 **Estado General**: 🟡 **92% Fase 1** - Esperando LLVM para finalizar compilación

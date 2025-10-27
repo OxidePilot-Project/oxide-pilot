@@ -25,5 +25,4 @@ tempfile = "3.8"
 
 [features]
 default = ["surrealdb"]
-cognee = []
 surrealdb = ["dep:surrealdb"]

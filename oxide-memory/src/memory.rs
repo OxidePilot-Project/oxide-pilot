@@ -8,8 +8,6 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::fs;
 use crate::backend::MemoryBackend;
-#[cfg(feature = "cognee")]
-use crate::backend::CogneeBackend;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -80,19 +78,6 @@ impl MemoryManager {
             max_entries: 10000, // Configurable limit
             backend: None,
         }
-    }
-    
-    #[cfg(feature = "cognee")]
-    pub fn with_cognee(storage_path: Option<String>, base_url: String, token: Option<String>) -> Self {
-        let mut s = Self::new(storage_path);
-        match CogneeBackend::new(base_url, token) {
-            Ok(b) => { s.backend = Some(Arc::new(b)); }
-            Err(e) => {
-                warn!("Failed to initialize Cognee backend: {}", e);
-                s.backend = None;
-            }
-        }
-        s
     }
 
     pub async fn initialize(&self) -> Result<(), String> {

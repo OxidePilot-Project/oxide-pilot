@@ -27,7 +27,6 @@ Oxide Pilot es un **asistente de automatización empresarial** con backend en Ru
 - **Memoria**: 4GB RAM mínimo, 8GB recomendado
 
 ### Opcionales
-- **Python**: 3.8–3.12 (para sidecar Cognee)
 - **GPU**: Para aceleración de modelos locales
 
 ## 📥 Descarga e Instalación
@@ -80,9 +79,6 @@ PowerShell:
 # Lanzador unificado de desarrollo (gestiona .profraw y frontend)
 pwsh -File scripts/oxide-dev.ps1
 
-# Con memoria Cognee y sidecar Python
-pwsh -File scripts/oxide-dev.ps1 -UseCognee -StartSidecar
-
 # Opcional: qué hacer con artefactos *.profraw (move|delete|none)
 pwsh -File scripts/oxide-dev.ps1 -ProfrawAction move -ProfrawDir dev-artifacts/coverage
 ```
@@ -126,8 +122,6 @@ PowerShell:
 ```powershell
 # Requisitos: cargo-tauri, (opcional) WiX/NSIS según target
 pwsh -File scripts/build-windows.ps1
-# Con Cognee habilitado durante build
-pwsh -File scripts/build-windows.ps1 -UseCognee
 ```
 
 ## 🏷️ Crear una Release
@@ -221,7 +215,7 @@ Para obtener información detallada sobre el proyecto, consulte los siguientes d
 | **Backend & Lógica Central** | ![Rust](https://img.shields.io/badge/-Rust-000000?style=flat&logo=rust) | Motor de alto rendimiento y seguridad |
 | **Frontend & UI** | ![Tauri](https://img.shields.io/badge/-Tauri-24C8DB?style=flat&logo=tauri) + ![Svelte](https://img.shields.io/badge/-Svelte-FF3E00?style=flat&logo=svelte) | Interfaz nativa multiplataforma |
 | **IA & Cloud** | ![Google Cloud](https://img.shields.io/badge/-Google%20Cloud-4285F4?style=flat&logo=google-cloud) | Vertex AI, Speech APIs, Firebase |
-| **Memoria Cognitiva** | [Cognee](https://github.com/topoteretes/cognee) | Arquitectura de conocimiento avanzada |
+| **Base de Datos** | SurrealDB | Multi-modelo (Graph, Document, Vector) en Rust nativo |
 
 ---
 
@@ -289,8 +283,8 @@ Oxide Pilot ofrece un conjunto completo de herramientas para la gestión intelig
 
 - Conexión con servicios de IA en la nube
 - Integración con herramientas de desarrollo
-- Soporte para memoria cognitiva avanzada (Cognee)
-- Compatibilidad con múltiples proveedores de IA
+- Compatibilidad con múltiples proveedores de IA (Google Vertex AI, OpenAI, Qwen)
+- Sistema de memoria avanzada con SurrealDB
 
 ---
 
@@ -403,20 +397,20 @@ Oxide: "Detecté que Visual Studio está esperando una operación de Git
 
 ---
 
-## �️ Roadmap: Migración a SurrealDB (Sistema de Memoria Avanzado)
+## 🗄️ Roadmap: Sistema de Memoria Avanzado con SurrealDB
 
 ### 📌 Visión General
 
-Oxide Pilot está migrando de **Cognee** (Python) a **SurrealDB** (Rust nativo) para eliminar dependencias externas y aprovechar capacidades avanzadas de bases de datos multi-modelo directamente en Rust. Esta migración representa un salto significativo en rendimiento, seguridad y capacidades de análisis.
+Oxide Pilot utiliza **SurrealDB** (Rust nativo) como base de datos multi-modelo embebida, proporcionando capacidades avanzadas de grafo, documentos y búsqueda vectorial directamente en Rust. Este enfoque elimina dependencias externas y ofrece rendimiento excepcional.
 
 ### 🎯 Objetivos Estratégicos
 
 | Objetivo | Descripción | Impacto |
 |----------|-------------|---------|
-| **🚀 100% Rust Nativo** | Eliminar sidecar Python (Cognee) | -50% uso de memoria, +300% velocidad de inicio |
+| **🚀 100% Rust Nativo** | Base de datos embebida sin sidecars | -50% uso de memoria, +300% velocidad de inicio |
 | **📊 Almacenamiento Inteligente** | Datos del sistema como grafo de conocimiento | Análisis contextual avanzado para agentes |
 | **🧠 Memoria Persistente** | Relaciones temporales entre eventos | Diagnóstico predictivo y correlación de incidencias |
-| **⚡ Rendimiento** | Base de datos embebida en proceso | Latencia <5ms vs 50-200ms actual (HTTP) |
+| **⚡ Rendimiento** | Base de datos embebida en proceso | Latencia <5ms, throughput >1000 ops/s |
 | **🔍 Capacidades Avanzadas** | Graph queries + Vector search + Full-text | Búsquedas híbridas para análisis multi-dimensional |
 
 ### 🏗️ Arquitectura Propuesta
@@ -587,9 +581,8 @@ DEFINE TABLE performance_pattern AS
 - [ ] **1.4** Feature flag `surrealdb` en `Cargo.toml`
   ```toml
   [features]
-  default = ["json"]
+  default = ["surrealdb"]
   json = []
-  cognee = ["oxide-cognee-bridge"]  # mantener compatibilidad
   surrealdb = ["dep:surrealdb", "dep:surrealdb-core"]
   ```
 - [ ] **1.5** Tests unitarios de backend
@@ -749,33 +742,33 @@ DEFINE TABLE performance_pattern AS
   - Exportar datos para debugging
 
 **Entregables**:
-- Performance 10x mejor que Cognee
+- Performance 10x mejor
 - Sistema listo para escalar a 100k+ registros/día
-- Documentación completa de migración
+- Documentación completa de implementación
 
 ---
 
-### 📊 Comparativa: Cognee vs SurrealDB
+### 📊 Especificaciones Técnicas: SurrealDB
 
-| Característica | Cognee (Actual) | SurrealDB (Propuesto) | Mejora |
-|----------------|-----------------|----------------------|--------|
-| **Lenguaje** | Python (sidecar HTTP) | Rust (embebido) | 🟢 Sin overhead de red |
-| **Latencia típica** | 50-200ms (HTTP) | <5ms (in-process) | 🟢 **40x más rápido** |
-| **Uso de memoria** | ~150MB (Python + libs) | ~30MB (Rust nativo) | 🟢 **5x menos RAM** |
-| **Inicio en frío** | 3-5 segundos | <100ms | 🟢 **50x más rápido** |
-| **Modelo de datos** | Vector + JSON | Graph + Document + Vector + Time-series | 🟢 Multi-modelo |
-| **Queries complejas** | Limitado (REST API) | SurrealQL (SQL-like avanzado) | 🟢 Graph traversal nativo |
-| **Transacciones** | No ACID | ACID completas | 🟢 Consistencia garantizada |
-| **Búsqueda vectorial** | ChromaDB (externo) | HNSW integrado | 🟢 Sin deps externas |
-| **Escalabilidad** | Vertical (single node) | Horizontal (TiKV cluster) | 🟢 Distribuido |
-| **Tamaño despliegue** | +200MB (Python runtime) | +20MB (binary Rust) | 🟢 **10x más ligero** |
-| **Dependencias** | 50+ paquetes Python | 0 (autocontenido) | 🟢 Zero deps |
+| Característica | Valor | Beneficio |
+|----------------|-------|-----------|
+| **Lenguaje** | Rust (embebido) | 🟢 Sin overhead de red, rendimiento máximo |
+| **Latencia típica** | <5ms (in-process) | 🟢 Respuesta instantánea |
+| **Uso de memoria** | ~30MB (Rust nativo) | 🟢 Huella mínima |
+| **Inicio en frío** | <100ms | 🟢 Arranque ultrarrápido |
+| **Modelo de datos** | Graph + Document + Vector + Time-series | 🟢 Multi-modelo completo |
+| **Queries complejas** | SurrealQL (SQL-like avanzado) | 🟢 Graph traversal nativo |
+| **Transacciones** | ACID completas | 🟢 Consistencia garantizada |
+| **Búsqueda vectorial** | HNSW integrado | 🟢 Sin deps externas |
+| **Escalabilidad** | Horizontal (TiKV cluster opcional) | 🟢 Distribuido cuando necesario |
+| **Tamaño despliegue** | +20MB (binary Rust) | 🟢 Minimal footprint |
+| **Dependencias** | 0 (autocontenido) | 🟢 Zero deps |
 
 ### 🎯 Beneficios Clave
 
 1. **🚀 Performance Extrema**
-   - Queries graph en <5ms vs 50-200ms actual
-   - Embeddings search 10x más rápido (HNSW nativo)
+   - Queries graph en <5ms
+   - Embeddings search con HNSW nativo
    - Sin latencia de red (in-process)
 
 2. **🧠 Análisis Contextual Avanzado**
@@ -811,10 +804,8 @@ DEFINE TABLE performance_pattern AS
 
 | Riesgo | Probabilidad | Impacto | Mitigación |
 |--------|--------------|---------|-----------|
-| **Breaking changes en Cognee users** | Alta | Alto | Feature flag `cognee` mantener 1 versión más |
 | **Curva de aprendizaje SurrealQL** | Media | Medio | Queries pre-hechas + docs extensos |
-| **Bugs en SurrealDB (joven ecosystem)** | Media | Alto | Tests exhaustivos + versión LTS (2.3.x) |
-| **Migración de datos fallida** | Baja | Crítico | Script de migración con rollback |
+| **Bugs en SurrealDB (ecosystem joven)** | Media | Alto | Tests exhaustivos + versión LTS (2.3.x) |
 | **Performance no cumple target** | Baja | Alto | Benchmarks tempranos + optimización índices |
 
 ### 📚 Recursos y Referencias

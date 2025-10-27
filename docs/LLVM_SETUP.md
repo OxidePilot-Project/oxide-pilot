@@ -86,7 +86,6 @@ Si no puedes instalar LLVM ahora, puedes deshabilitar temporalmente SurrealDB:
 ```toml
 [features]
 default = []  # Cambiar de ["surrealdb"] a []
-cognee = []
 surrealdb = ["dep:surrealdb"]
 ```
 
@@ -267,5 +266,5 @@ Si compila y ejecuta sin errores, ✅ SurrealDB está correctamente configurado.
 
 ---
 
-**Última actualización**: 26 de octubre de 2025  
+**Última actualización**: 26 de octubre de 2025
 **Estado**: Implementación en progreso (Phase 1)
