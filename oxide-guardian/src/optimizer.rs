@@ -1,8 +1,8 @@
 use log::{info, warn};
-use sysinfo::{System, SystemExt, ProcessExt, CpuExt, Pid};
-use std::time::{Duration, Instant};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
+use sysinfo::{CpuExt, Pid, ProcessExt, System, SystemExt};
 
 #[derive(Debug, Clone)]
 pub struct ResourceUsage {
@@ -76,7 +76,7 @@ impl PerformanceOptimizer {
         ResourceUsage {
             cpu_percent,
             memory_mb,
-            disk_usage_mb: 0, // Could be implemented with disk usage tracking
+            disk_usage_mb: 0,    // Could be implemented with disk usage tracking
             network_usage_kb: 0, // Could be implemented with network monitoring
         }
     }
@@ -84,8 +84,8 @@ impl PerformanceOptimizer {
     pub fn should_throttle(&mut self) -> bool {
         let usage = self.get_current_usage();
 
-        let should_throttle = usage.cpu_percent > self.config.max_cpu_percent ||
-                            usage.memory_mb > self.config.max_memory_mb;
+        let should_throttle = usage.cpu_percent > self.config.max_cpu_percent
+            || usage.memory_mb > self.config.max_memory_mb;
 
         self.is_throttled.store(should_throttle, Ordering::Relaxed);
         should_throttle
@@ -151,9 +151,13 @@ impl PerformanceOptimizer {
     pub fn is_system_idle(&mut self) -> bool {
         self.sys.refresh_cpu();
 
-        let cpu_usage: f32 = self.sys.cpus().iter()
+        let cpu_usage: f32 = self
+            .sys
+            .cpus()
+            .iter()
             .map(|cpu| cpu.cpu_usage())
-            .sum::<f32>() / self.sys.cpus().len() as f32;
+            .sum::<f32>()
+            / self.sys.cpus().len() as f32;
 
         cpu_usage < 10.0 // System is idle if CPU usage < 10%
     }
@@ -187,7 +191,8 @@ impl PerformanceOptimizer {
         // Identify high CPU usage processes
         let mut high_cpu_processes = Vec::new();
         for (pid, process) in self.sys.processes() {
-            if process.cpu_usage() > 50.0 { // Threshold for high CPU usage
+            if process.cpu_usage() > 50.0 {
+                // Threshold for high CPU usage
                 high_cpu_processes.push((pid, process.name().to_string(), process.cpu_usage()));
             }
         }
@@ -208,7 +213,8 @@ impl PerformanceOptimizer {
         let total_memory = self.sys.total_memory();
         for (pid, process) in self.sys.processes() {
             let memory_percent = (process.memory() as f64 / total_memory as f64) * 100.0;
-            if memory_percent > 10.0 { // Threshold for high memory usage
+            if memory_percent > 10.0 {
+                // Threshold for high memory usage
                 high_mem_processes.push((pid, process.name().to_string(), memory_percent));
             }
         }

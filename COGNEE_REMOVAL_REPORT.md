@@ -1,7 +1,7 @@
 # Reporte de Eliminación de Cognee y Migración Completa a SurrealDB
 
-**Fecha**: 26 de octubre de 2025  
-**Commit**: `d7bfde7`  
+**Fecha**: 26 de octubre de 2025
+**Commit**: `d7bfde7`
 **Branch**: `main`
 
 ---
@@ -137,11 +137,11 @@ db.signin(Root {
 **Solución**:
 ```rust
 // ANTES
-DEFINE INDEX IF NOT EXISTS idx_high_cpu 
+DEFINE INDEX IF NOT EXISTS idx_high_cpu
 ON system_metrics FIELDS cpu_usage WHERE cpu_usage > 80;
 
 // DESPUÉS
-DEFINE INDEX IF NOT EXISTS idx_high_cpu 
+DEFINE INDEX IF NOT EXISTS idx_high_cpu
 ON system_metrics FIELDS cpu_usage;
 ```
 
@@ -248,7 +248,7 @@ cargo test -p oxide-memory --release -- --test-threads=1
 
 3. **`test_insert_and_query_metrics`**
    ```
-   Error: Found '2025-10-27T05:14:54.192725400Z' for field `timestamp`, 
+   Error: Found '2025-10-27T05:14:54.192725400Z' for field `timestamp`,
           but expected a datetime
    ```
    - **Causa**: Serialización `chrono::DateTime<Utc>` vs `surrealdb::sql::Datetime`
@@ -411,7 +411,7 @@ El único issue pendiente (serialización DateTime) es **menor y no bloqueante**
 
 ---
 
-**Firma Digital**: Commit `d7bfde7` - "Eliminación completa de Cognee y compilación exitosa"  
-**Verificado**: `git log --oneline -1` → `[cleanup] Eliminación completa de Cognee...`  
+**Firma Digital**: Commit `d7bfde7` - "Eliminación completa de Cognee y compilación exitosa"
+**Verificado**: `git log --oneline -1` → `[cleanup] Eliminación completa de Cognee...`
 **Branch**: `main` (pushed to GitHub)
 

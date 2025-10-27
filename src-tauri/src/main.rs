@@ -4,37 +4,42 @@
 )]
 
 mod error_handler;
-mod oxide_system;
-mod cognee_supervisor;
-mod mcp_server;
+mod guardian_commands;
 mod local_llm;
-mod threat_consensus;
+mod mcp_server;
+mod oxide_system;
 mod rpa_commands;
+mod threat_consensus;
 
 #[cfg(test)]
 mod rpa_integration_test;
 
-use error_handler::{ErrorHandler, OxideError, RetryConfig, retry_with_backoff, GLOBAL_ERROR_MONITOR};
+use crate::mcp_server::McpServerHandle;
+use error_handler::{
+    retry_with_backoff, ErrorHandler, OxideError, RetryConfig, GLOBAL_ERROR_MONITOR,
+};
 use log::{error, info, warn};
-use serde_json::json;
+use oxide_copilot::auth_manager::AuthManager;
 use oxide_core::config::OxidePilotConfig;
 use oxide_core::google_auth;
-use oxide_core::qwen_auth::{QwenAuth, DeviceAuthStart, PollResult};
 use oxide_core::openai_auth;
 use oxide_core::openai_key;
+use oxide_core::qwen_auth::{DeviceAuthStart, PollResult, QwenAuth};
 use oxide_guardian::guardian::{SystemStatus, ThreatEvent};
 use oxide_guardian::scanner::FileScanReport;
 use oxide_memory::memory::MemoryStats;
 use oxide_system::OxideSystem;
-use oxide_copilot::auth_manager::AuthManager;
-use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+use serde_json::json;
 use std::collections::HashMap;
-use tauri::{Manager, State};
-use tokio::sync::{RwLock, Mutex, mpsc};
-use std::path::PathBuf;
 use std::collections::VecDeque;
+use std::path::PathBuf;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use std::time::Instant;
-use crate::mcp_server::McpServerHandle;
+use tauri::{Manager, State};
+use tokio::sync::{mpsc, Mutex, RwLock};
 
 // Define a struct to hold the application state with async-safe mutexes
 pub struct AppState {
@@ -45,6 +50,9 @@ pub struct AppState {
     folder_scan_cancels: Arc<RwLock<HashMap<String, Arc<AtomicBool>>>>,
     // RPA controller state
     rpa_state: Arc<RwLock<Option<oxide_rpa::secure_rpa::SecureRPAController>>>,
+    // Guardian state
+    #[cfg(feature = "surrealdb-metrics")]
+    guardian_state: Arc<guardian_commands::GuardianState>,
 }
 
 // ==============================
@@ -72,7 +80,11 @@ async fn local_llm_ls() -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn local_llm_get(model_spec: String, gguf: Option<bool>, yes: Option<bool>) -> Result<String, String> {
+async fn local_llm_get(
+    model_spec: String,
+    gguf: Option<bool>,
+    yes: Option<bool>,
+) -> Result<String, String> {
     local_llm::get_model(&model_spec, gguf.unwrap_or(true), yes.unwrap_or(true)).await
 }
 
@@ -90,7 +102,8 @@ async fn local_llm_load(
         context_len,
         gpu.as_deref(),
         ttl_secs,
-    ).await
+    )
+    .await
 }
 
 #[tauri::command]
@@ -106,14 +119,23 @@ async fn local_llm_chat(
     let resolved_model = model
         .or_else(|| std::env::var("LOCAL_LLM_MODEL").ok())
         .unwrap_or_else(|| "ui-tars-local".to_string());
-    local_llm::chat_completion(resolved_base, resolved_key, resolved_model, system_prompt, user_prompt).await
+    local_llm::chat_completion(
+        resolved_base,
+        resolved_key,
+        resolved_model,
+        system_prompt,
+        user_prompt,
+    )
+    .await
 }
 
 // Call Qwen Chat Completions API using stored OAuth token
 async fn qwen_chat_completion(prompt: &str, model: Option<String>) -> Result<String, String> {
     // Resolve config
-    let base = std::env::var("QWEN_API_BASE").map_err(|_| "Missing env QWEN_API_BASE".to_string())?;
-    let path = std::env::var("QWEN_CHAT_COMPLETIONS_PATH").unwrap_or_else(|_| "/v1/chat/completions".to_string());
+    let base =
+        std::env::var("QWEN_API_BASE").map_err(|_| "Missing env QWEN_API_BASE".to_string())?;
+    let path = std::env::var("QWEN_CHAT_COMPLETIONS_PATH")
+        .unwrap_or_else(|_| "/v1/chat/completions".to_string());
     let url = format!("{}{}", base, path);
     let model_name = model
         .or_else(|| std::env::var("QWEN_MODEL").ok())
@@ -192,7 +214,10 @@ async fn run_collaborative_analysis(
             let mut map = std::collections::HashMap::new();
             map.insert("max_execution_time".to_string(), serde_json::json!(300));
             map.insert("security_level".to_string(), serde_json::json!("high"));
-            map.insert("performance_impact".to_string(), serde_json::json!("minimal"));
+            map.insert(
+                "performance_impact".to_string(),
+                serde_json::json!("minimal"),
+            );
             map
         },
     };
@@ -202,7 +227,7 @@ async fn run_collaborative_analysis(
 
     // Add collaborative providers
     use oxide_copilot::collaborative_providers::CollaborativeProviderFactory;
-    use oxide_copilot::llm_orchestrator::{LLMRole, LLMConfig};
+    use oxide_copilot::llm_orchestrator::{LLMConfig, LLMRole};
 
     let providers = CollaborativeProviderFactory::create_default_setup();
     for (name, provider, role) in providers {
@@ -237,7 +262,8 @@ async fn run_collaborative_analysis(
                 "execution_plan": result.execution_plan,
                 "timestamp": chrono::Utc::now().to_rfc3339()
             });
-            Ok(serde_json::to_string_pretty(&response).unwrap_or_else(|_| "Serialization error".to_string()))
+            Ok(serde_json::to_string_pretty(&response)
+                .unwrap_or_else(|_| "Serialization error".to_string()))
         }
         Err(e) => {
             error!("Collaborative analysis failed: {}", e);
@@ -254,7 +280,8 @@ async fn run_multi_agent_analysis(
     qwen_model: Option<String>,
 ) -> Result<String, String> {
     let snapshot_val = get_system_snapshot(state).await?;
-    let snapshot_str = serde_json::to_string_pretty(&snapshot_val).unwrap_or_else(|_| snapshot_val.to_string());
+    let snapshot_str =
+        serde_json::to_string_pretty(&snapshot_val).unwrap_or_else(|_| snapshot_val.to_string());
 
     // Prompts for each agent
     let gemini_prompt = format!(
@@ -281,7 +308,12 @@ async fn run_multi_agent_analysis(
 
     // Run both analyses concurrently
     let (g_res, q_res) = tokio::join!(
-        async { gauth.send_message(&gemini_prompt, gemini_model.as_deref()).await.map_err(|e| e.to_string()) },
+        async {
+            gauth
+                .send_message(&gemini_prompt, gemini_model.as_deref())
+                .await
+                .map_err(|e| e.to_string())
+        },
         async { qwen_chat_completion(&qwen_prompt, qwen_model).await }
     );
 
@@ -296,7 +328,8 @@ async fn run_multi_agent_analysis(
 #[tauri::command]
 async fn set_google_api_key(_api_key: String) -> Result<(), String> {
     // API key-based authentication is disabled. Use OAuth 2.0 instead.
-    let msg = "Gemini API key authentication is disabled. Please use OAuth 2.0 via Google credentials.";
+    let msg =
+        "Gemini API key authentication is disabled. Please use OAuth 2.0 via Google credentials.";
     error!("{}", msg);
     Err(msg.to_string())
 }
@@ -318,23 +351,29 @@ async fn set_google_client_credentials(
 async fn authenticate_google_command(app: tauri::AppHandle) -> Result<String, String> {
     match google_auth::authenticate_google().await {
         Ok(token) => {
-            let _ = app.emit_all("google_auth_complete", json!({
-                "status": "success",
-                "provider": "google",
-                "timestamp": std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_secs())
-                    .unwrap_or(0),
-            }));
+            let _ = app.emit_all(
+                "google_auth_complete",
+                json!({
+                    "status": "success",
+                    "provider": "google",
+                    "timestamp": std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0),
+                }),
+            );
             Ok(token)
         }
         Err(e) => {
             error!("Google authentication failed: {}", e);
-            let _ = app.emit_all("google_auth_complete", json!({
-                "status": "error",
-                "provider": "google",
-                "message": e.to_string(),
-            }));
+            let _ = app.emit_all(
+                "google_auth_complete",
+                json!({
+                    "status": "error",
+                    "provider": "google",
+                    "message": e.to_string(),
+                }),
+            );
             Err(e.to_string())
         }
     }
@@ -362,14 +401,16 @@ async fn initialize_system(
                 let system = OxideSystem::new(config_clone)
                     .await
                     .map_err(|e| OxideError::SystemInit(e))?;
-                system.start()
+                system
+                    .start()
                     .await
                     .map_err(|e| OxideError::SystemInit(e))?;
                 Ok::<OxideSystem, OxideError>(system)
             })
         },
         retry_config,
-    ).await;
+    )
+    .await;
 
     match result {
         Ok(system) => {
@@ -377,14 +418,15 @@ async fn initialize_system(
             *system_lock = Some(system);
             info!("Oxide System initialized and started");
             Ok(())
-        },
+        }
         Err(error) => {
             let context = json!({
                 "config": config,
                 "operation": "initialize_system"
             });
             let response = ErrorHandler::handle_error_with_monitoring(error, Some(context));
-            Err(serde_json::to_string(&response).unwrap_or_else(|_| "Serialization error".to_string()))
+            Err(serde_json::to_string(&response)
+                .unwrap_or_else(|_| "Serialization error".to_string()))
         }
     }
 }
@@ -399,10 +441,13 @@ async fn handle_user_input_command(
         state.clone(),
         user_input.clone(),
         Some("user_query".to_string()),
-    ).await {
+    )
+    .await
+    {
         // Parse the collaborative result and extract the primary response
         if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&collaborative_result) {
-            if let Some(primary_response) = parsed.get("primary_response").and_then(|v| v.as_str()) {
+            if let Some(primary_response) = parsed.get("primary_response").and_then(|v| v.as_str())
+            {
                 info!("Using collaborative LLM response for user input");
                 return Ok(primary_response.to_string());
             }
@@ -424,13 +469,15 @@ async fn handle_user_input_command(
                 let input_clone = user_input.clone();
                 let system_ref = system_clone.clone();
                 Box::pin(async move {
-                    system_ref.handle_text_input(input_clone)
+                    system_ref
+                        .handle_text_input(input_clone)
                         .await
                         .map_err(|e| OxideError::Internal(e))
                 })
             },
             retry_config,
-        ).await;
+        )
+        .await;
 
         match result {
             Ok(response) => Ok(response),
@@ -440,7 +487,8 @@ async fn handle_user_input_command(
                     "operation": "handle_user_input"
                 });
                 let response = ErrorHandler::handle_error_with_monitoring(error, Some(context));
-                Err(serde_json::to_string(&response).unwrap_or_else(|_| "Serialization error".to_string()))
+                Err(serde_json::to_string(&response)
+                    .unwrap_or_else(|_| "Serialization error".to_string()))
             }
         }
     } else {
@@ -479,7 +527,9 @@ async fn start_folder_scan(
 ) -> Result<String, String> {
     // Ensure system exists
     let system_guard = state.oxide_system.read().await;
-    let Some(system) = system_guard.as_ref() else { return Err("System not initialized".to_string()); };
+    let Some(system) = system_guard.as_ref() else {
+        return Err("System not initialized".to_string());
+    };
     let system_clone = system.clone();
     drop(system_guard);
 
@@ -487,7 +537,10 @@ async fn start_folder_scan(
     let cfg = system_clone.get_config().await;
     let max_workers = cfg.guardian.folder_scan_max_workers.unwrap_or(8).max(1);
     let max_depth = cfg.guardian.folder_scan_max_depth.unwrap_or(usize::MAX);
-    let max_file_size_bytes: Option<u64> = cfg.guardian.max_file_size_mb.map(|mb| (mb as u64) * 1024 * 1024);
+    let max_file_size_bytes: Option<u64> = cfg
+        .guardian
+        .max_file_size_mb
+        .map(|mb| (mb as u64) * 1024 * 1024);
 
     // Create cancel flag and scan id
     let scan_id = uuid::Uuid::new_v4().to_string();
@@ -505,6 +558,8 @@ async fn start_folder_scan(
         mcp_server: state.mcp_server.clone(),
         folder_scan_cancels: state.folder_scan_cancels.clone(),
         rpa_state: state.rpa_state.clone(),
+        #[cfg(feature = "surrealdb-metrics")]
+        guardian_state: state.guardian_state.clone(),
     };
 
     // Clone scan_id for the async task
@@ -514,10 +569,13 @@ async fn start_folder_scan(
     // Spawn background task
     tokio::spawn(async move {
         let start = Instant::now();
-        let _ = app_clone.emit_all("folder_scan_started", serde_json::json!({
-            "scan_id": scan_id_for_task,
-            "root": root_for_task,
-        }));
+        let _ = app_clone.emit_all(
+            "folder_scan_started",
+            serde_json::json!({
+                "scan_id": scan_id_for_task,
+                "root": root_for_task,
+            }),
+        );
 
         // Discover files breadth-first up to max_depth, respecting cancellation
         let mut files: Vec<PathBuf> = Vec::new();
@@ -525,21 +583,29 @@ async fn start_folder_scan(
         q.push_back((root_path.clone(), 0));
 
         while let Some((dir, depth)) = q.pop_front() {
-            if cancel_flag.load(Ordering::SeqCst) { break; }
+            if cancel_flag.load(Ordering::SeqCst) {
+                break;
+            }
             match std::fs::read_dir(&dir) {
                 Ok(read_dir) => {
                     for entry in read_dir.flatten() {
-                        if cancel_flag.load(Ordering::SeqCst) { break; }
+                        if cancel_flag.load(Ordering::SeqCst) {
+                            break;
+                        }
                         let path = entry.path();
                         match entry.file_type() {
                             Ok(ft) if ft.is_dir() => {
-                                if depth < max_depth { q.push_back((path, depth + 1)); }
+                                if depth < max_depth {
+                                    q.push_back((path, depth + 1));
+                                }
                             }
                             Ok(ft) if ft.is_file() => {
                                 // size filter
                                 if let Some(limit) = max_file_size_bytes {
                                     if let Ok(meta) = entry.metadata() {
-                                        if meta.len() > limit { continue; }
+                                        if meta.len() > limit {
+                                            continue;
+                                        }
                                     }
                                 }
                                 files.push(path);
@@ -549,29 +615,38 @@ async fn start_folder_scan(
                     }
                 }
                 Err(e) => {
-                    let _ = app_clone.emit_all("folder_scan_progress", serde_json::json!({
-                        "scan_id": scan_id_for_task,
-                        "error": format!("read_dir error at {}: {}", dir.display(), e),
-                    }));
+                    let _ = app_clone.emit_all(
+                        "folder_scan_progress",
+                        serde_json::json!({
+                            "scan_id": scan_id_for_task,
+                            "error": format!("read_dir error at {}: {}", dir.display(), e),
+                        }),
+                    );
                 }
             }
         }
 
         let total = files.len();
-        let _ = app_clone.emit_all("folder_scan_progress", serde_json::json!({
-            "scan_id": scan_id_for_task,
-            "discovered": total,
-        }));
+        let _ = app_clone.emit_all(
+            "folder_scan_progress",
+            serde_json::json!({
+                "scan_id": scan_id_for_task,
+                "discovered": total,
+            }),
+        );
 
         if cancel_flag.load(Ordering::SeqCst) {
-            let _ = app_clone.emit_all("folder_scan_cancelled", serde_json::json!({
-                "scan_id": scan_id_for_task,
-                "scanned": 0,
-                "total": total,
-                "malicious": 0,
-                "errors": 0,
-                "duration_ms": start.elapsed().as_millis(),
-            }));
+            let _ = app_clone.emit_all(
+                "folder_scan_cancelled",
+                serde_json::json!({
+                    "scan_id": scan_id_for_task,
+                    "scanned": 0,
+                    "total": total,
+                    "malicious": 0,
+                    "errors": 0,
+                    "duration_ms": start.elapsed().as_millis(),
+                }),
+            );
             let mut cancels = state_clone.folder_scan_cancels.write().await;
             cancels.remove(&scan_id_for_task);
             return;
@@ -580,7 +655,9 @@ async fn start_folder_scan(
         // Scan concurrently with a worker pool using mpsc
         let (tx, rx) = mpsc::channel::<String>(std::cmp::max(1, total));
         for path in files {
-            if cancel_flag.load(Ordering::SeqCst) { break; }
+            if cancel_flag.load(Ordering::SeqCst) {
+                break;
+            }
             let _ = tx.send(path.to_string_lossy().to_string()).await;
         }
         drop(tx);
@@ -602,52 +679,68 @@ async fn start_folder_scan(
             let scan_id_cl = scan_id_for_task.clone();
             handles.push(tokio::spawn(async move {
                 loop {
-                    if cancel_chk.load(Ordering::SeqCst) { break; }
+                    if cancel_chk.load(Ordering::SeqCst) {
+                        break;
+                    }
                     let next = {
                         let mut guard = rx.lock().await;
                         guard.recv().await
                     };
-                    let Some(path_str) = next else { break; };
-                    if cancel_chk.load(Ordering::SeqCst) { break; }
+                    let Some(path_str) = next else {
+                        break;
+                    };
+                    if cancel_chk.load(Ordering::SeqCst) {
+                        break;
+                    }
 
                     let res = sys.scan_file(path_str.clone(), use_cloud, quarantine).await;
                     match res {
                         Ok(report) => {
                             let s = scanned_c.fetch_add(1, Ordering::SeqCst) + 1;
-                            if report.malicious { malicious_c.fetch_add(1, Ordering::SeqCst); }
+                            if report.malicious {
+                                malicious_c.fetch_add(1, Ordering::SeqCst);
+                            }
                             let m = malicious_c.load(Ordering::SeqCst);
                             let e = errors_c.load(Ordering::SeqCst);
-                            let _ = app_emit.emit_all("folder_scan_progress", serde_json::json!({
-                                "scan_id": scan_id_cl,
-                                "scanned": s,
-                                "total": total,
-                                "malicious": m,
-                                "errors": e,
-                                "current_file": path_str,
-                                "local_match": report.local_match,
-                                "external_verdict": report.external_verdict,
-                            }));
+                            let _ = app_emit.emit_all(
+                                "folder_scan_progress",
+                                serde_json::json!({
+                                    "scan_id": scan_id_cl,
+                                    "scanned": s,
+                                    "total": total,
+                                    "malicious": m,
+                                    "errors": e,
+                                    "current_file": path_str,
+                                    "local_match": report.local_match,
+                                    "external_verdict": report.external_verdict,
+                                }),
+                            );
                         }
                         Err(err) => {
                             let s = scanned_c.fetch_add(1, Ordering::SeqCst) + 1;
                             let e = errors_c.fetch_add(1, Ordering::SeqCst) + 1;
                             let m = malicious_c.load(Ordering::SeqCst);
-                            let _ = app_emit.emit_all("folder_scan_progress", serde_json::json!({
-                                "scan_id": scan_id_cl,
-                                "scanned": s,
-                                "total": total,
-                                "malicious": m,
-                                "errors": e,
-                                "current_file": path_str,
-                                "error": err,
-                            }));
+                            let _ = app_emit.emit_all(
+                                "folder_scan_progress",
+                                serde_json::json!({
+                                    "scan_id": scan_id_cl,
+                                    "scanned": s,
+                                    "total": total,
+                                    "malicious": m,
+                                    "errors": e,
+                                    "current_file": path_str,
+                                    "error": err,
+                                }),
+                            );
                         }
                     }
                 }
             }));
         }
 
-        for h in handles { let _ = h.await; }
+        for h in handles {
+            let _ = h.await;
+        }
 
         let scanned = scanned_c.load(Ordering::SeqCst);
         let malicious = malicious_c.load(Ordering::SeqCst);
@@ -655,23 +748,29 @@ async fn start_folder_scan(
 
         // Emit final event
         if cancel_flag.load(Ordering::SeqCst) {
-            let _ = app_clone.emit_all("folder_scan_cancelled", serde_json::json!({
-                "scan_id": scan_id_for_task,
-                "scanned": scanned,
-                "total": total,
-                "malicious": malicious,
-                "errors": errors,
-                "duration_ms": start.elapsed().as_millis(),
-            }));
+            let _ = app_clone.emit_all(
+                "folder_scan_cancelled",
+                serde_json::json!({
+                    "scan_id": scan_id_for_task,
+                    "scanned": scanned,
+                    "total": total,
+                    "malicious": malicious,
+                    "errors": errors,
+                    "duration_ms": start.elapsed().as_millis(),
+                }),
+            );
         } else {
-            let _ = app_clone.emit_all("folder_scan_completed", serde_json::json!({
-                "scan_id": scan_id_for_task,
-                "scanned": scanned,
-                "total": total,
-                "malicious": malicious,
-                "errors": errors,
-                "duration_ms": start.elapsed().as_millis(),
-            }));
+            let _ = app_clone.emit_all(
+                "folder_scan_completed",
+                serde_json::json!({
+                    "scan_id": scan_id_for_task,
+                    "scanned": scanned,
+                    "total": total,
+                    "malicious": malicious,
+                    "errors": errors,
+                    "duration_ms": start.elapsed().as_millis(),
+                }),
+            );
         }
 
         // Cleanup cancel flag
@@ -848,14 +947,18 @@ async fn optimize_performance(state: State<'_, AppState>) -> Result<Vec<String>,
 
 #[tauri::command]
 async fn get_error_statistics() -> Result<serde_json::Value, String> {
-    GLOBAL_ERROR_MONITOR.get_error_stats()
+    GLOBAL_ERROR_MONITOR
+        .get_error_stats()
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-async fn get_recent_errors(limit: Option<usize>) -> Result<Vec<error_handler::ErrorResponse>, String> {
+async fn get_recent_errors(
+    limit: Option<usize>,
+) -> Result<Vec<error_handler::ErrorResponse>, String> {
     let limit = limit.unwrap_or(10);
-    GLOBAL_ERROR_MONITOR.get_recent_errors(limit)
+    GLOBAL_ERROR_MONITOR
+        .get_recent_errors(limit)
         .map_err(|e| e.to_string())
 }
 
@@ -894,7 +997,10 @@ async fn clear_performance_alerts(state: State<'_, AppState>) -> Result<(), Stri
 // }
 
 #[tauri::command]
-async fn set_performance_monitoring(state: State<'_, AppState>, enabled: bool) -> Result<(), String> {
+async fn set_performance_monitoring(
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> Result<(), String> {
     let system_guard = state.oxide_system.read().await;
     if let Some(system) = system_guard.as_ref() {
         system.set_performance_monitoring(enabled).await;
@@ -905,7 +1011,11 @@ async fn set_performance_monitoring(state: State<'_, AppState>, enabled: bool) -
 }
 
 #[tauri::command]
-async fn validate_input(state: State<'_, AppState>, field_name: String, value: String) -> Result<String, String> {
+async fn validate_input(
+    state: State<'_, AppState>,
+    field_name: String,
+    value: String,
+) -> Result<String, String> {
     let system_guard = state.oxide_system.read().await;
     if let Some(system) = system_guard.as_ref() {
         system.validate_input(&field_name, &value).await
@@ -924,14 +1034,19 @@ async fn create_security_session(
 ) -> Result<String, String> {
     let system_guard = state.oxide_system.read().await;
     if let Some(system) = system_guard.as_ref() {
-        system.create_security_session(user_id, permissions, ip_address, user_agent).await
+        system
+            .create_security_session(user_id, permissions, ip_address, user_agent)
+            .await
     } else {
         Err("System not initialized".to_string())
     }
 }
 
 #[tauri::command]
-async fn validate_security_session(state: State<'_, AppState>, session_id: String) -> Result<bool, String> {
+async fn validate_security_session(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<bool, String> {
     let system_guard = state.oxide_system.read().await;
     if let Some(system) = system_guard.as_ref() {
         system.validate_security_session(&session_id).await
@@ -941,17 +1056,26 @@ async fn validate_security_session(state: State<'_, AppState>, session_id: Strin
 }
 
 #[tauri::command]
-async fn check_security_permission(state: State<'_, AppState>, session_id: String, permission: String) -> Result<bool, String> {
+async fn check_security_permission(
+    state: State<'_, AppState>,
+    session_id: String,
+    permission: String,
+) -> Result<bool, String> {
     let system_guard = state.oxide_system.read().await;
     if let Some(system) = system_guard.as_ref() {
-        system.check_security_permission(&session_id, &permission).await
+        system
+            .check_security_permission(&session_id, &permission)
+            .await
     } else {
         Err("System not initialized".to_string())
     }
 }
 
 #[tauri::command]
-async fn get_security_events(state: State<'_, AppState>, limit: Option<usize>) -> Result<Vec<oxide_core::security_manager::SecurityEvent>, String> {
+async fn get_security_events(
+    state: State<'_, AppState>,
+    limit: Option<usize>,
+) -> Result<Vec<oxide_core::security_manager::SecurityEvent>, String> {
     let system_guard = state.oxide_system.read().await;
     if let Some(system) = system_guard.as_ref() {
         Ok(system.get_security_events(limit).await)
@@ -961,7 +1085,9 @@ async fn get_security_events(state: State<'_, AppState>, limit: Option<usize>) -
 }
 
 #[tauri::command]
-async fn get_security_policy(state: State<'_, AppState>) -> Result<oxide_core::security_manager::SecurityPolicy, String> {
+async fn get_security_policy(
+    state: State<'_, AppState>,
+) -> Result<oxide_core::security_manager::SecurityPolicy, String> {
     let system_guard = state.oxide_system.read().await;
     if let Some(system) = system_guard.as_ref() {
         Ok(system.get_security_policy().await)
@@ -992,7 +1118,10 @@ async fn initialize_auth_manager(state: State<'_, AppState>) -> Result<(), Strin
 async fn get_auth_token(state: State<'_, AppState>) -> Result<String, String> {
     let mut auth_guard = state.auth_manager.write().await;
     if let Some(auth_manager) = auth_guard.as_mut() {
-        auth_manager.get_auth_token().await.map_err(|e| e.to_string())
+        auth_manager
+            .get_auth_token()
+            .await
+            .map_err(|e| e.to_string())
     } else {
         Err("Auth manager not initialized".to_string())
     }
@@ -1041,10 +1170,12 @@ async fn send_message_to_gemini(message: String, model: Option<String>) -> Resul
     // Try to initialize from environment first
     let _ = auth.init_from_env().await;
 
-    auth.send_message(&message, model.as_deref()).await.map_err(|e| {
-        error!("Failed to send message to Gemini: {}", e);
-        e.to_string()
-    })
+    auth.send_message(&message, model.as_deref())
+        .await
+        .map_err(|e| {
+            error!("Failed to send message to Gemini: {}", e);
+            e.to_string()
+        })
 }
 
 #[tauri::command]
@@ -1089,7 +1220,9 @@ async fn qwen_start_device_auth() -> Result<DeviceAuthStart, String> {
 #[tauri::command]
 async fn qwen_poll_device_auth(device_code: String) -> Result<PollResult, String> {
     let auth = QwenAuth::new();
-    auth.poll_device_once(&device_code).await.map_err(|e| e.to_string())
+    auth.poll_device_once(&device_code)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1105,10 +1238,7 @@ async fn qwen_clear_auth() -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn openai_start_oauth(
-    client_id: String,
-    client_secret: String,
-) -> Result<String, String> {
+async fn openai_start_oauth(client_id: String, client_secret: String) -> Result<String, String> {
     // Store credentials first
     openai_auth::store_client_credentials(&client_id, &client_secret)
         .await
@@ -1151,9 +1281,20 @@ async fn openai_get_auth_status() -> Result<String, String> {
 #[tauri::command]
 async fn openai_clear_auth() -> Result<(), String> {
     let mut errors: Vec<String> = Vec::new();
-    if let Err(e) = openai_key::clear_api_key().await { errors.push(format!("key: {}", e)); }
-    if let Err(e) = openai_auth::clear_auth().await { errors.push(format!("oauth: {}", e)); }
-    if errors.is_empty() { Ok(()) } else { Err(format!("Failed to clear some OpenAI auth items: {}", errors.join(", "))) }
+    if let Err(e) = openai_key::clear_api_key().await {
+        errors.push(format!("key: {}", e));
+    }
+    if let Err(e) = openai_auth::clear_auth().await {
+        errors.push(format!("oauth: {}", e));
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "Failed to clear some OpenAI auth items: {}",
+            errors.join(", ")
+        ))
+    }
 }
 
 // Collect a comprehensive snapshot of the current system state for analysis
@@ -1190,7 +1331,10 @@ async fn get_system_snapshot(state: State<'_, AppState>) -> Result<serde_json::V
 
 // Orchestrate system analysis: collect snapshot and summarize with Gemini
 #[tauri::command]
-async fn run_system_analysis(state: State<'_, AppState>, model: Option<String>) -> Result<String, String> {
+async fn run_system_analysis(
+    state: State<'_, AppState>,
+    model: Option<String>,
+) -> Result<String, String> {
     let snapshot = get_system_snapshot(state).await?;
 
     // Build an analyst-style prompt for Gemini
@@ -1205,10 +1349,12 @@ async fn run_system_analysis(state: State<'_, AppState>, model: Option<String>) 
 
     use oxide_core::gemini_auth::GeminiAuth;
     let auth = GeminiAuth::new();
-    auth.send_message(&prompt, model.as_deref()).await.map_err(|e| {
-        error!("System analysis via Gemini failed: {}", e);
-        e.to_string()
-    })
+    auth.send_message(&prompt, model.as_deref())
+        .await
+        .map_err(|e| {
+            error!("System analysis via Gemini failed: {}", e);
+            e.to_string()
+        })
 }
 
 // Run autonomous threat consensus without external VT. Uses both LLMs if available; if only one is available, uses that one.
@@ -1279,7 +1425,8 @@ async fn mcp_start(
         }
     };
 
-    let handle = McpServerHandle::start(port, password).await
+    let handle = McpServerHandle::start(port, password)
+        .await
         .map_err(|e| e.to_string())?;
     let addr = handle.addr();
 
@@ -1323,6 +1470,26 @@ fn main() {
 
     info!("Starting Oxide Pilot Application");
 
+    // Initialize Guardian backend if feature is enabled
+    #[cfg(feature = "surrealdb-metrics")]
+    let guardian_state = {
+        use oxide_memory::SurrealBackend;
+        let db_path =
+            std::env::var("OXIDE_DB_PATH").unwrap_or_else(|_| "./data/oxide.db".to_string());
+
+        let backend = tokio::runtime::Runtime::new()
+            .expect("Failed to create runtime")
+            .block_on(async {
+                SurrealBackend::new(&db_path)
+                    .await
+                    .expect("Failed to initialize SurrealDB backend")
+            });
+
+        Arc::new(guardian_commands::GuardianState {
+            backend: Arc::new(backend),
+        })
+    };
+
     tauri::Builder::default()
         .manage(AppState {
             oxide_system: Arc::new(RwLock::new(None)),
@@ -1330,6 +1497,8 @@ fn main() {
             mcp_server: Arc::new(RwLock::new(None)),
             folder_scan_cancels: Arc::new(RwLock::new(HashMap::new())),
             rpa_state: Arc::new(RwLock::new(None)),
+            #[cfg(feature = "surrealdb-metrics")]
+            guardian_state,
         })
         .invoke_handler(tauri::generate_handler![
             send_notification,
@@ -1422,7 +1591,13 @@ fn main() {
             rpa_commands::rpa_get_reversible_count,
             rpa_commands::rpa_get_pending_confirmations,
             rpa_commands::rpa_respond_confirmation,
-            rpa_commands::rpa_add_auto_approve
+            rpa_commands::rpa_add_auto_approve,
+            // Guardian Commands
+            guardian_commands::get_system_metrics,
+            guardian_commands::get_recent_metrics,
+            guardian_commands::get_high_cpu_processes,
+            guardian_commands::search_agent_memory,
+            guardian_commands::get_guardian_status
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

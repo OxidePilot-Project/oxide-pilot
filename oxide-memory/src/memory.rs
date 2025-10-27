@@ -1,3 +1,4 @@
+use crate::backend::MemoryBackend;
 use chrono::{DateTime, Utc};
 use log::{info, warn};
 use oxide_core::types::{Interaction, SystemEvent};
@@ -5,9 +6,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use tokio::fs;
-use crate::backend::MemoryBackend;
+use tokio::sync::Mutex;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,7 +64,7 @@ pub struct MemoryManager {
     user_patterns: Arc<Mutex<HashMap<String, UserPattern>>>,
     storage_path: String,
     max_entries: usize,
-    backend: Option<Arc<dyn MemoryBackend>>, 
+    backend: Option<Arc<dyn MemoryBackend>>,
 }
 
 impl MemoryManager {
@@ -145,7 +145,8 @@ impl MemoryManager {
     }
 
     async fn store_memory_entry(&self, entry: MemoryEntry) -> Result<(), String> {
-        let (content_for_backend, entry_type_for_backend) = (entry.content.clone(), format!("{:?}", entry.entry_type));
+        let (content_for_backend, entry_type_for_backend) =
+            (entry.content.clone(), format!("{:?}", entry.entry_type));
         {
             let mut store = self.memory_store.lock().await;
 
@@ -159,12 +160,15 @@ impl MemoryManager {
 
         // Persist to disk periodically
         self.save_to_disk().await?;
-        
+
         // Mirror to backend (best-effort)
         if let Some(backend) = &self.backend {
             let metadata = serde_json::json!({ "source": "oxide-memory", "entry_type": entry_type_for_backend });
-            if let Err(e) = backend.add_texts(vec![(content_for_backend, vec![])], metadata).await {
-                warn!("Backend add failed: {}", e);
+            if let Err(e) = backend
+                .add_texts(vec![(content_for_backend, vec![])], metadata)
+                .await
+            {
+                warn!("Backend add failed: {e}");
             }
         }
 
@@ -177,7 +181,11 @@ impl MemoryManager {
         entries.sort_by_key(|e| e.timestamp);
 
         let evict_count = self.max_entries / 10;
-        let ids_to_remove: Vec<_> = entries.iter().take(evict_count).map(|e| e.id.clone()).collect();
+        let ids_to_remove: Vec<_> = entries
+            .iter()
+            .take(evict_count)
+            .map(|e| e.id.clone())
+            .collect();
         for id in ids_to_remove {
             store.remove(&id);
         }
@@ -194,7 +202,9 @@ impl MemoryManager {
                     let mut mapped: Vec<MemoryEntry> = Vec::new();
                     for r in results {
                         let mut metadata: HashMap<String, String> = HashMap::new();
-                        if let Some(src) = r.source.clone() { metadata.insert("source".to_string(), src); }
+                        if let Some(src) = r.source.clone() {
+                            metadata.insert("source".to_string(), src);
+                        }
                         // we don't attempt to stringify full meta here
                         mapped.push(MemoryEntry {
                             id: Uuid::new_v4().to_string(),
@@ -207,11 +217,15 @@ impl MemoryManager {
                         });
                     }
                     if !mapped.is_empty() {
-                        info!("Retrieved {} backend results for query: {}", mapped.len(), query.query);
+                        info!(
+                            "Retrieved {} backend results for query: {}",
+                            mapped.len(),
+                            query.query
+                        );
                         return Ok(mapped);
                     }
                 }
-                Err(e) => warn!("Backend search failed: {}", e),
+                Err(e) => warn!("Backend search failed: {e}"),
             }
         }
         let store = self.memory_store.lock().await;

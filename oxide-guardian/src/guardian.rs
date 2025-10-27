@@ -1,17 +1,17 @@
-use crate::monitor::SystemMonitor;
-use crate::scanner::{FileScanner, FileScanReport, ExternalVerdict};
-use crate::signatures::SignatureDb;
 use crate::external_api;
+use crate::monitor::SystemMonitor;
+use crate::scanner::{ExternalVerdict, FileScanReport, FileScanner};
+use crate::signatures::SignatureDb;
+use chrono::{DateTime, Utc};
+use log::{error, info, warn};
 use oxide_core::config::GuardianConfig;
 use oxide_core::types::SystemEvent;
-use log::{info, warn, error};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 #[cfg(feature = "yara-detection")]
 use yara::{Compiler, Rules};
-use std::collections::HashMap;
-use chrono::{DateTime, Utc};
 
 // Simple in-memory cache for VirusTotal verdicts with TTL and max size.
 struct VtCacheEntry {
@@ -27,7 +27,11 @@ struct VtCache {
 
 impl VtCache {
     fn new(ttl: Duration, max_entries: usize) -> Self {
-        Self { map: HashMap::new(), ttl, max_entries }
+        Self {
+            map: HashMap::new(),
+            ttl,
+            max_entries,
+        }
     }
 
     fn get(&mut self, sha256: &str) -> Option<ExternalVerdict> {
@@ -53,7 +57,13 @@ impl VtCache {
                 self.map.remove(&oldest_key);
             }
         }
-        self.map.insert(sha256, VtCacheEntry { verdict, inserted: Instant::now() });
+        self.map.insert(
+            sha256,
+            VtCacheEntry {
+                verdict,
+                inserted: Instant::now(),
+            },
+        );
     }
 }
 
@@ -163,15 +173,13 @@ rule suspicious_network_tool {
 }
 "#;
         match Compiler::new().add_rules_str(rules_str) {
-            Ok(compiler) => {
-                match compiler.compile_rules() {
-                    Ok(rules) => {
-                        let mut yara_rules = self.yara_rules.lock().unwrap();
-                        *yara_rules = Some(rules);
-                        info!("Enhanced YARA rules loaded successfully.");
-                    },
-                    Err(e) => error!("Failed to compile YARA rules: {}", e),
+            Ok(compiler) => match compiler.compile_rules() {
+                Ok(rules) => {
+                    let mut yara_rules = self.yara_rules.lock().unwrap();
+                    *yara_rules = Some(rules);
+                    info!("Enhanced YARA rules loaded successfully.");
                 }
+                Err(e) => error!("Failed to compile YARA rules: {}", e),
             },
             Err(e) => error!("Failed to create YARA compiler: {}", e),
         }
@@ -185,27 +193,37 @@ rule suspicious_network_tool {
 
         for event in processes {
             if event.event_type == "process_info" {
-                let process_name = event.details.get("name")
+                let process_name = event
+                    .details
+                    .get("name")
                     .and_then(|v| v.as_str())
                     .unwrap_or_default()
                     .to_string();
-                let process_id = event.details.get("pid")
+                let process_id = event
+                    .details
+                    .get("pid")
                     .and_then(|v| v.as_str())
                     .and_then(|s| s.parse::<u32>().ok());
-                let cpu_usage = event.details.get("cpu_usage")
+                let cpu_usage = event
+                    .details
+                    .get("cpu_usage")
                     .and_then(|v| v.as_f64())
                     .unwrap_or(0.0) as f32;
-                let memory_usage = event.details.get("memory")
+                let memory_usage = event
+                    .details
+                    .get("memory")
                     .and_then(|v| v.as_u64())
                     .unwrap_or(0);
 
                 // Update baseline
-                let entry = baseline.entry(process_name.clone()).or_insert(ProcessBaseline {
-                    average_cpu: cpu_usage,
-                    average_memory: memory_usage,
-                    first_seen: Utc::now(),
-                    execution_count: 0,
-                });
+                let entry = baseline
+                    .entry(process_name.clone())
+                    .or_insert(ProcessBaseline {
+                        average_cpu: cpu_usage,
+                        average_memory: memory_usage,
+                        first_seen: Utc::now(),
+                        execution_count: 0,
+                    });
                 entry.execution_count += 1;
                 entry.average_cpu = (entry.average_cpu + cpu_usage) / 2.0;
                 entry.average_memory = (entry.average_memory + memory_usage) / 2;
@@ -240,7 +258,10 @@ rule suspicious_network_tool {
                                             timestamp: Utc::now(),
                                             threat_type: ThreatType::MalwareSignature,
                                             severity: ThreatSeverity::High,
-                                            description: format!("YARA rule match: {}", m.rule_name),
+                                            description: format!(
+                                                "YARA rule match: {}",
+                                                m.rule_name
+                                            ),
                                             process_name: Some(process_name.clone()),
                                             process_id,
                                             details: HashMap::from([
@@ -250,7 +271,7 @@ rule suspicious_network_tool {
                                         });
                                     }
                                 }
-                            },
+                            }
                             Err(e) => error!("YARA scan error: {}", e),
                         }
                     }
@@ -270,7 +291,9 @@ rule suspicious_network_tool {
                         timestamp: Utc::now(),
                         threat_type: ThreatType::SuspiciousProcess,
                         severity: ThreatSeverity::Medium,
-                        description: format!("Suspicious process behavior detected: {process_name}"),
+                        description: format!(
+                            "Suspicious process behavior detected: {process_name}"
+                        ),
                         process_name: Some(process_name.clone()),
                         process_id,
                         details: details_map,
@@ -295,34 +318,49 @@ rule suspicious_network_tool {
     fn is_suspicious_process(&self, process_name: &str, details: &serde_json::Value) -> bool {
         // Check for suspicious process names
         let suspicious_names = [
-            "cmd.exe", "powershell.exe", "wscript.exe", "cscript.exe",
-            "regsvr32.exe", "rundll32.exe", "mshta.exe"
+            "cmd.exe",
+            "powershell.exe",
+            "wscript.exe",
+            "cscript.exe",
+            "regsvr32.exe",
+            "rundll32.exe",
+            "mshta.exe",
         ];
 
-        if suspicious_names.iter().any(|&name| process_name.to_lowercase().contains(name)) {
+        if suspicious_names
+            .iter()
+            .any(|&name| process_name.to_lowercase().contains(name))
+        {
             // Check for suspicious command line arguments
             if let Some(command) = details.get("command").and_then(|v| v.as_str()) {
                 let suspicious_args = [
-                    "-encodedcommand", "-windowstyle hidden", "-noprofile",
-                    "invoke-expression", "downloadstring", "bypass"
+                    "-encodedcommand",
+                    "-windowstyle hidden",
+                    "-noprofile",
+                    "invoke-expression",
+                    "downloadstring",
+                    "bypass",
                 ];
 
-                return suspicious_args.iter().any(|&arg|
-                    command.to_lowercase().contains(arg)
-                );
+                return suspicious_args
+                    .iter()
+                    .any(|&arg| command.to_lowercase().contains(arg));
             }
         }
 
         // Check for processes running from suspicious locations
         if let Some(path) = details.get("exe").and_then(|v| v.as_str()) {
             let suspicious_paths = [
-                "\\temp\\", "\\appdata\\local\\temp\\", "\\users\\public\\",
-                "\\programdata\\", "\\windows\\temp\\"
+                "\\temp\\",
+                "\\appdata\\local\\temp\\",
+                "\\users\\public\\",
+                "\\programdata\\",
+                "\\windows\\temp\\",
             ];
 
-            return suspicious_paths.iter().any(|&path_part|
-                path.to_lowercase().contains(path_part)
-            );
+            return suspicious_paths
+                .iter()
+                .any(|&path_part| path.to_lowercase().contains(path_part));
         }
 
         false
@@ -350,7 +388,10 @@ impl Guardian {
             threat_detector: Arc::new(ThreatDetector::new()),
             file_scanner: Arc::new(Mutex::new(scanner)),
             // Cache VT verdicts for 24h with a modest cap to bound memory.
-            vt_cache: Arc::new(Mutex::new(VtCache::new(Duration::from_secs(24 * 60 * 60), 2048))),
+            vt_cache: Arc::new(Mutex::new(VtCache::new(
+                Duration::from_secs(24 * 60 * 60),
+                2048,
+            ))),
         }
     }
 
@@ -404,7 +445,9 @@ impl Guardian {
 
                 for threat in threats {
                     match threat.severity {
-                        ThreatSeverity::Critical => error!("CRITICAL THREAT: {}", threat.description),
+                        ThreatSeverity::Critical => {
+                            error!("CRITICAL THREAT: {}", threat.description)
+                        }
                         ThreatSeverity::High => error!("HIGH THREAT: {}", threat.description),
                         ThreatSeverity::Medium => warn!("MEDIUM THREAT: {}", threat.description),
                         ThreatSeverity::Low => info!("LOW THREAT: {}", threat.description),
@@ -453,16 +496,20 @@ impl Guardian {
                     let mut cache = self.vt_cache.lock().unwrap();
                     if let Some(v) = cache.get(&sha) {
                         report.external_verdict = Some(v.clone());
-                        if v.malicious { report.malicious = true; }
+                        if v.malicious {
+                            report.malicious = true;
+                        }
                     } else {
                         match external_api::virustotal_lookup(&sha, &api_key) {
                             Ok(v) => {
                                 report.external_verdict = Some(v.clone());
-                                if v.malicious { report.malicious = true; }
+                                if v.malicious {
+                                    report.malicious = true;
+                                }
                                 cache.put(sha, v);
                             }
                             Err(e) => {
-                                warn!("VirusTotal lookup failed: {}", e);
+                                warn!("VirusTotal lookup failed: {e}");
                             }
                         }
                     }

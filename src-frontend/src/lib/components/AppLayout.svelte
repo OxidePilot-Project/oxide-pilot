@@ -14,10 +14,13 @@ import PatternDashboard from "./PatternDashboard.svelte";
 import CollaborativeAnalysis from "./CollaborativeAnalysis.svelte";
 import RPAConfirmationDialog from "./RPAConfirmationDialog.svelte";
 import RPADashboard from "./RPADashboard.svelte";
+import GuardianDashboard from "./GuardianDashboard.svelte";
+import GuardianAlertsPanel from "./GuardianAlertsPanel.svelte";
+import GuardianProcessesPanel from "./GuardianProcessesPanel.svelte";
 import { isTauri } from "$lib/utils/env";
 import { tauriInvoke } from "$lib/utils/tauri";
 
-type ActiveTab = "dashboard" | "conversation" | "analysis" | "collaborative" | "rpa" | "settings" | "advanced";
+type ActiveTab = "dashboard" | "conversation" | "analysis" | "collaborative" | "guardian" | "rpa" | "settings" | "advanced";
 
 const activeTab = writable<ActiveTab>("dashboard");
 let isAuthSetupComplete = false;
@@ -190,6 +193,13 @@ $: if ($activeTab === 'settings') {
           </button>
           <button
             class="tab-button"
+            class:active={$activeTab === 'guardian'}
+            on:click={() => setActiveTab('guardian')}
+          >
+            🛡️ Guardian
+          </button>
+          <button
+            class="tab-button"
             class:active={$activeTab === 'rpa'}
             on:click={() => setActiveTab('rpa')}
           >
@@ -298,6 +308,14 @@ $: if ($activeTab === 'settings') {
         <SystemAnalysisPanel />
       {:else if $activeTab === 'collaborative'}
         <CollaborativeAnalysis />
+      {:else if $activeTab === 'guardian'}
+        <div class="guardian-container">
+          <GuardianDashboard />
+          <div class="guardian-panels">
+            <GuardianAlertsPanel />
+            <GuardianProcessesPanel />
+          </div>
+        </div>
       {:else if $activeTab === 'rpa'}
         <RPADashboard />
       {:else if $activeTab === 'settings'}
@@ -597,6 +615,27 @@ $: if ($activeTab === 'settings') {
   .conversation-container {
     min-height: 0;
     padding: clamp(12px, 2vh, 20px);
+  }
+
+  .guardian-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    padding: clamp(12px, 2vh, 20px);
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .guardian-panels {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+    gap: 1.5rem;
+  }
+
+  @media (max-width: 1024px) {
+    .guardian-panels {
+      grid-template-columns: 1fr;
+    }
   }
 
   .settings-container {

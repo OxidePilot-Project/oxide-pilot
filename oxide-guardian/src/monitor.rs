@@ -1,7 +1,7 @@
-use sysinfo::{System, SystemExt, ProcessExt, CpuExt, DiskExt, NetworkExt};
-use oxide_core::types::SystemEvent;
-use uuid::Uuid;
 use chrono::Utc;
+use oxide_core::types::SystemEvent;
+use sysinfo::{CpuExt, DiskExt, NetworkExt, ProcessExt, System, SystemExt};
+use uuid::Uuid;
 
 pub struct SystemMonitor {
     sys: System,

@@ -1,11 +1,11 @@
-pub mod monitor;
-pub mod guardian;
-pub mod optimizer;
-pub mod security;
-pub mod scanner;
-pub mod signatures;
-pub mod quarantine;
 pub mod external_api;
+pub mod guardian;
+pub mod monitor;
+pub mod optimizer;
+pub mod quarantine;
+pub mod scanner;
+pub mod security;
+pub mod signatures;
 
 #[cfg(feature = "surrealdb-metrics")]
 pub mod metrics_collector;

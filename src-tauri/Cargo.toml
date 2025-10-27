@@ -69,9 +69,10 @@ windows = { version = "0.52", features = [
 tauri-build = { version = "1.5", features = [] }
 
 [features]
-default = ["custom-protocol"]
+default = ["custom-protocol", "surrealdb-metrics"]
 custom-protocol = ["tauri/custom-protocol"]
 cognee = []
+surrealdb-metrics = ["oxide-memory/surrealdb", "oxide-guardian/surrealdb-metrics"]
 
 [[test]]
 name = "async_concurrency_tests"

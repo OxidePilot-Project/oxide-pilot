@@ -1,7 +1,7 @@
-use oxide_rpa::permissions::{Permission, PermissionPolicy};
 use oxide_rpa::audit::{AuditEntry, AuditStats};
-use oxide_rpa::rollback::ReversibleAction;
 use oxide_rpa::confirmation::ConfirmationRequest;
+use oxide_rpa::permissions::{Permission, PermissionPolicy};
+use oxide_rpa::rollback::ReversibleAction;
 use oxide_rpa::secure_rpa::SecureRPAController;
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -127,7 +127,10 @@ pub async fn rpa_scroll_mouse(
     let state_lock = state.rpa_state.read().await;
     let controller = state_lock.as_ref().ok_or("RPA not initialized")?;
 
-    controller.scroll_mouse(delta_x, delta_y).await.map_err(|e| e.to_string())
+    controller
+        .scroll_mouse(delta_x, delta_y)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 // ==============================
@@ -135,10 +138,7 @@ pub async fn rpa_scroll_mouse(
 // ==============================
 
 #[tauri::command]
-pub async fn rpa_type_text(
-    text: String,
-    state: State<'_, crate::AppState>,
-) -> Result<(), String> {
+pub async fn rpa_type_text(text: String, state: State<'_, crate::AppState>) -> Result<(), String> {
     let state_lock = state.rpa_state.read().await;
     let controller = state_lock.as_ref().ok_or("RPA not initialized")?;
 
@@ -146,10 +146,7 @@ pub async fn rpa_type_text(
 }
 
 #[tauri::command]
-pub async fn rpa_press_key(
-    key: String,
-    state: State<'_, crate::AppState>,
-) -> Result<(), String> {
+pub async fn rpa_press_key(key: String, state: State<'_, crate::AppState>) -> Result<(), String> {
     let state_lock = state.rpa_state.read().await;
     let controller = state_lock.as_ref().ok_or("RPA not initialized")?;
 
@@ -162,17 +159,22 @@ pub async fn rpa_press_key(
 // ==============================
 
 #[tauri::command]
-pub async fn rpa_capture_screen(
-    state: State<'_, crate::AppState>,
-) -> Result<Vec<u8>, String> {
+pub async fn rpa_capture_screen(state: State<'_, crate::AppState>) -> Result<Vec<u8>, String> {
     let state_lock = state.rpa_state.read().await;
     let controller = state_lock.as_ref().ok_or("RPA not initialized")?;
 
-    let image = controller.capture_screen().await.map_err(|e| e.to_string())?;
+    let image = controller
+        .capture_screen()
+        .await
+        .map_err(|e| e.to_string())?;
 
     // Convert image to PNG bytes
     let mut bytes: Vec<u8> = Vec::new();
-    image.write_to(&mut std::io::Cursor::new(&mut bytes), image::ImageOutputFormat::Png)
+    image
+        .write_to(
+            &mut std::io::Cursor::new(&mut bytes),
+            image::ImageOutputFormat::Png,
+        )
         .map_err(|e| e.to_string())?;
 
     Ok(bytes)
@@ -193,9 +195,7 @@ pub async fn rpa_get_audit_entries(
 }
 
 #[tauri::command]
-pub async fn rpa_get_audit_stats(
-    state: State<'_, crate::AppState>,
-) -> Result<AuditStats, String> {
+pub async fn rpa_get_audit_stats(state: State<'_, crate::AppState>) -> Result<AuditStats, String> {
     let state_lock = state.rpa_state.read().await;
     let controller = state_lock.as_ref().ok_or("RPA not initialized")?;
 
@@ -223,13 +223,14 @@ pub async fn rpa_get_rollback_history(
     let state_lock = state.rpa_state.read().await;
     let controller = state_lock.as_ref().ok_or("RPA not initialized")?;
 
-    controller.rollback().get_history().map_err(|e| e.to_string())
+    controller
+        .rollback()
+        .get_history()
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub async fn rpa_rollback_last(
-    state: State<'_, crate::AppState>,
-) -> Result<(), String> {
+pub async fn rpa_rollback_last(state: State<'_, crate::AppState>) -> Result<(), String> {
     let state_lock = state.rpa_state.read().await;
     let controller = state_lock.as_ref().ok_or("RPA not initialized")?;
 
@@ -237,13 +238,14 @@ pub async fn rpa_rollback_last(
 }
 
 #[tauri::command]
-pub async fn rpa_get_reversible_count(
-    state: State<'_, crate::AppState>,
-) -> Result<usize, String> {
+pub async fn rpa_get_reversible_count(state: State<'_, crate::AppState>) -> Result<usize, String> {
     let state_lock = state.rpa_state.read().await;
     let controller = state_lock.as_ref().ok_or("RPA not initialized")?;
 
-    controller.rollback().reversible_count().map_err(|e| e.to_string())
+    controller
+        .rollback()
+        .reversible_count()
+        .map_err(|e| e.to_string())
 }
 
 // ==============================
@@ -257,7 +259,10 @@ pub async fn rpa_get_pending_confirmations(
     let state_lock = state.rpa_state.read().await;
     let controller = state_lock.as_ref().ok_or("RPA not initialized")?;
 
-    controller.confirmation().get_pending().map_err(|e| e.to_string())
+    controller
+        .confirmation()
+        .get_pending()
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -270,7 +275,8 @@ pub async fn rpa_respond_confirmation(
     let state_lock = state.rpa_state.read().await;
     let controller = state_lock.as_ref().ok_or("RPA not initialized")?;
 
-    controller.confirmation()
+    controller
+        .confirmation()
         .respond(&request_id, approved, reason)
         .map_err(|e| e.to_string())
 }
@@ -285,7 +291,8 @@ pub async fn rpa_add_auto_approve(
     let state_lock = state.rpa_state.read().await;
     let controller = state_lock.as_ref().ok_or("RPA not initialized")?;
 
-    controller.confirmation()
+    controller
+        .confirmation()
         .add_auto_approve(perm)
         .map_err(|e| e.to_string())
 }

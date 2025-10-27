@@ -104,7 +104,10 @@ impl MetricsCollector {
     /// * `backend` - SurrealDB backend for storage
     /// * `config` - Collector configuration
     pub fn new(backend: Arc<SurrealBackend>, config: MetricsConfig) -> Self {
-        info!("Initializing metrics collector with interval={}s", config.interval_secs);
+        info!(
+            "Initializing metrics collector with interval={}s",
+            config.interval_secs
+        );
 
         let mut system = System::new_all();
         system.refresh_all();
@@ -174,7 +177,10 @@ impl MetricsCollector {
     }
 
     /// Collect system-level performance metrics
-    async fn collect_system_metrics(&self, timestamp: chrono::DateTime<Utc>) -> Result<SystemMetric> {
+    async fn collect_system_metrics(
+        &self,
+        timestamp: chrono::DateTime<Utc>,
+    ) -> Result<SystemMetric> {
         let sys = self.system.read().await;
 
         // CPU usage (global average)
@@ -267,8 +273,10 @@ impl MetricsCollector {
         }
 
         // Convert bytes to MB (divide by sample interval for per-second rate)
-        let sent_mb_per_sec = (total_sent as f64) / 1024.0 / 1024.0 / (self.config.interval_secs as f64);
-        let recv_mb_per_sec = (total_recv as f64) / 1024.0 / 1024.0 / (self.config.interval_secs as f64);
+        let sent_mb_per_sec =
+            (total_sent as f64) / 1024.0 / 1024.0 / (self.config.interval_secs as f64);
+        let recv_mb_per_sec =
+            (total_recv as f64) / 1024.0 / 1024.0 / (self.config.interval_secs as f64);
 
         // Note: Connection count requires OS-specific API
         // TODO: Implement TCP connection counting
@@ -288,7 +296,10 @@ impl MetricsCollector {
         let mut process_map = self.process_map.write().await;
         let now = Utc::now();
 
-        debug!("Collecting process tree ({} processes)", sys.processes().len());
+        debug!(
+            "Collecting process tree ({} processes)",
+            sys.processes().len()
+        );
 
         for (pid, process) in sys.processes() {
             let pid_i32 = pid.as_u32() as i32;
@@ -301,7 +312,7 @@ impl MetricsCollector {
             }
 
             // Create ProcessInfo
-            let process_info = ProcessInfo {
+            let _process_info = ProcessInfo {
                 pid: pid_i32,
                 name: process.name().to_string(),
                 exe_path: Some(process.exe().display().to_string()),
@@ -349,10 +360,13 @@ impl MetricsCollector {
             );
 
             // Create agent memory for future analysis
-            if let Err(e) = self.create_alert_memory(
-                &format!("High CPU usage: {:.2}%", metric.cpu_usage),
-                metric.timestamp,
-            ).await {
+            if let Err(e) = self
+                .create_alert_memory(
+                    &format!("High CPU usage: {:.2}%", metric.cpu_usage),
+                    metric.timestamp,
+                )
+                .await
+            {
                 error!("Failed to create alert memory: {:#}", e);
             }
         }
@@ -364,17 +378,24 @@ impl MetricsCollector {
                 metric.memory_usage.percent, self.config.memory_alert_threshold
             );
 
-            if let Err(e) = self.create_alert_memory(
-                &format!("High memory usage: {:.2}%", metric.memory_usage.percent),
-                metric.timestamp,
-            ).await {
+            if let Err(e) = self
+                .create_alert_memory(
+                    &format!("High memory usage: {:.2}%", metric.memory_usage.percent),
+                    metric.timestamp,
+                )
+                .await
+            {
                 error!("Failed to create alert memory: {:#}", e);
             }
         }
     }
 
     /// Create agent memory for alert
-    async fn create_alert_memory(&self, content: &str, timestamp: chrono::DateTime<Utc>) -> Result<()> {
+    async fn create_alert_memory(
+        &self,
+        content: &str,
+        timestamp: chrono::DateTime<Utc>,
+    ) -> Result<()> {
         // TODO: Generate real embeddings
         let embedding = vec![0.0; 1536];
 
@@ -423,7 +444,7 @@ mod tests {
         let backend = Arc::new(
             SurrealBackend::new(temp_dir.path().join("test.db"))
                 .await
-                .unwrap()
+                .unwrap(),
         );
 
         let config = MetricsConfig {
@@ -446,7 +467,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(metrics.len() > 0);
+        assert!(!metrics.is_empty());
         assert!(metrics[0].cpu_usage >= 0.0 && metrics[0].cpu_usage <= 100.0);
     }
 }

@@ -18,6 +18,7 @@ tracing = "0.1"
 
 # SurrealDB dependencies (feature-gated)
 surrealdb = { version = "2.3", optional = true, features = ["kv-rocksdb", "protocol-ws"] }
+surrealdb-types = { version = "3.0.0-alpha.11", optional = true }
 
 [dev-dependencies]
 tokio-test = "0.4"
@@ -25,4 +26,4 @@ tempfile = "3.8"
 
 [features]
 default = ["surrealdb"]
-surrealdb = ["dep:surrealdb"]
+surrealdb = ["dep:surrealdb", "dep:surrealdb-types"]

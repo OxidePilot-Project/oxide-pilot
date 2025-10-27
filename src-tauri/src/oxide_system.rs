@@ -3,14 +3,12 @@ use log::{error, info};
 use oxide_copilot::ai::AIOrchestrator;
 use oxide_copilot::copilot::CopilotAgent;
 use oxide_copilot::functions::FunctionRegistry;
-use oxide_core::config::{
-    OxidePilotConfig,
-};
+use oxide_core::config::OxidePilotConfig;
 use oxide_core::performance::PerformanceMonitor;
 // TODO: Implement PerformanceTimer and ResourceOptimizer
 // use oxide_core::performance::{PerformanceTimer, ResourceOptimizer};
-use oxide_core::security_manager::{SecurityManager, SecurityEvent, SecurityPolicy};
 use oxide_core::input_validation::InputValidator;
+use oxide_core::security_manager::{SecurityEvent, SecurityManager, SecurityPolicy};
 use oxide_core::types::{Context, Interaction};
 use oxide_guardian::guardian::{Guardian, SystemStatus, ThreatEvent};
 use oxide_guardian::scanner::FileScanReport;
@@ -56,7 +54,9 @@ impl OxideSystem {
             {
                 // Resolve effective Cognee config from env then config, with sane defaults
                 let cfg_cognee = config.cognee.clone();
-                let env_enable = env::var("OXIDE_COGNEE_ENABLE").ok().map(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+                let env_enable = env::var("OXIDE_COGNEE_ENABLE")
+                    .ok()
+                    .map(|v| v == "1" || v.eq_ignore_ascii_case("true"));
                 let enabled_bool = env_enable
                     .or_else(|| cfg_cognee.as_ref().map(|c| c.enabled))
                     .unwrap_or(false);
@@ -74,10 +74,19 @@ impl OxideSystem {
                     // Health check the Cognee sidecar before selecting it
                     match CogneeSupervisor::new(base_url.clone(), token.clone()) {
                         Ok(supervisor) => {
-                            match tokio::time::timeout(Duration::from_millis(800), supervisor.health_check()).await {
+                            match tokio::time::timeout(
+                                Duration::from_millis(800),
+                                supervisor.health_check(),
+                            )
+                            .await
+                            {
                                 Ok(Ok(())) => {
                                     info!("Memory backend: Cognee ({}). Fallback: JSON", base_url);
-                                    Arc::new(MemoryManager::with_cognee(Some("oxide_data".to_string()), base_url, token))
+                                    Arc::new(MemoryManager::with_cognee(
+                                        Some("oxide_data".to_string()),
+                                        base_url,
+                                        token,
+                                    ))
                                 }
                                 Ok(Err(e)) => {
                                     warn!("Cognee health check failed: {}. Attempting to start sidecar...", e);
@@ -85,11 +94,16 @@ impl OxideSystem {
                                     let (host, port) = {
                                         fn parse_host_port(url: &str) -> (String, u16) {
                                             let mut rest = url;
-                                            if let Some(idx) = url.find("://") { rest = &url[idx+3..]; }
+                                            if let Some(idx) = url.find("://") {
+                                                rest = &url[idx + 3..];
+                                            }
                                             let rest = rest.split('/').next().unwrap_or(rest);
                                             let mut parts = rest.split(':');
                                             let h = parts.next().unwrap_or("127.0.0.1").to_string();
-                                            let p = parts.next().and_then(|s| s.parse::<u16>().ok()).unwrap_or(8765);
+                                            let p = parts
+                                                .next()
+                                                .and_then(|s| s.parse::<u16>().ok())
+                                                .unwrap_or(8765);
                                             (h, p)
                                         }
                                         parse_host_port(&base_url)
@@ -100,25 +114,41 @@ impl OxideSystem {
                                             PathBuf::from("../cognee-sidecar"),
                                             PathBuf::from("cognee-sidecar"),
                                         ];
-                                        let found = candidates.iter().find(|p| p.join("cognee_sidecar").join("app.py").exists());
+                                        let found = candidates.iter().find(|p| {
+                                            p.join("cognee_sidecar").join("app.py").exists()
+                                        });
                                         found.cloned()
                                     };
                                     let ensured = tokio::time::timeout(
                                         Duration::from_secs(3),
-                                        supervisor.ensure_running(Some("python".to_string()), Some(host), Some(port), working_dir)
-                                    ).await;
+                                        supervisor.ensure_running(
+                                            Some("python".to_string()),
+                                            Some(host),
+                                            Some(port),
+                                            working_dir,
+                                        ),
+                                    )
+                                    .await;
                                     match ensured {
                                         Ok(Ok(())) => {
                                             info!("Cognee sidecar started and healthy. Selecting Cognee backend.");
-                                            Arc::new(MemoryManager::with_cognee(Some("oxide_data".to_string()), base_url, token))
+                                            Arc::new(MemoryManager::with_cognee(
+                                                Some("oxide_data".to_string()),
+                                                base_url,
+                                                token,
+                                            ))
                                         }
                                         Ok(Err(e2)) => {
                                             warn!("Failed to start Cognee sidecar: {}. Falling back to JSON backend.", e2);
-                                            Arc::new(MemoryManager::new(Some("oxide_data".to_string())))
+                                            Arc::new(MemoryManager::new(Some(
+                                                "oxide_data".to_string(),
+                                            )))
                                         }
                                         Err(_) => {
                                             warn!("Timed out starting Cognee sidecar. Falling back to JSON backend.");
-                                            Arc::new(MemoryManager::new(Some("oxide_data".to_string())))
+                                            Arc::new(MemoryManager::new(Some(
+                                                "oxide_data".to_string(),
+                                            )))
                                         }
                                     }
                                 }
@@ -127,11 +157,16 @@ impl OxideSystem {
                                     let (host, port) = {
                                         fn parse_host_port(url: &str) -> (String, u16) {
                                             let mut rest = url;
-                                            if let Some(idx) = url.find("://") { rest = &url[idx+3..]; }
+                                            if let Some(idx) = url.find("://") {
+                                                rest = &url[idx + 3..];
+                                            }
                                             let rest = rest.split('/').next().unwrap_or(rest);
                                             let mut parts = rest.split(':');
                                             let h = parts.next().unwrap_or("127.0.0.1").to_string();
-                                            let p = parts.next().and_then(|s| s.parse::<u16>().ok()).unwrap_or(8765);
+                                            let p = parts
+                                                .next()
+                                                .and_then(|s| s.parse::<u16>().ok())
+                                                .unwrap_or(8765);
                                             (h, p)
                                         }
                                         parse_host_port(&base_url)
@@ -142,25 +177,41 @@ impl OxideSystem {
                                             PathBuf::from("../cognee-sidecar"),
                                             PathBuf::from("cognee-sidecar"),
                                         ];
-                                        let found = candidates.iter().find(|p| p.join("cognee_sidecar").join("app.py").exists());
+                                        let found = candidates.iter().find(|p| {
+                                            p.join("cognee_sidecar").join("app.py").exists()
+                                        });
                                         found.cloned()
                                     };
                                     let ensured = tokio::time::timeout(
                                         Duration::from_secs(3),
-                                        supervisor.ensure_running(Some("python".to_string()), Some(host), Some(port), working_dir)
-                                    ).await;
+                                        supervisor.ensure_running(
+                                            Some("python".to_string()),
+                                            Some(host),
+                                            Some(port),
+                                            working_dir,
+                                        ),
+                                    )
+                                    .await;
                                     match ensured {
                                         Ok(Ok(())) => {
                                             info!("Cognee sidecar started and healthy. Selecting Cognee backend.");
-                                            Arc::new(MemoryManager::with_cognee(Some("oxide_data".to_string()), base_url, token))
+                                            Arc::new(MemoryManager::with_cognee(
+                                                Some("oxide_data".to_string()),
+                                                base_url,
+                                                token,
+                                            ))
                                         }
                                         Ok(Err(e2)) => {
                                             warn!("Failed to start Cognee sidecar: {}. Falling back to JSON backend.", e2);
-                                            Arc::new(MemoryManager::new(Some("oxide_data".to_string())))
+                                            Arc::new(MemoryManager::new(Some(
+                                                "oxide_data".to_string(),
+                                            )))
                                         }
                                         Err(_) => {
                                             warn!("Timed out starting Cognee sidecar. Falling back to JSON backend.");
-                                            Arc::new(MemoryManager::new(Some("oxide_data".to_string())))
+                                            Arc::new(MemoryManager::new(Some(
+                                                "oxide_data".to_string(),
+                                            )))
                                         }
                                     }
                                 }
@@ -211,8 +262,7 @@ impl OxideSystem {
         let output_devices = voice_processor.get_output_devices().await;
         info!(
             "Audio devices - Input: {:?}, Output: {:?}",
-            input_devices,
-            output_devices
+            input_devices, output_devices
         );
 
         // Initialize Performance Monitor
@@ -224,8 +274,10 @@ impl OxideSystem {
 
         // Initialize security components
         let encryption_key = oxide_core::encryption::EncryptionManager::generate_key();
-        let security_manager = Arc::new(SecurityManager::new(&encryption_key)
-            .map_err(|e| format!("Failed to initialize security manager: {}", e))?);
+        let security_manager = Arc::new(
+            SecurityManager::new(&encryption_key)
+                .map_err(|e| format!("Failed to initialize security manager: {}", e))?,
+        );
         let input_validator = Arc::new(InputValidator::new());
 
         let system = Self {
@@ -535,7 +587,12 @@ impl OxideSystem {
     }
 
     // File scanning API plumbing for frontend commands
-    pub async fn scan_file(&self, path: String, use_cloud: bool, quarantine: bool) -> Result<FileScanReport, String> {
+    pub async fn scan_file(
+        &self,
+        path: String,
+        use_cloud: bool,
+        quarantine: bool,
+    ) -> Result<FileScanReport, String> {
         // Check antivirus feature toggle (defaults to enabled if not set)
         let av_enabled = {
             let cfg = self.config.lock().await;
@@ -547,8 +604,7 @@ impl OxideSystem {
 
         // Optional rate limiting for cloud lookups
         if use_cloud {
-            self
-                .security_manager
+            self.security_manager
                 .check_rate_limit("antivirus_cloud_scan")
                 .await
                 .map_err(|e| e.to_string())?;
@@ -558,7 +614,11 @@ impl OxideSystem {
         let vt_key: Option<String> = if use_cloud {
             // Prefer env override
             if let Ok(k) = std::env::var("VIRUSTOTAL_API_KEY") {
-                if !k.is_empty() { Some(k) } else { None }
+                if !k.is_empty() {
+                    Some(k)
+                } else {
+                    None
+                }
             } else {
                 // Fallback to encrypted key from config
                 let enc = {
@@ -569,9 +629,14 @@ impl OxideSystem {
                     let bytes = self
                         .decrypt_data(&ed)
                         .map_err(|e| format!("Failed to decrypt VirusTotal API key: {}", e))?;
-                    let s = String::from_utf8(bytes)
-                        .map_err(|_| "Decrypted VirusTotal API key is not valid UTF-8".to_string())?;
-                    if s.is_empty() { None } else { Some(s) }
+                    let s = String::from_utf8(bytes).map_err(|_| {
+                        "Decrypted VirusTotal API key is not valid UTF-8".to_string()
+                    })?;
+                    if s.is_empty() {
+                        None
+                    } else {
+                        Some(s)
+                    }
                 } else {
                     None
                 }
@@ -613,7 +678,8 @@ impl OxideSystem {
 
     // Security-related methods
     pub async fn validate_input(&self, field_name: &str, value: &str) -> Result<String, String> {
-        self.input_validator.validate(field_name, value)
+        self.input_validator
+            .validate(field_name, value)
             .map_err(|e| e.to_string())
     }
 
@@ -624,7 +690,8 @@ impl OxideSystem {
         ip_address: Option<String>,
         user_agent: Option<String>,
     ) -> Result<String, String> {
-        let session = self.security_manager
+        let session = self
+            .security_manager
             .create_session(user_id, permissions, ip_address, user_agent)
             .await
             .map_err(|e| e.to_string())?;
@@ -639,7 +706,11 @@ impl OxideSystem {
         }
     }
 
-    pub async fn check_security_permission(&self, session_id: &str, permission: &str) -> Result<bool, String> {
+    pub async fn check_security_permission(
+        &self,
+        session_id: &str,
+        permission: &str,
+    ) -> Result<bool, String> {
         self.security_manager
             .check_permission(session_id, permission)
             .await
@@ -666,7 +737,10 @@ impl OxideSystem {
     }
 
     // Convenience: decrypt an `EncryptedData` blob using the system SecurityManager
-    pub fn decrypt_data(&self, encrypted: &oxide_core::encryption::EncryptedData) -> Result<Vec<u8>, String> {
+    pub fn decrypt_data(
+        &self,
+        encrypted: &oxide_core::encryption::EncryptedData,
+    ) -> Result<Vec<u8>, String> {
         self.security_manager
             .decrypt_data(encrypted)
             .map_err(|e| e.to_string())

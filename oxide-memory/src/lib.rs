@@ -1,5 +1,5 @@
-pub mod memory;
 pub mod backend;
+pub mod memory;
 
 #[cfg(feature = "surrealdb")]
 pub mod surreal_backend;
@@ -9,8 +9,7 @@ pub use backend::{BackendSearchItem, MemoryBackend};
 
 #[cfg(feature = "surrealdb")]
 pub use surreal_backend::{
-    SurrealBackend, SystemMetric, MemoryUsage, DiskIO, NetworkStats,
-    ProcessInfo, ProcessStatus, ThreatInfo, ThreatSeverity, MitigationStatus,
-    IncidentInfo, IncidentSeverity, ResolutionStatus,
-    AgentMemory, AgentType, MemorySource,
+    AgentMemory, AgentType, DiskIO, IncidentInfo, IncidentSeverity, MemorySource, MemoryUsage,
+    MitigationStatus, NetworkStats, ProcessInfo, ProcessStatus, ResolutionStatus, SurrealBackend,
+    SystemMetric, ThreatInfo, ThreatSeverity,
 };

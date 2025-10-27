@@ -1,9 +1,9 @@
-use crate::signatures::SignatureDb;
 use crate::quarantine;
-use sha2::{Digest, Sha256};
+use crate::signatures::SignatureDb;
 use blake3;
+use sha2::{Digest, Sha256};
 use std::fs::File;
-use std::io::{Read, BufReader};
+use std::io::{BufReader, Read};
 use std::path::Path;
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -44,7 +44,9 @@ impl FileScanner {
 
     pub fn compute_hashes<P: AsRef<Path>>(path: P) -> Result<(FileHashes, u64), String> {
         let file = File::open(&path).map_err(|e| format!("Failed to open file: {e}"))?;
-        let metadata = file.metadata().map_err(|e| format!("Failed to read metadata: {e}"))?;
+        let metadata = file
+            .metadata()
+            .map_err(|e| format!("Failed to read metadata: {e}"))?;
         let size = metadata.len();
         let mut reader = BufReader::new(file);
 
@@ -53,8 +55,12 @@ impl FileScanner {
         let mut buf = [0u8; 64 * 1024];
 
         loop {
-            let n = reader.read(&mut buf).map_err(|e| format!("Failed to read file: {e}"))?;
-            if n == 0 { break; }
+            let n = reader
+                .read(&mut buf)
+                .map_err(|e| format!("Failed to read file: {e}"))?;
+            if n == 0 {
+                break;
+            }
             sha.update(&buf[..n]);
             blake3_hasher.update(&buf[..n]);
         }

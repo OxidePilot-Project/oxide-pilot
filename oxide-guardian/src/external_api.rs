@@ -3,7 +3,7 @@ use std::thread::sleep;
 use std::time::Duration;
 
 pub fn virustotal_lookup(sha256: &str, api_key: &str) -> Result<ExternalVerdict, String> {
-    let url = format!("https://www.virustotal.com/api/v3/files/{}", sha256);
+    let url = format!("https://www.virustotal.com/api/v3/files/{sha256}");
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(10))
         .build()
@@ -19,7 +19,10 @@ pub fn virustotal_lookup(sha256: &str, api_key: &str) -> Result<ExternalVerdict,
             .get(&url)
             .header("x-apikey", api_key)
             .header(reqwest::header::ACCEPT, "application/json")
-            .header(reqwest::header::USER_AGENT, "OxideGuardian/1.0 (+https://github.com/oxide-pilot)")
+            .header(
+                reqwest::header::USER_AGENT,
+                "OxideGuardian/1.0 (+https://github.com/oxide-pilot)",
+            )
             .send()
             .map_err(|e| format!("VirusTotal request failed: {e}"))?;
 
@@ -39,7 +42,10 @@ pub fn virustotal_lookup(sha256: &str, api_key: &str) -> Result<ExternalVerdict,
                 .and_then(|r| r.as_object())
             {
                 for (engine, detail) in results {
-                    let category = detail.get("category").and_then(|x| x.as_str()).unwrap_or("");
+                    let category = detail
+                        .get("category")
+                        .and_then(|x| x.as_str())
+                        .unwrap_or("");
                     let result = detail.get("result").and_then(|x| x.as_str()).unwrap_or("");
                     if category == "malicious" || category == "suspicious" {
                         malicious = true;
@@ -63,7 +69,11 @@ pub fn virustotal_lookup(sha256: &str, api_key: &str) -> Result<ExternalVerdict,
         let code = status.as_u16();
         if code == 404 {
             // Unknown hash in VT database; treat as not malicious with no detections.
-            return Ok(ExternalVerdict { malicious: false, engine_detections: Vec::new(), reference: None });
+            return Ok(ExternalVerdict {
+                malicious: false,
+                engine_detections: Vec::new(),
+                reference: None,
+            });
         }
 
         // Retry on 429 and 5xx with exponential backoff + jitter (bounded attempts)
@@ -74,6 +84,6 @@ pub fn virustotal_lookup(sha256: &str, api_key: &str) -> Result<ExternalVerdict,
             continue;
         }
 
-        return Err(format!("VirusTotal returned HTTP {}", status));
+        return Err(format!("VirusTotal returned HTTP {status}"));
     }
 }

@@ -1,10 +1,10 @@
-use log::{error, warn, info};
+use log::{error, info, warn};
+use oxide_copilot::errors::CopilotError;
+use oxide_core::google_auth::AuthError;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::fmt;
 use thiserror::Error;
-use oxide_copilot::errors::CopilotError;
-use oxide_core::google_auth::AuthError;
 
 /// Centralized error type for the Oxide Pilot application
 #[derive(Error, Debug)]
@@ -100,7 +100,7 @@ impl From<OxideError> for ErrorResponse {
                     "Check system requirements".to_string(),
                     "Verify configuration files".to_string(),
                     "Restart the application".to_string(),
-                ]
+                ],
             ),
             OxideError::Auth(_) => (
                 ErrorSeverity::High,
@@ -108,7 +108,7 @@ impl From<OxideError> for ErrorResponse {
                     "Check internet connection".to_string(),
                     "Verify API credentials".to_string(),
                     "Re-authenticate if needed".to_string(),
-                ]
+                ],
             ),
             OxideError::Copilot(_) => (
                 ErrorSeverity::Medium,
@@ -116,7 +116,7 @@ impl From<OxideError> for ErrorResponse {
                     "Try the request again".to_string(),
                     "Check AI provider status".to_string(),
                     "Verify input format".to_string(),
-                ]
+                ],
             ),
             OxideError::Audio(_) | OxideError::Voice(_) => (
                 ErrorSeverity::Medium,
@@ -124,7 +124,7 @@ impl From<OxideError> for ErrorResponse {
                     "Check audio device connections".to_string(),
                     "Verify microphone permissions".to_string(),
                     "Restart audio services".to_string(),
-                ]
+                ],
             ),
             OxideError::Network(_) => (
                 ErrorSeverity::Medium,
@@ -132,7 +132,7 @@ impl From<OxideError> for ErrorResponse {
                     "Check internet connection".to_string(),
                     "Verify firewall settings".to_string(),
                     "Try again in a few moments".to_string(),
-                ]
+                ],
             ),
             OxideError::Timeout { .. } => (
                 ErrorSeverity::Medium,
@@ -140,18 +140,18 @@ impl From<OxideError> for ErrorResponse {
                     "Try the operation again".to_string(),
                     "Check system performance".to_string(),
                     "Reduce operation complexity".to_string(),
-                ]
+                ],
             ),
             OxideError::InvalidInput(_) => (
                 ErrorSeverity::Low,
                 vec![
                     "Check input format".to_string(),
                     "Refer to documentation".to_string(),
-                ]
+                ],
             ),
             _ => (
                 ErrorSeverity::Medium,
-                vec!["Contact support if the issue persists".to_string()]
+                vec!["Contact support if the issue persists".to_string()],
             ),
         };
 
@@ -224,17 +224,29 @@ impl ErrorHandler {
         // Log the error based on severity
         match response.severity {
             ErrorSeverity::Critical => {
-                error!("CRITICAL ERROR: {} - Context: {:?}", response.message, response.context);
-            },
+                error!(
+                    "CRITICAL ERROR: {} - Context: {:?}",
+                    response.message, response.context
+                );
+            }
             ErrorSeverity::High => {
-                error!("HIGH SEVERITY ERROR: {} - Context: {:?}", response.message, response.context);
-            },
+                error!(
+                    "HIGH SEVERITY ERROR: {} - Context: {:?}",
+                    response.message, response.context
+                );
+            }
             ErrorSeverity::Medium => {
-                warn!("MEDIUM SEVERITY ERROR: {} - Context: {:?}", response.message, response.context);
-            },
+                warn!(
+                    "MEDIUM SEVERITY ERROR: {} - Context: {:?}",
+                    response.message, response.context
+                );
+            }
             ErrorSeverity::Low => {
-                info!("LOW SEVERITY ERROR: {} - Context: {:?}", response.message, response.context);
-            },
+                info!(
+                    "LOW SEVERITY ERROR: {} - Context: {:?}",
+                    response.message, response.context
+                );
+            }
         }
 
         response
@@ -251,17 +263,17 @@ impl ErrorHandler {
                 info!("Attempting network recovery...");
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                 Ok(())
-            },
+            }
             OxideError::Timeout { .. } => {
                 info!("Attempting timeout recovery...");
                 tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
                 Ok(())
-            },
+            }
             OxideError::ResourceUnavailable { resource } => {
                 info!("Attempting to recover resource: {}", resource);
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                 Ok(())
-            },
+            }
             _ => Ok(()),
         }
     }
@@ -276,7 +288,8 @@ macro_rules! handle_tauri_error {
             Err(error) => {
                 let oxide_error = OxideError::from(error);
                 let response = ErrorHandler::handle_error(oxide_error, None);
-                Err(serde_json::to_string(&response).unwrap_or_else(|_| "Serialization error".to_string()))
+                Err(serde_json::to_string(&response)
+                    .unwrap_or_else(|_| "Serialization error".to_string()))
             }
         }
     };
@@ -286,7 +299,8 @@ macro_rules! handle_tauri_error {
             Err(error) => {
                 let oxide_error = OxideError::from(error);
                 let response = ErrorHandler::handle_error(oxide_error, Some($context));
-                Err(serde_json::to_string(&response).unwrap_or_else(|_| "Serialization error".to_string()))
+                Err(serde_json::to_string(&response)
+                    .unwrap_or_else(|_| "Serialization error".to_string()))
             }
         }
     };
@@ -311,10 +325,7 @@ impl Default for RetryConfig {
     }
 }
 
-pub async fn retry_with_backoff<F, T, E>(
-    operation: F,
-    config: RetryConfig,
-) -> Result<T, OxideError>
+pub async fn retry_with_backoff<F, T, E>(operation: F, config: RetryConfig) -> Result<T, OxideError>
 where
     F: Fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<T, E>> + Send>>,
     E: Into<OxideError> + fmt::Debug,
@@ -331,7 +342,10 @@ where
                     return Err(oxide_error);
                 }
 
-                warn!("Attempt {} failed: {:?}. Retrying in {}ms...", attempt, oxide_error, delay);
+                warn!(
+                    "Attempt {} failed: {:?}. Retrying in {}ms...",
+                    attempt, oxide_error, delay
+                );
 
                 // Attempt recovery
                 if let Err(recovery_error) = ErrorHandler::attempt_recovery(&oxide_error).await {
@@ -347,7 +361,9 @@ where
         }
     }
 
-    Err(OxideError::Internal("Retry loop completed without result".to_string()))
+    Err(OxideError::Internal(
+        "Retry loop completed without result".to_string(),
+    ))
 }
 
 /// Error monitoring and metrics collection
@@ -359,8 +375,12 @@ pub struct ErrorMonitor {
 impl ErrorMonitor {
     pub fn new() -> Self {
         Self {
-            error_counts: std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
-            last_errors: std::sync::Arc::new(std::sync::Mutex::new(std::collections::VecDeque::new())),
+            error_counts: std::sync::Arc::new(std::sync::Mutex::new(
+                std::collections::HashMap::new(),
+            )),
+            last_errors: std::sync::Arc::new(std::sync::Mutex::new(
+                std::collections::VecDeque::new(),
+            )),
         }
     }
 
@@ -380,10 +400,14 @@ impl ErrorMonitor {
     }
 
     pub fn get_error_stats(&self) -> Result<serde_json::Value, OxideError> {
-        let counts = self.error_counts.lock()
+        let counts = self
+            .error_counts
+            .lock()
             .map_err(|_| OxideError::Internal("Failed to lock error counts".to_string()))?;
 
-        let last_errors = self.last_errors.lock()
+        let last_errors = self
+            .last_errors
+            .lock()
             .map_err(|_| OxideError::Internal("Failed to lock last errors".to_string()))?;
 
         Ok(json!({
@@ -395,14 +419,12 @@ impl ErrorMonitor {
     }
 
     pub fn get_recent_errors(&self, limit: usize) -> Result<Vec<ErrorResponse>, OxideError> {
-        let last_errors = self.last_errors.lock()
+        let last_errors = self
+            .last_errors
+            .lock()
             .map_err(|_| OxideError::Internal("Failed to lock last errors".to_string()))?;
 
-        Ok(last_errors.iter()
-            .rev()
-            .take(limit)
-            .cloned()
-            .collect())
+        Ok(last_errors.iter().rev().take(limit).cloned().collect())
     }
 }
 
@@ -420,7 +442,10 @@ lazy_static::lazy_static! {
 /// Enhanced error handler with monitoring
 impl ErrorHandler {
     /// Handle and log an error with monitoring
-    pub fn handle_error_with_monitoring(error: OxideError, context: Option<serde_json::Value>) -> ErrorResponse {
+    pub fn handle_error_with_monitoring(
+        error: OxideError,
+        context: Option<serde_json::Value>,
+    ) -> ErrorResponse {
         let response = Self::handle_error(error, context);
 
         // Record the error for monitoring

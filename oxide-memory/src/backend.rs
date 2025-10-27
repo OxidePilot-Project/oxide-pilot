@@ -1,7 +1,8 @@
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BackendSearchItem {
     pub text: String,
     pub score: f32,

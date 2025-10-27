@@ -72,7 +72,10 @@ impl PermissionManager {
     }
 
     pub async fn request_permission(&mut self, request: PermissionRequest) -> bool {
-        let level = self.permissions.get(&request.action_type).unwrap_or(&PermissionLevel::Ask);
+        let level = self
+            .permissions
+            .get(&request.action_type)
+            .unwrap_or(&PermissionLevel::Ask);
 
         match level {
             PermissionLevel::Allow => {
@@ -92,7 +95,12 @@ impl PermissionManager {
         }
     }
 
-    pub fn log_decision(&mut self, request: PermissionRequest, granted: bool, user_confirmed: bool) {
+    pub fn log_decision(
+        &mut self,
+        request: PermissionRequest,
+        granted: bool,
+        user_confirmed: bool,
+    ) {
         let decision = PermissionDecision {
             request,
             granted,
@@ -165,7 +173,10 @@ mod tests {
         manager.set_permission(RPAActionType::MouseClick, PermissionLevel::Allow);
 
         let permissions = manager.get_permissions();
-        assert_eq!(permissions.get(&RPAActionType::MouseClick), Some(&PermissionLevel::Allow));
+        assert_eq!(
+            permissions.get(&RPAActionType::MouseClick),
+            Some(&PermissionLevel::Allow)
+        );
     }
 
     #[tokio::test]

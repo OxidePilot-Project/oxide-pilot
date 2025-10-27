@@ -1,7 +1,10 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-pub fn move_to_quarantine<S: AsRef<Path>, D: AsRef<Path>>(src: S, quarantine_dir: D) -> Result<String, String> {
+pub fn move_to_quarantine<S: AsRef<Path>, D: AsRef<Path>>(
+    src: S,
+    quarantine_dir: D,
+) -> Result<String, String> {
     let src_path = src.as_ref();
     let q_dir = quarantine_dir.as_ref();
 
