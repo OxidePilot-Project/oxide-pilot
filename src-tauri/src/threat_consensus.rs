@@ -24,9 +24,8 @@ async fn analyze_with_openai(snapshot: &Value) -> Result<ModelReport, String> {
     JSON only, no prose.
 
     Snapshot:
-    {}
-    "#,
-        snapshot
+    {snapshot}
+    "#
     );
 
     let model_name = std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o".to_string());
@@ -49,8 +48,7 @@ async fn analyze_with_openai(snapshot: &Value) -> Result<ModelReport, String> {
             }
             Err(e) => {
                 warn!(
-                    "OpenAI JSON parse failed, returning low-confidence fallback: {}",
-                    e
+                    "OpenAI JSON parse failed, returning low-confidence fallback: {e}"
                 );
                 Ok(ModelReport {
                     provider: "openai".to_string(),
@@ -66,7 +64,7 @@ async fn analyze_with_openai(snapshot: &Value) -> Result<ModelReport, String> {
             }
         },
         Err(e) => {
-            error!("OpenAI analysis error: {}", e);
+            error!("OpenAI analysis error: {e}");
             Err(e.to_string())
         }
     }
@@ -250,12 +248,11 @@ async fn analyze_with_gemini(snapshot: &Value, grounded: bool) -> Result<ModelRe
 
     Requirements:
     - Output MUST be a single JSON object only, no prose.
-    - {} Use Google Search to verify suspicious indicators and include citations to authoritative sources (CVE pages, vendors, security writeups). If not available, still return the JSON.
+    - {grounding_text} Use Google Search to verify suspicious indicators and include citations to authoritative sources (CVE pages, vendors, security writeups). If not available, still return the JSON.
 
     Snapshot:
-    {}
-    "#,
-        grounding_text, snapshot_str
+    {snapshot_str}
+    "#
     );
 
     match auth.send_message(&prompt, Some("gemini-1.5-pro")).await {
@@ -268,8 +265,7 @@ async fn analyze_with_gemini(snapshot: &Value, grounded: bool) -> Result<ModelRe
                 }
                 Err(e) => {
                     warn!(
-                        "Gemini JSON parse failed, returning low-confidence fallback: {}",
-                        e
+                        "Gemini JSON parse failed, returning low-confidence fallback: {e}"
                     );
                     Ok(ModelReport {
                         provider: "gemini".to_string(),
@@ -287,7 +283,7 @@ async fn analyze_with_gemini(snapshot: &Value, grounded: bool) -> Result<ModelRe
             }
         }
         Err(e) => {
-            error!("Gemini analysis error: {}", e);
+            error!("Gemini analysis error: {e}");
             Err(e.to_string())
         }
     }
@@ -304,9 +300,8 @@ async fn analyze_with_qwen(snapshot: &Value) -> Result<ModelReport, String> {
     No prose, JSON only.
 
     Snapshot:
-    {}
-    "#,
-        snapshot_str
+    {snapshot_str}
+    "#
     );
 
     // Get auth header via QwenAuth helper
@@ -316,7 +311,7 @@ async fn analyze_with_qwen(snapshot: &Value) -> Result<ModelReport, String> {
         std::env::var("QWEN_API_BASE").map_err(|_| "Missing env QWEN_API_BASE".to_string())?;
     let path = std::env::var("QWEN_CHAT_COMPLETIONS_PATH")
         .unwrap_or_else(|_| "/v1/chat/completions".to_string());
-    let url = format!("{}{}", base, path);
+    let url = format!("{base}{path}");
     let model_name = std::env::var("QWEN_MODEL").unwrap_or_else(|_| "qwen-plus".to_string());
 
     let body = serde_json::json!({
@@ -341,14 +336,14 @@ async fn analyze_with_qwen(snapshot: &Value) -> Result<ModelReport, String> {
     if !resp.status().is_success() {
         let status = resp.status();
         let text = resp.text().await.unwrap_or_default();
-        return Err(format!("Qwen API error: {} - {}", status, text));
+        return Err(format!("Qwen API error: {status} - {text}"));
     }
 
     let v: Value = resp.json().await.map_err(|e| e.to_string())?;
     let text = v
         .get("choices")
         .and_then(|c| c.as_array())
-        .and_then(|a| a.get(0))
+        .and_then(|a| a.first())
         .and_then(|x| x.get("message"))
         .and_then(|m| m.get("content"))
         .and_then(|t| t.as_str())
@@ -361,8 +356,7 @@ async fn analyze_with_qwen(snapshot: &Value) -> Result<ModelReport, String> {
         }
         Err(e) => {
             warn!(
-                "Qwen JSON parse failed, returning low-confidence fallback: {}",
-                e
+                "Qwen JSON parse failed, returning low-confidence fallback: {e}"
             );
             Ok(ModelReport {
                 provider: "qwen".to_string(),
@@ -385,10 +379,10 @@ pub async fn run_consensus(snapshot: Value, _grounded: bool) -> Result<ThreatRep
     let mut providers: Vec<&str> = vec![];
 
     // Gemini availability (OAuth only)
-    let g_available = match oxide_core::google_auth::get_access_token().await {
-        Ok(Some(_)) => true,
-        _ => false,
-    };
+    let g_available = matches!(
+        oxide_core::google_auth::get_access_token().await,
+        Ok(Some(_))
+    );
     if g_available {
         providers.push("gemini");
     }
@@ -401,15 +395,12 @@ pub async fn run_consensus(snapshot: Value, _grounded: bool) -> Result<ThreatRep
     }
 
     // OpenAI availability (API Key)
-    let o_available = match oxide_core::openai_key::get_api_key().await {
-        Ok(Some(_)) => true,
-        _ => false,
-    };
+    let o_available = matches!(oxide_core::openai_key::get_api_key().await, Ok(Some(_)));
     if o_available {
         providers.push("openai");
     }
 
-    info!("Consensus starting with providers: {:?}", providers);
+    info!("Consensus starting with providers: {providers:?}");
     if providers.is_empty() {
         return Err("No LLM providers available (Gemini, Qwen, or OpenAI)".to_string());
     }

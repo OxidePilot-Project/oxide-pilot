@@ -55,21 +55,21 @@ pub async fn get_system_metrics(
     state: State<'_, GuardianState>,
     time_range: TimeRange,
 ) -> Result<MetricsResponse, String> {
-    debug!("Fetching system metrics: {:?}", time_range);
+    debug!("Fetching system metrics: {time_range:?}");
 
     let start = DateTime::parse_from_rfc3339(&time_range.start)
-        .map_err(|e| format!("Invalid start timestamp: {}", e))?
+        .map_err(|e| format!("Invalid start timestamp: {e}"))?
         .with_timezone(&Utc);
 
     let end = DateTime::parse_from_rfc3339(&time_range.end)
-        .map_err(|e| format!("Invalid end timestamp: {}", e))?
+        .map_err(|e| format!("Invalid end timestamp: {e}"))?
         .with_timezone(&Utc);
 
     let metrics = state
         .backend
         .query_metrics_by_time(start, end)
         .await
-        .map_err(|e| format!("Failed to query metrics: {}", e))?;
+        .map_err(|e| format!("Failed to query metrics: {e}"))?;
 
     let count = metrics.len();
     Ok(MetricsResponse { metrics, count })
@@ -82,7 +82,7 @@ pub async fn get_recent_metrics(
     state: State<'_, GuardianState>,
     hours: i64,
 ) -> Result<MetricsResponse, String> {
-    debug!("Fetching metrics for last {} hours", hours);
+    debug!("Fetching metrics for last {hours} hours");
 
     let end = Utc::now();
     let start = end - Duration::hours(hours);
@@ -91,7 +91,7 @@ pub async fn get_recent_metrics(
         .backend
         .query_metrics_by_time(start, end)
         .await
-        .map_err(|e| format!("Failed to query metrics: {}", e))?;
+        .map_err(|e| format!("Failed to query metrics: {e}"))?;
 
     let count = metrics.len();
     Ok(MetricsResponse { metrics, count })
@@ -106,15 +106,14 @@ pub async fn get_high_cpu_processes(
     hours: i64,
 ) -> Result<HighCpuProcessesResponse, String> {
     debug!(
-        "Fetching high CPU processes: threshold={:.2}%, hours={}",
-        threshold, hours
+        "Fetching high CPU processes: threshold={threshold:.2}%, hours={hours}"
     );
 
     let processes = state
         .backend
         .query_high_cpu_processes(threshold, hours)
         .await
-        .map_err(|e| format!("Failed to query high CPU processes: {}", e))?;
+        .map_err(|e| format!("Failed to query high CPU processes: {e}"))?;
 
     let count = processes.len();
     Ok(HighCpuProcessesResponse { processes, count })
@@ -128,7 +127,7 @@ pub async fn search_agent_memory(
     query: String,
     limit: usize,
 ) -> Result<MemorySearchResponse, String> {
-    debug!("Searching agent memory: query='{}', limit={}", query, limit);
+    debug!("Searching agent memory: query='{query}', limit={limit}");
 
     // Use the MemoryBackend trait method
     use oxide_memory::MemoryBackend;
@@ -136,7 +135,7 @@ pub async fn search_agent_memory(
         .backend
         .search(query, limit)
         .await
-        .map_err(|e| format!("Failed to search memory: {}", e))?;
+        .map_err(|e| format!("Failed to search memory: {e}"))?;
 
     let count = results.len();
     Ok(MemorySearchResponse { results, count })
@@ -157,7 +156,7 @@ pub async fn get_guardian_status(
         .backend
         .query_metrics_by_time(start, end)
         .await
-        .map_err(|e| format!("Failed to query metrics: {}", e))?;
+        .map_err(|e| format!("Failed to query metrics: {e}"))?;
 
     if let Some(latest) = metrics.first() {
         Ok(serde_json::json!({

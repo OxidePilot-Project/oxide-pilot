@@ -270,7 +270,7 @@ impl ErrorHandler {
                 Ok(())
             }
             OxideError::ResourceUnavailable { resource } => {
-                info!("Attempting to recover resource: {}", resource);
+                info!("Attempting to recover resource: {resource}");
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                 Ok(())
             }
@@ -343,13 +343,12 @@ where
                 }
 
                 warn!(
-                    "Attempt {} failed: {:?}. Retrying in {}ms...",
-                    attempt, oxide_error, delay
+                    "Attempt {attempt} failed: {oxide_error:?}. Retrying in {delay}ms..."
                 );
 
                 // Attempt recovery
                 if let Err(recovery_error) = ErrorHandler::attempt_recovery(&oxide_error).await {
-                    warn!("Recovery attempt failed: {:?}", recovery_error);
+                    warn!("Recovery attempt failed: {recovery_error:?}");
                 }
 
                 tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;

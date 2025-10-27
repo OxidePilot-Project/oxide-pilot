@@ -72,7 +72,7 @@ impl McpServerHandle {
 
         let handle: JoinHandle<()> = tokio::spawn(async move {
             if let Err(err) = server.await {
-                eprintln!("MCP HTTP server error: {}", err);
+                eprintln!("MCP HTTP server error: {err}");
             }
         });
 

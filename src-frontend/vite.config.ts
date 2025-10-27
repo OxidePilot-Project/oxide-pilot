@@ -17,4 +17,19 @@ export default defineConfig({
     // Run Istanbul after all transforms so output JS is instrumented
     istanbulPlugin as any,
   ],
+  build: {
+    target: 'esnext',
+    minify: 'esbuild',
+    cssMinify: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor': ['svelte'],
+        },
+      },
+    },
+  },
+  optimizeDeps: {
+    include: ['@tauri-apps/api'],
+  },
 });

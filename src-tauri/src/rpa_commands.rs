@@ -319,7 +319,7 @@ fn parse_permission(s: &str) -> Result<Permission, String> {
         "system_command" => Ok(Permission::SystemCommand),
         "process_control" => Ok(Permission::ProcessControl),
         "network_access" => Ok(Permission::NetworkAccess),
-        _ => Err(format!("Unknown permission: {}", s)),
+        _ => Err(format!("Unknown permission: {s}")),
     }
 }
 
@@ -336,6 +336,6 @@ fn parse_key(s: &str) -> Result<oxide_rpa::rpa::Key, String> {
         "down" => Ok(Key::DownArrow),
         "left" => Ok(Key::LeftArrow),
         "right" => Ok(Key::RightArrow),
-        _ => Err(format!("Unknown key: {}", s)),
+        _ => Err(format!("Unknown key: {s}")),
     }
 }

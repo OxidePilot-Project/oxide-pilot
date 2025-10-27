@@ -70,7 +70,7 @@ pub async fn server_status() -> Result<LocalLlmServerStatus, String> {
     let running = lower.contains("running") && !lower.contains("stopped");
     // Try extract a port like :1234 or on port 1234
     let port = lower
-        .split(|c: char| c == ' ' || c == '\n' || c == '\r' || c == '\t')
+        .split([' ', '\n', '\r', '\t'])
         .filter_map(|tok| tok.trim_start_matches(':').parse::<u16>().ok())
         .next();
     Ok(LocalLlmServerStatus {
@@ -168,20 +168,20 @@ pub async fn chat_completion(
     let client = reqwest::Client::new();
     let mut req = client.post(url).header("Content-Type", "application/json");
     if let Some(key) = api_key {
-        req = req.header("Authorization", format!("Bearer {}", key));
+        req = req.header("Authorization", format!("Bearer {key}"));
     }
 
     let resp = req.json(&body).send().await.map_err(|e| e.to_string())?;
     if !resp.status().is_success() {
         let status = resp.status();
         let text = resp.text().await.unwrap_or_default();
-        return Err(format!("Local LLM API error: {} - {}", status, text));
+        return Err(format!("Local LLM API error: {status} - {text}"));
     }
     let v: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
     if let Some(content) = v
         .get("choices")
         .and_then(|c| c.as_array())
-        .and_then(|arr| arr.get(0))
+        .and_then(|arr| arr.first())
         .and_then(|first| first.get("message"))
         .and_then(|m| m.get("content"))
         .and_then(|c| c.as_str())

@@ -79,13 +79,17 @@ Oxide Pilot is an advanced AI-powered system assistant with agentic capabilities
 | **Create Guardian UI Dashboard** | **Frontend** | **High** | **Oct 27, 2025** | **Real-time metrics, alerts, process monitoring - 3 components** |
 | **Integrate Guardian with Tauri** | **Backend** | **High** | **Oct 27, 2025** | **5 commands registered, SurrealDB backend initialized** |
 | **Complete Phase 3: Guardian UI** | **Full Stack** | **High** | **Oct 27, 2025** | **Dashboard, alerts, processes panels integrated** |
+| **Fix all Clippy warnings** | **Backend** | **High** | **Oct 27, 2025** | **0 warnings achieved** |
+| **Add production build optimizations** | **Build** | **High** | **Oct 27, 2025** | **Release profile, LTO, strip symbols** |
+| **Create production build script** | **DevOps** | **High** | **Oct 27, 2025** | **Automated build with tests and linting** |
+| **Write performance optimization guide** | **Docs** | **Medium** | **Oct 27, 2025** | **Complete optimization documentation** |
+| **Write production deployment guide** | **Docs** | **Medium** | **Oct 27, 2025** | **Deployment procedures and best practices** |
 
 ### 🟡 In Progress Tasks
 
 | Task | Component | Priority | Estimated Completion | Notes |
 |------|-----------|----------|----------------------|-------|
-| Deploy to main branch | Deployment | High | Today | Final testing and deployment |
-| Optimize performance and resource usage | Core | High | 1 week | Memory/CPU optimization needed |
+| **Phase 4: Production Polish** | **Full Stack** | **High** | **In Progress** | **Optimizations, documentation, deployment prep** |
 | Implement enterprise deployment features | Deployment | Medium | 2 weeks | Group policy templates, centralized management |
 | Add role-based access control | Security | Medium | 1 week | Enterprise feature for IT administrators |
 | Implement automatic performance tuning | Performance | Medium | 2 weeks | System capabilities based optimization |

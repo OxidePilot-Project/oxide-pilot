@@ -43,7 +43,7 @@ impl OxideSystem {
         // Validate configuration
         config
             .validate()
-            .map_err(|e| format!("Configuration validation failed: {}", e))?;
+            .map_err(|e| format!("Configuration validation failed: {e}"))?;
 
         // Load environment (.env support)
         let _ = dotenv::dotenv();
@@ -261,8 +261,7 @@ impl OxideSystem {
         let input_devices = voice_processor.get_input_devices().await;
         let output_devices = voice_processor.get_output_devices().await;
         info!(
-            "Audio devices - Input: {:?}, Output: {:?}",
-            input_devices, output_devices
+            "Audio devices - Input: {input_devices:?}, Output: {output_devices:?}"
         );
 
         // Initialize Performance Monitor
@@ -276,7 +275,7 @@ impl OxideSystem {
         let encryption_key = oxide_core::encryption::EncryptionManager::generate_key();
         let security_manager = Arc::new(
             SecurityManager::new(&encryption_key)
-                .map_err(|e| format!("Failed to initialize security manager: {}", e))?,
+                .map_err(|e| format!("Failed to initialize security manager: {e}"))?,
         );
         let input_validator = Arc::new(InputValidator::new());
 
@@ -354,7 +353,7 @@ impl OxideSystem {
                     // Handle wake word detection
                     wake_word = voice_receiver.recv() => {
                         if let Some(word) = wake_word {
-                            info!("Wake word detected: {}", word);
+                            info!("Wake word detected: {word}");
 
                             // Record real audio for transcription
                             info!("Recording audio for transcription...");
@@ -364,7 +363,7 @@ impl OxideSystem {
                                     match voice_processor.transcribe_audio(audio_data).await {
                                 Ok(transcription) => {
                                     if !transcription.is_empty() {
-                                        info!("User said: {}", transcription);
+                                        info!("User said: {transcription}");
 
                                         // Process user input with Copilot
                                         let context = Context {
@@ -378,7 +377,7 @@ impl OxideSystem {
 
                                         match copilot.handle_user_input(transcription.clone(), context.clone()).await {
                                             Ok(response) => {
-                                                info!("Copilot response: {}", response);
+                                                info!("Copilot response: {response}");
 
                                                 // Store interaction in memory
                                                 let interaction = Interaction {
@@ -390,7 +389,7 @@ impl OxideSystem {
                                                 };
 
                                                 if let Err(e) = memory_manager.store_interaction(interaction).await {
-                                                    error!("Failed to store interaction: {}", e);
+                                                    error!("Failed to store interaction: {e}");
                                                 }
 
                                                 // Synthesize and play speech response
@@ -398,22 +397,22 @@ impl OxideSystem {
                                                     Ok(audio_data) => {
                                                         info!("Speech synthesized, {} bytes", audio_data.len());
                                                         if let Err(e) = voice_processor.play_audio(&audio_data).await {
-                                                            error!("Failed to play audio: {}", e);
+                                                            error!("Failed to play audio: {e}");
                                                         } else {
                                                             info!("Audio played successfully");
                                                         }
                                                     },
-                                                    Err(e) => error!("Failed to synthesize speech: {}", e),
+                                                    Err(e) => error!("Failed to synthesize speech: {e}"),
                                                 }
                                             },
-                                            Err(e) => error!("Copilot error: {}", e),
+                                            Err(e) => error!("Copilot error: {e}"),
                                         }
                                     }
                                     },
-                                    Err(e) => error!("Transcription failed: {}", e),
+                                    Err(e) => error!("Transcription failed: {e}"),
                                 }
                                 },
-                                Err(e) => error!("Audio recording failed: {}", e),
+                                Err(e) => error!("Audio recording failed: {e}"),
                             }
                         }
                     }
@@ -451,7 +450,7 @@ impl OxideSystem {
         //     "handle_text_input".to_string(),
         //     Arc::clone(&self.performance_monitor),
         // );
-        info!("Handling text input: {}", input);
+        info!("Handling text input: {input}");
 
         // Build context from memory
         let context_query = ContextQuery {
@@ -628,7 +627,7 @@ impl OxideSystem {
                 if let Some(ed) = enc {
                     let bytes = self
                         .decrypt_data(&ed)
-                        .map_err(|e| format!("Failed to decrypt VirusTotal API key: {}", e))?;
+                        .map_err(|e| format!("Failed to decrypt VirusTotal API key: {e}"))?;
                     let s = String::from_utf8(bytes).map_err(|_| {
                         "Decrypted VirusTotal API key is not valid UTF-8".to_string()
                     })?;
@@ -650,7 +649,7 @@ impl OxideSystem {
         let path_cloned = path.clone();
         tokio::task::spawn_blocking(move || guardian.scan_file(&path_cloned, vt_key, quarantine))
             .await
-            .map_err(|e| format!("Scan task join error: {}", e))?
+            .map_err(|e| format!("Scan task join error: {e}"))?
     }
 
     /// Returns true if a VirusTotal API key is configured via env or encrypted config.

@@ -136,7 +136,7 @@ async fn qwen_chat_completion(prompt: &str, model: Option<String>) -> Result<Str
         std::env::var("QWEN_API_BASE").map_err(|_| "Missing env QWEN_API_BASE".to_string())?;
     let path = std::env::var("QWEN_CHAT_COMPLETIONS_PATH")
         .unwrap_or_else(|_| "/v1/chat/completions".to_string());
-    let url = format!("{}{}", base, path);
+    let url = format!("{base}{path}");
     let model_name = model
         .or_else(|| std::env::var("QWEN_MODEL").ok())
         .unwrap_or_else(|| "qwen-plus".to_string());
@@ -167,7 +167,7 @@ async fn qwen_chat_completion(prompt: &str, model: Option<String>) -> Result<Str
     if !resp.status().is_success() {
         let status = resp.status();
         let text = resp.text().await.unwrap_or_default();
-        return Err(format!("Qwen API error: {} - {}", status, text));
+        return Err(format!("Qwen API error: {status} - {text}"));
     }
 
     let v: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
@@ -175,7 +175,7 @@ async fn qwen_chat_completion(prompt: &str, model: Option<String>) -> Result<Str
     if let Some(content) = v
         .get("choices")
         .and_then(|c| c.as_array())
-        .and_then(|arr| arr.get(0))
+        .and_then(|arr| arr.first())
         .and_then(|first| first.get("message"))
         .and_then(|m| m.get("content"))
         .and_then(|c| c.as_str())
@@ -243,7 +243,7 @@ async fn run_collaborative_analysis(
                 LLMRole::Validator => 0.1,
             },
             max_tokens: Some(2048),
-            system_prompt: format!("You are a {} for the Oxide Pilot system.", role),
+            system_prompt: format!("You are a {role} for the Oxide Pilot system."),
         };
         orchestrator.add_provider(name, provider, config);
     }
@@ -266,8 +266,8 @@ async fn run_collaborative_analysis(
                 .unwrap_or_else(|_| "Serialization error".to_string()))
         }
         Err(e) => {
-            error!("Collaborative analysis failed: {}", e);
-            Err(format!("Collaborative analysis failed: {}", e))
+            error!("Collaborative analysis failed: {e}");
+            Err(format!("Collaborative analysis failed: {e}"))
         }
     }
 }
@@ -289,8 +289,7 @@ async fn run_multi_agent_analysis(
         - Key performance issues and likely root causes\n\
         - Suspicious processes or threats (if any)\n\
         - Immediate remediation steps (bulleted)\n\
-        - Risk score (0-100) and confidence.\n\nSnapshot:\n{}",
-        snapshot_str
+        - Risk score (0-100) and confidence.\n\nSnapshot:\n{snapshot_str}"
     );
 
     let qwen_prompt = format!(
@@ -298,8 +297,7 @@ async fn run_multi_agent_analysis(
         - Hot threads and blocking syscalls\n\
         - Memory pressure, leaks, fragmentation indicators\n\
         - Process anomalies (handles, CPU spikes, I/O)\n\
-        - Concrete remediation with commands and config changes.\n\nSnapshot:\n{}",
-        snapshot_str
+        - Concrete remediation with commands and config changes.\n\nSnapshot:\n{snapshot_str}"
     );
 
     use oxide_core::gemini_auth::GeminiAuth;
@@ -330,7 +328,7 @@ async fn set_google_api_key(_api_key: String) -> Result<(), String> {
     // API key-based authentication is disabled. Use OAuth 2.0 instead.
     let msg =
         "Gemini API key authentication is disabled. Please use OAuth 2.0 via Google credentials.";
-    error!("{}", msg);
+    error!("{msg}");
     Err(msg.to_string())
 }
 
@@ -342,7 +340,7 @@ async fn set_google_client_credentials(
     google_auth::store_client_credentials(&client_id, &client_secret)
         .await
         .map_err(|e| {
-            error!("Failed to store Google client credentials: {}", e);
+            error!("Failed to store Google client credentials: {e}");
             e.to_string()
         })
 }
@@ -365,7 +363,7 @@ async fn authenticate_google_command(app: tauri::AppHandle) -> Result<String, St
             Ok(token)
         }
         Err(e) => {
-            error!("Google authentication failed: {}", e);
+            error!("Google authentication failed: {e}");
             let _ = app.emit_all(
                 "google_auth_complete",
                 json!({
@@ -400,11 +398,11 @@ async fn initialize_system(
             Box::pin(async move {
                 let system = OxideSystem::new(config_clone)
                     .await
-                    .map_err(|e| OxideError::SystemInit(e))?;
+                    .map_err(OxideError::SystemInit)?;
                 system
                     .start()
                     .await
-                    .map_err(|e| OxideError::SystemInit(e))?;
+                    .map_err(OxideError::SystemInit)?;
                 Ok::<OxideSystem, OxideError>(system)
             })
         },
@@ -472,7 +470,7 @@ async fn handle_user_input_command(
                     system_ref
                         .handle_text_input(input_clone)
                         .await
-                        .map_err(|e| OxideError::Internal(e))
+                        .map_err(OxideError::Internal)
                 })
             },
             retry_config,
@@ -540,7 +538,7 @@ async fn start_folder_scan(
     let max_file_size_bytes: Option<u64> = cfg
         .guardian
         .max_file_size_mb
-        .map(|mb| (mb as u64) * 1024 * 1024);
+        .map(|mb| mb * 1024 * 1024);
 
     // Create cancel flag and scan id
     let scan_id = uuid::Uuid::new_v4().to_string();
@@ -1152,7 +1150,7 @@ async fn get_available_models() -> Result<Vec<String>, String> {
     use oxide_core::gemini_auth::GeminiAuth;
     let auth = GeminiAuth::new();
     auth.get_available_models().await.map_err(|e| {
-        error!("Failed to get available models: {}", e);
+        error!("Failed to get available models: {e}");
         e.to_string()
     })
 }
@@ -1173,7 +1171,7 @@ async fn send_message_to_gemini(message: String, model: Option<String>) -> Resul
     auth.send_message(&message, model.as_deref())
         .await
         .map_err(|e| {
-            error!("Failed to send message to Gemini: {}", e);
+            error!("Failed to send message to Gemini: {e}");
             e.to_string()
         })
 }
@@ -1248,7 +1246,7 @@ async fn openai_start_oauth(client_id: String, client_secret: String) -> Result<
     match openai_auth::authenticate_openai().await {
         Ok(token) => Ok(token),
         Err(e) => {
-            error!("OpenAI OAuth failed: {}", e);
+            error!("OpenAI OAuth failed: {e}");
             Err(e.to_string())
         }
     }
@@ -1268,12 +1266,12 @@ async fn openai_get_auth_status() -> Result<String, String> {
     match openai_key::get_api_key().await {
         Ok(Some(key)) if !key.trim().is_empty() => return Ok("API Key".to_string()),
         Ok(_) => { /* fall through */ }
-        Err(e) => warn!("Failed to read OpenAI API key: {}", e),
+        Err(e) => warn!("Failed to read OpenAI API key: {e}"),
     }
 
     // Fallback to OAuth status
     openai_auth::get_auth_status().await.map_err(|e| {
-        error!("OpenAI auth status check failed: {}", e);
+        error!("OpenAI auth status check failed: {e}");
         e.to_string()
     })
 }
@@ -1282,10 +1280,10 @@ async fn openai_get_auth_status() -> Result<String, String> {
 async fn openai_clear_auth() -> Result<(), String> {
     let mut errors: Vec<String> = Vec::new();
     if let Err(e) = openai_key::clear_api_key().await {
-        errors.push(format!("key: {}", e));
+        errors.push(format!("key: {e}"));
     }
     if let Err(e) = openai_auth::clear_auth().await {
-        errors.push(format!("oauth: {}", e));
+        errors.push(format!("oauth: {e}"));
     }
     if errors.is_empty() {
         Ok(())
@@ -1343,8 +1341,7 @@ async fn run_system_analysis(
         - Key performance issues and likely root causes\n\
         - Suspicious processes or threats (if any)\n\
         - Immediate remediation steps (bulleted)\n\
-        - Risk score (0-100) and confidence.\n\nSnapshot:\n{}",
-        snapshot
+        - Risk score (0-100) and confidence.\n\nSnapshot:\n{snapshot}"
     );
 
     use oxide_core::gemini_auth::GeminiAuth;
@@ -1352,7 +1349,7 @@ async fn run_system_analysis(
     auth.send_message(&prompt, model.as_deref())
         .await
         .map_err(|e| {
-            error!("System analysis via Gemini failed: {}", e);
+            error!("System analysis via Gemini failed: {e}");
             e.to_string()
         })
 }
@@ -1365,7 +1362,7 @@ async fn run_threat_consensus(state: State<'_, AppState>) -> Result<String, Stri
     let report = threat_consensus::run_consensus(snapshot, true)
         .await
         .map_err(|e| {
-            error!("Threat consensus failed: {}", e);
+            error!("Threat consensus failed: {e}");
             e
         })?;
     serde_json::to_string(&report).map_err(|e| e.to_string())
@@ -1377,7 +1374,7 @@ async fn get_threat_recommendations(state: State<'_, AppState>) -> Result<Vec<St
     let report = threat_consensus::run_consensus(snapshot, true)
         .await
         .map_err(|e| {
-            error!("Threat consensus (recommendations) failed: {}", e);
+            error!("Threat consensus (recommendations) failed: {e}");
             e
         })?;
     Ok(threat_consensus::recommendations_from_report(&report))
@@ -1412,7 +1409,7 @@ async fn mcp_start(
             } else if let Some(enc) = from_cfg.and_then(|m| m.password) {
                 let bytes = system
                     .decrypt_data(&enc)
-                    .map_err(|e| format!("Failed to decrypt MCP password: {}", e))?;
+                    .map_err(|e| format!("Failed to decrypt MCP password: {e}"))?;
                 let s = String::from_utf8(bytes)
                     .map_err(|_| "Decrypted MCP password is not valid UTF-8".to_string())?;
                 Some(s)
@@ -1433,7 +1430,7 @@ async fn mcp_start(
     let mut mcp = state.mcp_server.write().await;
     *mcp = Some(handle);
 
-    Ok(format!("mcp_started: http://{}", addr))
+    Ok(format!("mcp_started: http://{addr}"))
 }
 
 #[tauri::command]
@@ -1607,7 +1604,7 @@ fn main() {
 fn send_notification(title: String, body: String) {
     // For Tauri 2.x, notifications are handled differently
     // This is a placeholder implementation
-    log::info!("Notification: {} - {}", title, body);
+    log::info!("Notification: {title} - {body}");
 }
 
 #[tauri::command]
@@ -1615,12 +1612,12 @@ async fn open_url(url: String, app_handle: tauri::AppHandle) -> Result<(), Strin
     use tauri::api::shell;
     match shell::open(&app_handle.shell_scope(), &url, None) {
         Ok(_) => {
-            log::info!("Opened URL: {}", url);
+            log::info!("Opened URL: {url}");
             Ok(())
         }
         Err(e) => {
-            log::error!("Failed to open URL {}: {}", url, e);
-            Err(format!("Failed to open URL: {}", e))
+            log::error!("Failed to open URL {url}: {e}");
+            Err(format!("Failed to open URL: {e}"))
         }
     }
 }
