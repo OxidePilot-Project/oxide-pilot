@@ -78,15 +78,15 @@ try {
         -Method Post `
         -Body $transferBody `
         -ContentType "application/json"
-    
+
     Write-Host "✅ Repositorio transferido exitosamente!" -ForegroundColor Green
     Write-Host ""
     Write-Host "📦 Nueva ubicación: https://github.com/$NewOwner/$Repo" -ForegroundColor Cyan
     Write-Host ""
-    
+
 } catch {
     Write-Host "❌ Error durante la transferencia: $_" -ForegroundColor Red
-    
+
     if ($_.Exception.Response.StatusCode -eq 403) {
         Write-Host ""
         Write-Host "⚠️  Posibles causas:" -ForegroundColor Yellow
@@ -100,7 +100,7 @@ try {
         Write-Host "   3. Click en 'Transfer'" -ForegroundColor White
         Write-Host "   4. Sigue las instrucciones en pantalla" -ForegroundColor White
     }
-    
+
     exit 1
 }
 
@@ -113,7 +113,7 @@ Write-Host "🔄 Actualizando remoto local..." -ForegroundColor Cyan
 
 try {
     $gitRemote = git remote -v 2>&1
-    
+
     if ($gitRemote -match "iberi22/oxide-pilot") {
         git remote set-url origin "https://github.com/$NewOwner/$Repo.git"
         Write-Host "✓ Remoto actualizado a: https://github.com/$NewOwner/$Repo.git" -ForegroundColor Green

@@ -177,6 +177,7 @@ Consulta docs/IMPLEMENTATION-TASKS.md para el desglose de tareas, estados y pró
 [![Rust](https://img.shields.io/badge/rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Tauri](https://img.shields.io/badge/tauri-%2324C8DB.svg?style=for-the-badge&logo=tauri&logoColor=%23FFFFFF)](https://tauri.app/)
 [![Svelte](https://img.shields.io/badge/svelte-%23f1413d.svg?style=for-the-badge&logo=svelte&logoColor=white)](https://svelte.dev/)
+[![SurrealDB](https://img.shields.io/badge/SurrealDB-FF00A0?style=for-the-badge&logo=surrealdb&logoColor=white)](https://surrealdb.com/)
 [![Google Cloud](https://img.shields.io/badge/GoogleCloud-%234285F4.svg?style=for-the-badge&logo=google-cloud&logoColor=white)](https://cloud.google.com/)
 
 ---
@@ -402,7 +403,443 @@ Oxide: "Detecté que Visual Studio está esperando una operación de Git
 
 ---
 
-## 📊 Estado del Proyecto
+## �️ Roadmap: Migración a SurrealDB (Sistema de Memoria Avanzado)
+
+### 📌 Visión General
+
+Oxide Pilot está migrando de **Cognee** (Python) a **SurrealDB** (Rust nativo) para eliminar dependencias externas y aprovechar capacidades avanzadas de bases de datos multi-modelo directamente en Rust. Esta migración representa un salto significativo en rendimiento, seguridad y capacidades de análisis.
+
+### 🎯 Objetivos Estratégicos
+
+| Objetivo | Descripción | Impacto |
+|----------|-------------|---------|
+| **🚀 100% Rust Nativo** | Eliminar sidecar Python (Cognee) | -50% uso de memoria, +300% velocidad de inicio |
+| **📊 Almacenamiento Inteligente** | Datos del sistema como grafo de conocimiento | Análisis contextual avanzado para agentes |
+| **🧠 Memoria Persistente** | Relaciones temporales entre eventos | Diagnóstico predictivo y correlación de incidencias |
+| **⚡ Rendimiento** | Base de datos embebida en proceso | Latencia <5ms vs 50-200ms actual (HTTP) |
+| **🔍 Capacidades Avanzadas** | Graph queries + Vector search + Full-text | Búsquedas híbridas para análisis multi-dimensional |
+
+### 🏗️ Arquitectura Propuesta
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     OXIDE PILOT AGENTS                          │
+│  ┌────────────┐              ┌─────────────────────────┐       │
+│  │  Guardian  │              │       Copilot           │       │
+│  │   Agent    │              │        Agent            │       │
+│  └─────┬──────┘              └───────────┬─────────────┘       │
+│        │                                  │                      │
+│        └──────────────┬───────────────────┘                      │
+│                       ▼                                          │
+│         ┌──────────────────────────────┐                        │
+│         │   oxide-memory (Rust Trait)  │                        │
+│         │   MemoryBackend Interface    │                        │
+│         └────────────┬─────────────────┘                        │
+│                      │                                           │
+│                      ▼                                           │
+│         ┌──────────────────────────────┐                        │
+│         │   SurrealDB Backend (NEW)    │                        │
+│         │  • Embedded (in-process)     │                        │
+│         │  • RocksDB/TiKV storage      │                        │
+│         │  • ACID transactions         │                        │
+│         │  • Graph + Document + Vector │                        │
+│         └────────────┬─────────────────┘                        │
+│                      │                                           │
+│                      ▼                                           │
+│         ┌──────────────────────────────┐                        │
+│         │    Data Storage Layer        │                        │
+│         │  ┌────────────────────────┐  │                        │
+│         │  │ System Metrics (Time)  │  │  ← CPU, RAM, Disk I/O │
+│         │  ├────────────────────────┤  │                        │
+│         │  │ Process Graph          │  │  ← Relaciones entre   │
+│         │  │ (parent→child)         │  │    procesos           │
+│         │  ├────────────────────────┤  │                        │
+│         │  │ Threat Detections      │  │  ← YARA matches       │
+│         │  ├────────────────────────┤  │                        │
+│         │  │ User Interactions      │  │  ← Comandos, queries  │
+│         │  ├────────────────────────┤  │                        │
+│         │  │ Incident History       │  │  ← Errores, crashes   │
+│         │  ├────────────────────────┤  │                        │
+│         │  │ Performance Patterns   │  │  ← Análisis temporal  │
+│         │  ├────────────────────────┤  │                        │
+│         │  │ LLM Context Vectors    │  │  ← Embeddings para    │
+│         │  │                        │  │    análisis semántico │
+│         │  └────────────────────────┘  │                        │
+│         └──────────────────────────────┘                        │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 📦 Modelo de Datos SurrealDB
+
+#### **1. Métricas del Sistema (TimeSeries + Document)**
+```surql
+-- Métricas de rendimiento con metadata contextual
+DEFINE TABLE system_metrics SCHEMAFULL;
+DEFINE FIELD timestamp ON system_metrics TYPE datetime;
+DEFINE FIELD cpu_usage ON system_metrics TYPE float;
+DEFINE FIELD memory_usage ON system_metrics TYPE object;
+DEFINE FIELD disk_io ON system_metrics TYPE object;
+DEFINE FIELD network_stats ON system_metrics TYPE object;
+DEFINE FIELD metadata ON system_metrics TYPE object;
+DEFINE INDEX idx_timestamp ON system_metrics FIELDS timestamp;
+```
+
+#### **2. Grafo de Procesos (Graph Relationships)**
+```surql
+-- Procesos y sus relaciones padre-hijo
+DEFINE TABLE process SCHEMAFULL;
+DEFINE FIELD pid ON process TYPE int;
+DEFINE FIELD name ON process TYPE string;
+DEFINE FIELD cmd ON process TYPE string;
+DEFINE FIELD start_time ON process TYPE datetime;
+DEFINE FIELD cpu_percent ON process TYPE float;
+DEFINE FIELD memory_mb ON process TYPE float;
+
+-- Relación directed graph: parent→spawns→child
+DEFINE TABLE spawns SCHEMAFULL TYPE RELATION IN process OUT process;
+DEFINE FIELD spawn_time ON spawns TYPE datetime;
+DEFINE FIELD exit_code ON spawns TYPE option<int>;
+```
+
+#### **3. Detecciones de Amenazas (Document + Graph)**
+```surql
+DEFINE TABLE threat SCHEMAFULL;
+DEFINE FIELD severity ON threat TYPE string
+  ASSERT $value INSIDE ['low', 'medium', 'high', 'critical'];
+DEFINE FIELD yara_rule ON threat TYPE string;
+DEFINE FIELD timestamp ON threat TYPE datetime;
+DEFINE FIELD process_chain ON threat TYPE array<record<process>>;
+DEFINE FIELD indicators ON threat TYPE array<string>;
+DEFINE FIELD mitigation_status ON threat TYPE string;
+
+-- Relación: threat→affects→process
+DEFINE TABLE affects SCHEMAFULL TYPE RELATION IN threat OUT process;
+```
+
+#### **4. Historial de Incidencias (Temporal Graph)**
+```surql
+DEFINE TABLE incident SCHEMAFULL;
+DEFINE FIELD description ON incident TYPE string;
+DEFINE FIELD timestamp ON incident TYPE datetime;
+DEFINE FIELD error_code ON incident TYPE option<string>;
+DEFINE FIELD stack_trace ON incident TYPE option<string>;
+DEFINE FIELD resolution_status ON incident TYPE string;
+DEFINE FIELD related_processes ON incident TYPE array<record<process>>;
+
+-- Relación temporal: incident→triggers→incident (cascadas)
+DEFINE TABLE triggers SCHEMAFULL TYPE RELATION IN incident OUT incident;
+DEFINE FIELD time_delta ON triggers TYPE duration;
+```
+
+#### **5. Memoria de Agentes (Vector Embeddings)**
+```surql
+DEFINE TABLE agent_memory SCHEMAFULL;
+DEFINE FIELD agent_type ON agent_memory TYPE string
+  ASSERT $value INSIDE ['guardian', 'copilot'];
+DEFINE FIELD content ON agent_memory TYPE string;
+DEFINE FIELD embedding ON agent_memory TYPE array<float>;  -- 1536 dims
+DEFINE FIELD timestamp ON agent_memory TYPE datetime;
+DEFINE FIELD metadata ON agent_memory TYPE object;
+
+-- Índice vectorial para búsqueda semántica (KNN)
+DEFINE INDEX idx_embedding ON agent_memory
+  FIELDS embedding
+  HNSW DIMENSION 1536
+  DIST COSINE
+  EFC 150
+  M 12;
+```
+
+#### **6. Patrones de Comportamiento (Analytical Views)**
+```surql
+-- Vista pre-computada para patrones recurrentes
+DEFINE TABLE performance_pattern AS
+  SELECT
+    time::group(timestamp, '1h') AS hour,
+    math::mean(cpu_usage) AS avg_cpu,
+    math::mean(memory_usage.percent) AS avg_memory,
+    array::distinct(->affects->process.name) AS affected_processes
+  FROM threat
+  WHERE timestamp > time::now() - 7d
+  GROUP BY hour;
+```
+
+### 🔄 Plan de Migración (Fases)
+
+#### **Fase 1: Infraestructura Base (1-2 semanas)**
+
+**Objetivo**: Implementar backend SurrealDB embebido sin romper funcionalidad actual
+
+**Tareas**:
+- [ ] **1.1** Agregar dependencia `surrealdb` al workspace
+  ```toml
+  [dependencies]
+  surrealdb = { version = "2.3", features = ["kv-rocksdb", "scripting"] }
+  surrealdb-core = { version = "2.3" }
+  ```
+- [ ] **1.2** Crear `oxide-memory/src/surreal_backend.rs`
+  - Implementar `MemoryBackend` trait para SurrealDB
+  - Modo embebido: `Surreal::new::<RocksDb>("./data/oxide.db")`
+  - Namespace: `oxide`, Database: `memory`
+- [ ] **1.3** Migración de esquema
+  - Definir tablas (system_metrics, process, threat, incident, agent_memory)
+  - Crear índices (timestamp, embeddings, graph edges)
+- [ ] **1.4** Feature flag `surrealdb` en `Cargo.toml`
+  ```toml
+  [features]
+  default = ["json"]
+  json = []
+  cognee = ["oxide-cognee-bridge"]  # mantener compatibilidad
+  surrealdb = ["dep:surrealdb", "dep:surrealdb-core"]
+  ```
+- [ ] **1.5** Tests unitarios de backend
+  - CRUD básico con transacciones ACID
+  - Graph queries (procesos padre-hijo)
+  - Vector search (similitud de embeddings)
+
+**Entregables**:
+- Backend funcional en modo embebido
+- Tests passing al 100%
+- Zero regresión en funcionalidad actual
+
+---
+
+#### **Fase 2: Recolección de Datos del Sistema (2-3 semanas)**
+
+**Objetivo**: Capturar telemetría del sistema y almacenarla en SurrealDB
+
+**Tareas**:
+- [ ] **2.1** Extender `oxide-guardian` para recolección avanzada
+  ```rust
+  // oxide-guardian/src/metrics_collector.rs
+  pub struct MetricsCollector {
+      surreal: Arc<SurrealBackend>,
+      interval: Duration,
+  }
+
+  impl MetricsCollector {
+      pub async fn collect_and_store(&self) -> Result<()> {
+          let metrics = self.gather_system_metrics().await?;
+          let processes = self.gather_process_tree().await?;
+
+          // Transacción ACID para consistencia
+          self.surreal.transaction(|txn| async {
+              txn.create("system_metrics", metrics).await?;
+              txn.upsert_process_graph(processes).await?;
+          }).await
+      }
+  }
+  ```
+- [ ] **2.2** Almacenar grafo de procesos
+  - Capturar árbol de procesos cada 5 segundos
+  - Crear edges `spawns` entre procesos padre-hijo
+  - Metadata: CPU%, memoria, I/O, sockets abiertos
+- [ ] **2.3** Telemetría de amenazas
+  - Integración con detecciones YARA
+  - Almacenar cadena de procesos afectados
+  - Severity scoring automático
+- [ ] **2.4** Histórico de incidencias
+  - Capturar errores de aplicaciones (event logs Windows)
+  - Stack traces de crashes
+  - Relaciones temporales entre incidentes relacionados
+- [ ] **2.5** Dashboard de monitoreo interno
+  - UI Svelte para visualizar datos recolectados
+  - Gráficos de series temporales (CPU, RAM)
+  - Vista de grafo de procesos interactivo
+
+**Entregables**:
+- Sistema recolectando 50+ tipos de métricas
+- DB creciendo ~1MB/día en uso normal
+- Queries de ejemplo funcionando
+
+---
+
+#### **Fase 3: Análisis Inteligente para Agentes (2-3 semanas)**
+
+**Objetivo**: LLMs consultan SurrealDB para diagnósticos contextuales
+
+**Tareas**:
+- [ ] **3.1** Queries SurrealQL para agentes
+  ```rust
+  // Ejemplo: "¿Qué procesos consumen más CPU en las últimas 2 horas?"
+  pub async fn query_high_cpu_processes(&self, hours: u32) -> Result<Vec<ProcessInfo>> {
+      self.surreal.query(r#"
+          SELECT
+              process.*,
+              math::mean(->spawns->process.cpu_percent) AS avg_child_cpu
+          FROM process
+          WHERE start_time > time::now() - type::duration({hours}h)
+          ORDER BY cpu_percent DESC
+          LIMIT 10
+      "#).bind(("hours", hours)).await
+  }
+
+  // Ejemplo: "¿Hay amenazas relacionadas con este proceso?"
+  pub async fn query_related_threats(&self, pid: i32) -> Result<Vec<ThreatInfo>> {
+      self.surreal.query(r#"
+          SELECT threat.*,
+                 array::len(threat.process_chain) AS chain_length
+          FROM threat
+          WHERE process_chain CONTAINS (SELECT * FROM process WHERE pid = {pid})
+          ORDER BY timestamp DESC
+      "#).bind(("pid", pid)).await
+  }
+  ```
+- [ ] **3.2** Vector search para análisis semántico
+  - Generar embeddings de logs con `text-embeddings-inference` (Rust)
+  - Almacenar en tabla `agent_memory` con índice HNSW
+  - Búsqueda KNN para "incidentes similares pasados"
+  ```rust
+  pub async fn find_similar_incidents(&self, query: &str, k: usize) -> Result<Vec<Incident>> {
+      let embedding = self.generate_embedding(query).await?;
+      self.surreal.query(r#"
+          SELECT incident.*,
+                 vector::similarity::cosine(embedding, {query_vec}) AS score
+          FROM agent_memory
+          WHERE agent_type = 'guardian'
+          ORDER BY score DESC
+          LIMIT {k}
+      "#).bind(("query_vec", embedding)).bind(("k", k)).await
+  }
+  ```
+- [ ] **3.3** Integración con Copilot Agent
+  - Tool/Function: `analyze_system_performance(time_range)`
+  - Tool/Function: `find_root_cause(error_message)`
+  - Tool/Function: `predict_resource_exhaustion()`
+- [ ] **3.4** Análisis temporal de patrones
+  - Detección de anomalías: CPU spikes recurrentes
+  - Correlación de eventos: "Cuando el proceso X crashea, Y siempre falla después"
+  - Predicciones: "RAM se agotará en ~4 horas a este ritmo"
+- [ ] **3.5** Exportar contexto para LLMs
+  - Serializar subgrafo relevante a JSON compacto
+  - Incluir en prompts de Gemini/Qwen/OpenAI
+  - Ejemplo: "Últimos 10 procesos high-CPU + amenazas + incidentes relacionados"
+
+**Entregables**:
+- 15+ queries pre-definidas para agentes
+- Vector search funcional con <50ms latencia
+- Agentes respondiendo preguntas complejas con datos históricos
+
+---
+
+#### **Fase 4: Optimización y Producción (1-2 semanas)**
+
+**Objetivo**: Preparar para release con performance óptima
+
+**Tareas**:
+- [ ] **4.1** Benchmarks de rendimiento
+  - Comparar latencia SurrealDB vs Cognee (HTTP)
+  - Medir throughput: inserciones/segundo
+  - Target: <5ms queries, >1000 inserts/sec
+- [ ] **4.2** Compresión y retención de datos
+  - Comprimir métricas >30 días con agregaciones horarias
+  - Purgar datos >6 meses automáticamente
+  - Backup incremental a archivos `.surreal`
+- [ ] **4.3** Modo distribuido (opcional)
+  - Configurar cluster TiKV para enterprise
+  - Multi-nodo para alta disponibilidad
+  - Sincronización cross-device
+- [ ] **4.4** Deprecar Cognee (breaking change)
+  - Migrar datos históricos JSON → SurrealDB
+  - Eliminar `oxide-cognee-bridge` del workspace
+  - Actualizar docs con ejemplos SurrealDB
+- [ ] **4.5** UI de administración
+  - Panel Svelte para explorar DB
+  - Editor de queries SurrealQL
+  - Exportar datos para debugging
+
+**Entregables**:
+- Performance 10x mejor que Cognee
+- Sistema listo para escalar a 100k+ registros/día
+- Documentación completa de migración
+
+---
+
+### 📊 Comparativa: Cognee vs SurrealDB
+
+| Característica | Cognee (Actual) | SurrealDB (Propuesto) | Mejora |
+|----------------|-----------------|----------------------|--------|
+| **Lenguaje** | Python (sidecar HTTP) | Rust (embebido) | 🟢 Sin overhead de red |
+| **Latencia típica** | 50-200ms (HTTP) | <5ms (in-process) | 🟢 **40x más rápido** |
+| **Uso de memoria** | ~150MB (Python + libs) | ~30MB (Rust nativo) | 🟢 **5x menos RAM** |
+| **Inicio en frío** | 3-5 segundos | <100ms | 🟢 **50x más rápido** |
+| **Modelo de datos** | Vector + JSON | Graph + Document + Vector + Time-series | 🟢 Multi-modelo |
+| **Queries complejas** | Limitado (REST API) | SurrealQL (SQL-like avanzado) | 🟢 Graph traversal nativo |
+| **Transacciones** | No ACID | ACID completas | 🟢 Consistencia garantizada |
+| **Búsqueda vectorial** | ChromaDB (externo) | HNSW integrado | 🟢 Sin deps externas |
+| **Escalabilidad** | Vertical (single node) | Horizontal (TiKV cluster) | 🟢 Distribuido |
+| **Tamaño despliegue** | +200MB (Python runtime) | +20MB (binary Rust) | 🟢 **10x más ligero** |
+| **Dependencias** | 50+ paquetes Python | 0 (autocontenido) | 🟢 Zero deps |
+
+### 🎯 Beneficios Clave
+
+1. **🚀 Performance Extrema**
+   - Queries graph en <5ms vs 50-200ms actual
+   - Embeddings search 10x más rápido (HNSW nativo)
+   - Sin latencia de red (in-process)
+
+2. **🧠 Análisis Contextual Avanzado**
+   ```surql
+   -- Ejemplo: "¿Qué procesos maliciosos infectaron otros procesos?"
+   SELECT process.name,
+          array::len(->spawns->process) AS children_spawned,
+          <-affects<-threat AS threats
+   FROM process
+   WHERE threats IS NOT EMPTY
+   ORDER BY children_spawned DESC;
+   ```
+
+3. **📈 Escalabilidad Ilimitada**
+   - Embedded: 1 dispositivo, millones de registros
+   - Cluster: sincronizar datos entre múltiples PCs
+   - Cloud: futuro SaaS con SurrealDB serverless
+
+4. **🔍 Búsquedas Híbridas**
+   ```rust
+   // Combinar graph + vector + full-text en una query
+   "Procesos relacionados con 'ransomware' semánticamente +
+    que spawnearon >5 hijos +
+    con CPU >80%"
+   ```
+
+5. **🎨 Developer Experience**
+   - SurrealQL es SQL familiar + graph extensions
+   - Rust SDK con macros ergonómicas
+   - Migraciones automáticas de esquema
+
+### 🚧 Riesgos y Mitigaciones
+
+| Riesgo | Probabilidad | Impacto | Mitigación |
+|--------|--------------|---------|-----------|
+| **Breaking changes en Cognee users** | Alta | Alto | Feature flag `cognee` mantener 1 versión más |
+| **Curva de aprendizaje SurrealQL** | Media | Medio | Queries pre-hechas + docs extensos |
+| **Bugs en SurrealDB (joven ecosystem)** | Media | Alto | Tests exhaustivos + versión LTS (2.3.x) |
+| **Migración de datos fallida** | Baja | Crítico | Script de migración con rollback |
+| **Performance no cumple target** | Baja | Alto | Benchmarks tempranos + optimización índices |
+
+### 📚 Recursos y Referencias
+
+- **SurrealDB Docs**: https://surrealdb.com/docs
+- **SurrealQL Tutorial**: https://surrealdb.com/learn
+- **Rust SDK**: https://docs.rs/surrealdb/latest/surrealdb/
+- **Graph Queries**: https://surrealdb.com/docs/surrealql/statements/relate
+- **Vector Search**: https://surrealdb.com/docs/surrealql/functions/vector
+- **Embedding Integration**: `text-embeddings-inference` (Rust) - https://github.com/huggingface/text-embeddings-inference
+
+### 🎉 Resultado Final
+
+Al completar la migración, Oxide Pilot tendrá:
+
+✅ **Sistema de Memoria 100% Rust**: Sin Python, sin HTTP, sin latencia
+✅ **Knowledge Graph del Sistema**: Relaciones complejas entre procesos, amenazas, incidentes
+✅ **Análisis Predictivo**: Patrones temporales para prevenir problemas
+✅ **Búsqueda Híbrida**: Graph + Vector + Full-text en una sola query
+✅ **Escalabilidad Enterprise**: De embedded a cluster distribuido
+✅ **Performance 40x Superior**: <5ms queries vs 50-200ms actual
+
+---
+
+## �📊 Estado del Proyecto
 
 **Estado Actual**: 🟢 Production Ready (92% Complete)
 **Fase**: Final Integration & Polish
@@ -452,8 +889,8 @@ Para más detalles, consulta el archivo [LICENSE](LICENSE) completo.
 
 #### Equipo Oxide Pilot
 
-- 📧 Email: [Pendiente]
-- 🐦 Twitter: [Pendiente]
+- 📧 Email: [iberi22@gmail.com]
+- 🐦 Twitter: [x_donberi]
 - 💬 Discord: [Pendiente]
 
 ---

@@ -46,14 +46,14 @@ $certPassword = Get-Content $passwordPath -Raw
 # Función para obtener la clave pública del repositorio
 function Get-RepoPublicKey {
     param($Owner, $Repo, $Token)
-    
+
     $uri = "https://api.github.com/repos/$Owner/$Repo/actions/secrets/public-key"
     $headers = @{
         "Authorization" = "Bearer $Token"
         "Accept" = "application/vnd.github+json"
         "X-GitHub-Api-Version" = "2022-11-28"
     }
-    
+
     try {
         $response = Invoke-RestMethod -Uri $uri -Headers $headers -Method Get
         return $response
@@ -66,19 +66,19 @@ function Get-RepoPublicKey {
 # Función para encriptar un secreto usando la clave pública
 function Encrypt-Secret {
     param($Secret, $PublicKey)
-    
+
     # Convertir la clave pública de base64
     $publicKeyBytes = [System.Convert]::FromBase64String($PublicKey)
-    
+
     # Convertir el secreto a bytes
     $secretBytes = [System.Text.Encoding]::UTF8.GetBytes($Secret)
-    
+
     # Usar libsodium para encriptar (esto requiere Sodium.Core NuGet package)
     # Para simplificar, usaremos un método alternativo con .NET
-    
+
     # Nota: GitHub requiere encriptación con libsodium sealed_box
     # Como PowerShell no tiene esto nativamente, usaremos un script Python inline
-    
+
     $pythonScript = @"
 import base64
 import sys
@@ -96,11 +96,11 @@ if __name__ == '__main__':
     secret = sys.argv[2]
     print(encrypt_secret(public_key, secret))
 "@
-    
+
     # Guardar script temporal
     $tempPy = [System.IO.Path]::GetTempFileName() + ".py"
     Set-Content -Path $tempPy -Value $pythonScript
-    
+
     try {
         # Ejecutar Python para encriptar
         $encrypted = python $tempPy $PublicKey $Secret
@@ -113,9 +113,9 @@ if __name__ == '__main__':
 # Función para crear o actualizar un secreto
 function Set-GitHubSecret {
     param($Owner, $Repo, $Token, $SecretName, $SecretValue, $KeyId, $PublicKey)
-    
+
     Write-Host "🔑 Configurando secreto: $SecretName" -ForegroundColor Yellow
-    
+
     # Encriptar el secreto
     try {
         $encryptedValue = Encrypt-Secret -Secret $SecretValue -PublicKey $PublicKey
@@ -125,7 +125,7 @@ function Set-GitHubSecret {
         Write-Host "   https://github.com/$Owner/$Repo/settings/secrets/actions" -ForegroundColor Cyan
         return $false
     }
-    
+
     $uri = "https://api.github.com/repos/$Owner/$Repo/actions/secrets/$SecretName"
     $headers = @{
         "Authorization" = "Bearer $Token"
@@ -133,12 +133,12 @@ function Set-GitHubSecret {
         "X-GitHub-Api-Version" = "2022-11-28"
         "Content-Type" = "application/json"
     }
-    
+
     $body = @{
         encrypted_value = $encryptedValue
         key_id = $KeyId
     } | ConvertTo-Json
-    
+
     try {
         Invoke-RestMethod -Uri $uri -Headers $headers -Method Put -Body $body | Out-Null
         Write-Host "   ✅ Secreto configurado exitosamente" -ForegroundColor Green
@@ -174,7 +174,7 @@ try {
     $hasPyNaCl = $false
     Write-Host "⚠️  PyNaCl no está instalado. Instalando..." -ForegroundColor Yellow
     pip install PyNaCl 2>$null
-    
+
     # Verificar nuevamente
     try {
         python -c "import nacl" 2>$null
@@ -210,7 +210,7 @@ foreach ($secret in $secrets) {
     $result = Set-GitHubSecret -Owner $Owner -Repo $Repo -Token $Token `
         -SecretName $secret.Name -SecretValue $secret.Value `
         -KeyId $publicKeyInfo.key_id -PublicKey $publicKeyInfo.key
-    
+
     if ($result) {
         $successCount++
     }

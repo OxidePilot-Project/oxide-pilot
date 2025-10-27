@@ -36,14 +36,14 @@ if (-not $GitHubToken) {
     Write-Host "3. Selecciona permisos: repo, workflow" -ForegroundColor White
     Write-Host "4. Copia el token" -ForegroundColor White
     Write-Host ""
-    
+
     $token = Read-Host "Pega tu GitHub Token aquí"
-    
+
     if (-not $token) {
         Write-Host "❌ Token no proporcionado. Abortando." -ForegroundColor Red
         exit 1
     }
-    
+
     $GitHubToken = $token
 }
 
@@ -59,10 +59,10 @@ $passwordPath = Join-Path $certPath "password.txt"
 if (-not (Test-Path $pfxPath)) {
     Write-Host "⚠️  No se encontró certificado PFX" -ForegroundColor Yellow
     Write-Host "   Generando nuevo certificado..." -ForegroundColor Cyan
-    
+
     # Ejecutar script de generación de certificados
     & .\scripts\setup-code-signing.ps1
-    
+
     if (-not $?) {
         Write-Host "❌ Error al generar certificado" -ForegroundColor Red
         exit 1
@@ -80,7 +80,7 @@ $env:GITHUB_TOKEN = $GitHubToken
 
 try {
     & .\scripts\setup-github-secrets.ps1
-    
+
     if (-not $?) {
         Write-Host "⚠️  Hubo un problema al configurar los secretos" -ForegroundColor Yellow
         Write-Host "   Puedes configurarlos manualmente en:" -ForegroundColor Yellow
@@ -106,16 +106,16 @@ $headers = @{
 
 try {
     $secrets = Invoke-RestMethod -Uri "https://api.github.com/repos/iberi22/oxide-pilot/actions/secrets" -Headers $headers -Method Get
-    
+
     Write-Host ""
     Write-Host "Secretos configurados:" -ForegroundColor Green
     foreach ($secret in $secrets.secrets) {
         Write-Host "  ✓ $($secret.name)" -ForegroundColor Green
     }
-    
+
     $expectedSecrets = @("SIGN_PFX_BASE64", "SIGN_PFX_PASSWORD", "SIGN_TS_URL")
     $missingSecrets = $expectedSecrets | Where-Object { $_ -notin $secrets.secrets.name }
-    
+
     if ($missingSecrets.Count -gt 0) {
         Write-Host ""
         Write-Host "⚠️  Secretos faltantes:" -ForegroundColor Yellow
@@ -141,9 +141,9 @@ if (Test-Path $passwordPath) {
     Write-Host "⚠️  IMPORTANTE: Guarda esta contraseña en un lugar seguro" -ForegroundColor Yellow
     Write-Host "   Contraseña del certificado: $password" -ForegroundColor White
     Write-Host ""
-    
+
     $remove = Read-Host "¿Eliminar archivo password.txt? (y/N)"
-    
+
     if ($remove -eq "y" -or $remove -eq "Y") {
         Remove-Item $passwordPath -Force
         Write-Host "✓ Archivo eliminado" -ForegroundColor Green
