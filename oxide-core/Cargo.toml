@@ -30,3 +30,10 @@ lru = "0.12"
 [features]
 default = []
 tauri-integration = ["tauri"]
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "performance_benchmarks"
+harness = false

@@ -1,10 +1,10 @@
 use crate::errors::CopilotError;
-use crate::llm_orchestrator::{CollaborativeLLM, CollaborativeContext, LLMRole};
+use crate::llm_orchestrator::{CollaborativeContext, CollaborativeLLM, LLMRole};
 use async_trait::async_trait;
 use log::info;
 use oxide_core::gemini_auth::GeminiAuth;
-use oxide_core::qwen_auth::QwenAuth;
 use oxide_core::openai_client::{self, ChatMessage};
+use oxide_core::qwen_auth::QwenAuth;
 
 /// Gemini implementation for collaborative tasks
 pub struct CollaborativeGemini {
@@ -27,7 +27,7 @@ impl CollaborativeGemini {
             // Try to initialize from environment
             if let Err(e) = self.auth.init_from_env().await {
                 return Err(CopilotError::Authentication(format!(
-                    "Gemini authentication failed: {}", e
+                    "Gemini authentication failed: {e}"
                 )));
             }
         }
@@ -67,7 +67,7 @@ impl CollaborativeLLM for CollaborativeGemini {
         self.auth
             .send_message(&enhanced_prompt, self.model.as_deref())
             .await
-            .map_err(|e| CopilotError::AIProvider(format!("Gemini error: {}", e)))
+            .map_err(|e| CopilotError::AIProvider(format!("Gemini error: {e}")))
     }
 
     async fn analyze_with_role(
@@ -89,18 +89,18 @@ impl CollaborativeLLM for CollaborativeGemini {
 
         let full_prompt = format!(
             "{}\n\n{}\n\nTask: {}\nUser Input: {}",
-            system_prompt,
-            role_specific_prompt,
-            task,
-            context.user_input
+            system_prompt, role_specific_prompt, task, context.user_input
         );
 
-        info!("Gemini ({}): Analyzing with role-specific prompt", self.role());
+        info!(
+            "Gemini ({}): Analyzing with role-specific prompt",
+            self.role()
+        );
 
         self.auth
             .send_message(&full_prompt, self.model.as_deref())
             .await
-            .map_err(|e| CopilotError::AIProvider(format!("Gemini analysis error: {}", e)))
+            .map_err(|e| CopilotError::AIProvider(format!("Gemini analysis error: {e}")))
     }
 }
 
@@ -126,13 +126,13 @@ impl CollaborativeQwen {
             Ok(status) => {
                 if !status.contains("authenticated") {
                     return Err(CopilotError::Authentication(
-                        "Qwen not authenticated. Please complete OAuth2 device flow.".to_string()
+                        "Qwen not authenticated. Please complete OAuth2 device flow.".to_string(),
                     ));
                 }
             }
             Err(e) => {
                 return Err(CopilotError::Authentication(format!(
-                    "Qwen authentication check failed: {}", e
+                    "Qwen authentication check failed: {e}"
                 )));
             }
         }
@@ -143,7 +143,9 @@ impl CollaborativeQwen {
         // TODO: Implement Qwen message sending
         // For now, we'll return a placeholder
         let _ = prompt;
-        Err(CopilotError::AIProvider("Qwen send_message not yet implemented".to_string()))
+        Err(CopilotError::AIProvider(
+            "Qwen send_message not yet implemented".to_string(),
+        ))
     }
 }
 
@@ -198,13 +200,13 @@ impl CollaborativeLLM for CollaborativeQwen {
 
         let full_prompt = format!(
             "{}\n\n{}\n\nTask: {}\nUser Input: {}",
-            system_prompt,
-            role_specific_prompt,
-            task,
-            context.user_input
+            system_prompt, role_specific_prompt, task, context.user_input
         );
 
-        info!("Qwen ({}): Analyzing with role-specific prompt", self.role());
+        info!(
+            "Qwen ({}): Analyzing with role-specific prompt",
+            self.role()
+        );
 
         self.send_message(&full_prompt).await
     }
@@ -229,10 +231,11 @@ impl CollaborativeOpenAI {
         match oxide_core::openai_key::get_api_key().await {
             Ok(Some(_)) => Ok(()),
             Ok(None) => Err(CopilotError::Authentication(
-                "OpenAI API key not configured. Please set OPENAI_API_KEY or configure via UI.".to_string()
+                "OpenAI API key not configured. Please set OPENAI_API_KEY or configure via UI."
+                    .to_string(),
             )),
             Err(e) => Err(CopilotError::Authentication(format!(
-                "Failed to check OpenAI API key: {}", e
+                "Failed to check OpenAI API key: {e}"
             ))),
         }
     }
@@ -265,7 +268,11 @@ impl CollaborativeLLM for CollaborativeOpenAI {
             serde_json::to_string_pretty(&context.constraints).unwrap_or_default()
         );
 
-        info!("OpenAI ({}): Generating response with model {}", self.role(), self.model);
+        info!(
+            "OpenAI ({}): Generating response with model {}",
+            self.role(),
+            self.model
+        );
 
         let messages = vec![
             ChatMessage {
@@ -280,7 +287,7 @@ impl CollaborativeLLM for CollaborativeOpenAI {
 
         openai_client::chat_completion(&self.model, messages, Some(0.7), Some(2000))
             .await
-            .map_err(|e| CopilotError::AIProvider(format!("OpenAI error: {}", e)))
+            .map_err(|e| CopilotError::AIProvider(format!("OpenAI error: {e}")))
     }
 
     async fn analyze_with_role(
@@ -302,12 +309,13 @@ impl CollaborativeLLM for CollaborativeOpenAI {
 
         let full_prompt = format!(
             "{}\n\nTask: {}\nUser Input: {}",
-            role_specific_prompt,
-            task,
-            context.user_input
+            role_specific_prompt, task, context.user_input
         );
 
-        info!("OpenAI ({}): Analyzing with role-specific prompt", self.role());
+        info!(
+            "OpenAI ({}): Analyzing with role-specific prompt",
+            self.role()
+        );
 
         let messages = vec![
             ChatMessage {
@@ -322,7 +330,7 @@ impl CollaborativeLLM for CollaborativeOpenAI {
 
         openai_client::chat_completion(&self.model, messages, Some(0.7), Some(2000))
             .await
-            .map_err(|e| CopilotError::AIProvider(format!("OpenAI analysis error: {}", e)))
+            .map_err(|e| CopilotError::AIProvider(format!("OpenAI analysis error: {e}")))
     }
 }
 

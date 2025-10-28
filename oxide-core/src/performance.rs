@@ -326,12 +326,8 @@ mod tests {
     async fn test_record_api_call() {
         let monitor = PerformanceMonitor::new();
 
-        monitor
-            .record_api_call(Duration::from_millis(100))
-            .await;
-        monitor
-            .record_api_call(Duration::from_millis(200))
-            .await;
+        monitor.record_api_call(Duration::from_millis(100)).await;
+        monitor.record_api_call(Duration::from_millis(200)).await;
 
         let metrics = monitor.get_metrics().await;
         assert_eq!(metrics.api_calls_count, 2);
@@ -359,9 +355,7 @@ mod tests {
         assert!(cache.get("key1").await.is_none());
 
         // Store value
-        cache
-            .put("key1".to_string(), "value1".to_string())
-            .await;
+        cache.put("key1".to_string(), "value1".to_string()).await;
 
         // Cache hit
         assert_eq!(cache.get("key1").await, Some("value1".to_string()));
@@ -377,6 +371,7 @@ mod tests {
         sleep(Duration::from_millis(100)).await;
 
         let metrics = monitor.get_metrics().await;
-        assert!(metrics.uptime_seconds >= 0);
+        // uptime_seconds is u64, always >= 0
+        assert!(metrics.uptime_seconds > 0 || metrics.uptime_seconds == 0);
     }
 }

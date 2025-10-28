@@ -1,0 +1,29 @@
+{
+  "name": "oxide-pilot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Oxide Pilot - RPA Automation Platform",
+  "scripts": {
+    "prepare": "husky install",
+    "precommit": "node scripts/pre-commit.mjs",
+    "validate": "node scripts/validate-commit.mjs",
+    "format": "cargo fmt --all",
+    "lint": "cargo clippy --workspace --features surrealdb-metrics -- -D warnings",
+    "test": "cargo test --workspace --features surrealdb-metrics",
+    "test:unit": "cargo test --lib --workspace --features surrealdb-metrics",
+    "test:e2e": "cargo test --test basic_flow --features surrealdb-metrics",
+    "build": "cargo build --release --features surrealdb-metrics",
+    "audit": "cargo audit",
+    "frontend:install": "cd src-frontend && npm ci",
+    "frontend:build": "cd src-frontend && npm run build",
+    "frontend:lint": "cd src-frontend && npm run check"
+  },
+  "devDependencies": {
+    "husky": "^9.0.11",
+    "chalk": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}

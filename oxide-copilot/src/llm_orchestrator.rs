@@ -101,12 +101,17 @@ impl LLMOrchestrator {
     }
 
     /// Add an LLM provider to the orchestrator
-    pub fn add_provider(&mut self, name: String, provider: Box<dyn CollaborativeLLM>, config: LLMConfig) {
+    pub fn add_provider(
+        &mut self,
+        name: String,
+        provider: Box<dyn CollaborativeLLM>,
+        config: LLMConfig,
+    ) {
         self.providers.insert(name.clone(), provider);
         self.configs.insert(name, config);
     }
 
-    /// Set the function registry for tool calling
+    // Set the function registry for tool calling
     // TODO: Re-enable when FunctionRegistry is available
     // pub fn set_function_registry(&mut self, registry: FunctionRegistry) {
     //     self.function_registry = Some(registry);
@@ -118,19 +123,34 @@ impl LLMOrchestrator {
         task: &str,
         context: CollaborativeContext,
     ) -> Result<CollaborativeResult, CopilotError> {
-        info!("Starting collaborative task: {}", task);
+        info!("Starting collaborative task: {task}");
 
         // Step 1: Coordinator analyzes the task and creates execution plan
-        let coordinator_response = self.execute_coordinator_phase(&task, &context).await?;
+        let coordinator_response = self.execute_coordinator_phase(task, &context).await?;
 
         // Step 2: Specialized LLMs provide their analysis
-        let specialized_responses = self.execute_specialized_phase(&task, &context, &coordinator_response).await?;
+        let specialized_responses = self
+            .execute_specialized_phase(task, &context, &coordinator_response)
+            .await?;
 
         // Step 3: Validator reviews all responses
-        let validation_result = self.execute_validation_phase(&task, &context, &coordinator_response, &specialized_responses).await?;
+        let validation_result = self
+            .execute_validation_phase(
+                task,
+                &context,
+                &coordinator_response,
+                &specialized_responses,
+            )
+            .await?;
 
         // Step 4: Generate final consensus
-        let consensus = self.generate_consensus(&coordinator_response, &specialized_responses, &validation_result).await?;
+        let consensus = self
+            .generate_consensus(
+                &coordinator_response,
+                &specialized_responses,
+                &validation_result,
+            )
+            .await?;
 
         Ok(consensus)
     }
@@ -173,7 +193,8 @@ impl LLMOrchestrator {
         let mut responses = HashMap::new();
 
         // Get all specialized providers (excluding coordinator)
-        let specialized_providers: Vec<_> = self.providers
+        let specialized_providers: Vec<_> = self
+            .providers
             .iter()
             .filter(|(_, provider)| provider.role() != LLMRole::Coordinator)
             .collect();
@@ -194,10 +215,13 @@ impl LLMOrchestrator {
                     &coordinator_response_clone,
                 );
 
-                match provider.analyze_with_role(&task_clone, &context_clone, &role_prompt).await {
+                match provider
+                    .analyze_with_role(&task_clone, &context_clone, &role_prompt)
+                    .await
+                {
                     Ok(response) => Ok((provider_name, response)),
                     Err(e) => {
-                        warn!("Specialized provider {} failed: {}", name, e);
+                        warn!("Specialized provider {name} failed: {e}");
                         Err(e)
                     }
                 }
@@ -213,7 +237,7 @@ impl LLMOrchestrator {
                     responses.insert(name, response);
                 }
                 Err(e) => {
-                    warn!("Specialized analysis failed: {}", e);
+                    warn!("Specialized analysis failed: {e}");
                 }
             }
         }
@@ -277,11 +301,17 @@ impl LLMOrchestrator {
     }
 
     /// Find provider by role
-    fn find_provider_by_role(&self, role: LLMRole) -> Result<&Box<dyn CollaborativeLLM>, CopilotError> {
+    fn find_provider_by_role(
+        &self,
+        role: LLMRole,
+    ) -> Result<&dyn CollaborativeLLM, CopilotError> {
         self.providers
             .values()
             .find(|provider| provider.role() == role)
-            .ok_or_else(|| CopilotError::AIProvider(format!("No provider found for role: {:?}", role)))
+            .map(|b| &**b)
+            .ok_or_else(|| {
+                CopilotError::AIProvider(format!("No provider found for role: {role:?}"))
+            })
     }
 
     /// Generate role-specific prompt
@@ -356,12 +386,14 @@ impl LLMOrchestrator {
         // Simple consensus calculation based on response length similarity
         let lengths: Vec<usize> = responses.values().map(|r| r.len()).collect();
         let avg_length = lengths.iter().sum::<usize>() as f32 / lengths.len() as f32;
-        let variance = lengths.iter()
+        let variance = lengths
+            .iter()
             .map(|&len| (len as f32 - avg_length).powi(2))
-            .sum::<f32>() / lengths.len() as f32;
+            .sum::<f32>()
+            / lengths.len() as f32;
 
         // Convert variance to consensus score (lower variance = higher consensus)
-        (1.0 - (variance / avg_length.powi(2))).max(0.0).min(1.0)
+        (1.0 - (variance / avg_length.powi(2))).clamp(0.0, 1.0)
     }
 
     /// Extract confidence score from validation result
@@ -372,7 +404,7 @@ impl LLMOrchestrator {
             .captures(validation)
         {
             if let Ok(score) = score_match[1].parse::<f32>() {
-                return (score / 100.0).max(0.0).min(1.0);
+                return (score / 100.0).clamp(0.0, 1.0);
             }
         }
 

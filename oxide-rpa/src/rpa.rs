@@ -49,7 +49,11 @@ impl MouseController {
 
     pub fn scroll(&self, delta_x: i32, delta_y: i32) {
         info!("Scrolling mouse by ({delta_x}, {delta_y})");
-        simulate(&EventType::Wheel { delta_x: delta_x.into(), delta_y: delta_y.into() }).unwrap();
+        simulate(&EventType::Wheel {
+            delta_x: delta_x.into(),
+            delta_y: delta_y.into(),
+        })
+        .unwrap();
     }
 }
 
@@ -135,7 +139,7 @@ impl KeyboardController {
                 ' ' => Key::Space,
                 '.' => Key::Dot,
                 ',' => Key::Comma,
-                '!' => Key::Num1, // Fallback for special characters
+                '!' => Key::Num1,  // Fallback for special characters
                 '?' => Key::Slash, // Fallback for special characters
                 _ => {
                     error!("Unsupported character for typing: {char_code}");
@@ -178,8 +182,9 @@ impl ScreenCapture {
         if let Some(screen) = screens.first() {
             let image = screen.capture().map_err(|e| e.to_string())?;
             // Convert screenshots::Image to image::ImageBuffer
-            let rgba_image = ImageBuffer::from_raw(image.width(), image.height(), image.rgba().to_vec())
-                .ok_or("Failed to convert image format")?;
+            let rgba_image =
+                ImageBuffer::from_raw(image.width(), image.height(), image.rgba().to_vec())
+                    .ok_or("Failed to convert image format")?;
             Ok(rgba_image)
         } else {
             Err("No screens found.".to_string())
@@ -193,17 +198,21 @@ impl ScreenCapture {
         width: u32,
         height: u32,
     ) -> Result<ImageBuffer<Rgba<u8>, Vec<u8>>, String> {
-        info!(
-            "Capturing screen area: x={x}, y={y}, width={width}, height={height}"
-        );
+        info!("Capturing screen area: x={x}, y={y}, width={width}, height={height}");
         let screens = Screen::all().map_err(|e| e.to_string())?;
         if let Some(screen) = screens.first() {
             let image = screen
-                .capture_area(x.try_into().unwrap_or(0), y.try_into().unwrap_or(0), width, height)
+                .capture_area(
+                    x.try_into().unwrap_or(0),
+                    y.try_into().unwrap_or(0),
+                    width,
+                    height,
+                )
                 .map_err(|e| e.to_string())?;
             // Convert screenshots::Image to image::ImageBuffer
-            let rgba_image = ImageBuffer::from_raw(image.width(), image.height(), image.rgba().to_vec())
-                .ok_or("Failed to convert image format")?;
+            let rgba_image =
+                ImageBuffer::from_raw(image.width(), image.height(), image.rgba().to_vec())
+                    .ok_or("Failed to convert image format")?;
             Ok(rgba_image)
         } else {
             Err("No screens found.".to_string())

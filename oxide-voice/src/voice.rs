@@ -1,6 +1,6 @@
 use crate::audio::{AudioManager, VoiceActivityDetector};
 use async_trait::async_trait;
-use base64::{Engine as _, engine::general_purpose};
+use base64::{engine::general_purpose, Engine as _};
 use log::{info, warn};
 use oxide_core::google_auth::get_access_token;
 use reqwest::Client;
@@ -243,7 +243,8 @@ impl TTSProvider for GoogleTTSProvider {
             .map_err(|e| format!("Failed to parse response: {e}"))?;
 
         if let Some(audio_content) = response_json["audioContent"].as_str() {
-            let audio_data = general_purpose::STANDARD.decode(audio_content)
+            let audio_data = general_purpose::STANDARD
+                .decode(audio_content)
                 .map_err(|e| format!("Failed to decode audio: {e}"))?;
 
             info!("Speech synthesis successful, {} bytes", audio_data.len());
@@ -305,14 +306,23 @@ impl VoiceProcessor {
     }
 
     pub async fn get_input_devices(&self) -> Vec<String> {
-        self.wake_word_detector.audio_manager.list_input_devices().await
+        self.wake_word_detector
+            .audio_manager
+            .list_input_devices()
+            .await
     }
 
     pub async fn get_output_devices(&self) -> Vec<String> {
-        self.wake_word_detector.audio_manager.list_output_devices().await
+        self.wake_word_detector
+            .audio_manager
+            .list_output_devices()
+            .await
     }
 
     pub async fn get_input_volume(&self) -> Result<f32, String> {
-        self.wake_word_detector.audio_manager.get_input_volume().await
+        self.wake_word_detector
+            .audio_manager
+            .get_input_volume()
+            .await
     }
 }

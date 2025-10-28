@@ -96,18 +96,17 @@ impl SecureRPAController {
 
         // Check if confirmation is needed
         if self.policy.needs_confirmation(permission) {
-            let request = ConfirmationRequest::new(
-                action.to_string(),
-                permission,
-                description.to_string(),
-            );
+            let request =
+                ConfirmationRequest::new(action.to_string(), permission, description.to_string());
 
             let response = self.confirmation.request_confirmation(request).await?;
 
             if !response.approved {
                 warn!("User denied action: {action}");
                 return Err(SecureRPAError::ConfirmationDenied(
-                    response.reason.unwrap_or_else(|| "No reason provided".to_string()),
+                    response
+                        .reason
+                        .unwrap_or_else(|| "No reason provided".to_string()),
                 ));
             }
 
@@ -251,7 +250,9 @@ impl SecureRPAController {
     }
 
     /// Capture screen with security checks
-    pub async fn capture_screen(&self) -> Result<image::ImageBuffer<image::Rgba<u8>, Vec<u8>>, SecureRPAError> {
+    pub async fn capture_screen(
+        &self,
+    ) -> Result<image::ImageBuffer<image::Rgba<u8>, Vec<u8>>, SecureRPAError> {
         let action = "capture_screen".to_string();
         let confirmed = self
             .check_permission_and_confirm(
@@ -286,7 +287,10 @@ impl SecureRPAController {
                 info!("Mouse position restored to ({from_x}, {from_y})");
             }
             _ => {
-                warn!("Rollback not implemented for action type: {:?}", action.action_type);
+                warn!(
+                    "Rollback not implemented for action type: {:?}",
+                    action.action_type
+                );
             }
         }
 

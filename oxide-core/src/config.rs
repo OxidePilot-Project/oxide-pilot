@@ -57,19 +57,29 @@ impl GuardianConfig {
             return Err("monitor_interval_secs must be greater than 0".to_string());
         }
         if let Some(mb) = self.max_file_size_mb {
-            if mb == 0 { return Err("max_file_size_mb must be greater than 0".to_string()); }
+            if mb == 0 {
+                return Err("max_file_size_mb must be greater than 0".to_string());
+            }
         }
         if let Some(ttl) = self.vt_cache_ttl_secs {
-            if ttl == 0 { return Err("vt_cache_ttl_secs must be greater than 0".to_string()); }
+            if ttl == 0 {
+                return Err("vt_cache_ttl_secs must be greater than 0".to_string());
+            }
         }
         if let Some(max) = self.vt_cache_max_entries {
-            if max == 0 { return Err("vt_cache_max_entries must be greater than 0".to_string()); }
+            if max == 0 {
+                return Err("vt_cache_max_entries must be greater than 0".to_string());
+            }
         }
         if let Some(w) = self.folder_scan_max_workers {
-            if w == 0 { return Err("folder_scan_max_workers must be greater than 0".to_string()); }
+            if w == 0 {
+                return Err("folder_scan_max_workers must be greater than 0".to_string());
+            }
         }
         if let Some(d) = self.folder_scan_max_depth {
-            if d == 0 { return Err("folder_scan_max_depth must be greater than 0".to_string()); }
+            if d == 0 {
+                return Err("folder_scan_max_depth must be greater than 0".to_string());
+            }
         }
         Ok(())
     }
@@ -169,7 +179,10 @@ impl AIProvidersConfig {
                 at_least_one_provider = true;
             }
             if !at_least_one_provider {
-                return Err("At least one AI provider must be configured when copilot is enabled".to_string());
+                return Err(
+                    "At least one AI provider must be configured when copilot is enabled"
+                        .to_string(),
+                );
             }
         }
         Ok(())

@@ -7,7 +7,10 @@ pub enum PermissionError {
     #[error("Action not permitted: {0}")]
     NotPermitted(String),
     #[error("Permission denied: {action} requires {permission:?}")]
-    Denied { action: String, permission: Permission },
+    Denied {
+        action: String,
+        permission: Permission,
+    },
     #[error("Invalid permission configuration: {0}")]
     InvalidConfig(String),
 }

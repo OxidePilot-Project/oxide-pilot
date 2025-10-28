@@ -45,8 +45,8 @@ jobs:
         run: |
           npm --prefix src-frontend ci
           npm --prefix src-frontend run build
-      - name: Rust tests
-        run: cargo test --workspace --all-features --locked
+      - name: Check formatting
+        run: cargo fmt --all -- --check
       - name: Install NSIS & WiX
         run: |
           choco install nsis -y

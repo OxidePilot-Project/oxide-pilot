@@ -1,15 +1,15 @@
-use oauth2::{
-    AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, PkceCodeChallenge,
-    RedirectUrl, Scope, TokenResponse, TokenUrl,
-};
 use oauth2::basic::BasicClient;
 use oauth2::reqwest::async_http_client;
+use oauth2::{
+    AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, PkceCodeChallenge, RedirectUrl,
+    Scope, TokenResponse, TokenUrl,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
-use tiny_http::{Server, Response, Header};
+use tiny_http::{Header, Response, Server};
 use url::Url;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,7 +39,9 @@ impl GoogleOAuthManager {
             ClientId::new(config.client_id.clone()),
             Some(ClientSecret::new(config.client_secret.clone())),
             AuthUrl::new("https://accounts.google.com/o/oauth2/v2/auth".to_string())?,
-            Some(TokenUrl::new("https://oauth2.googleapis.com/token".to_string())?),
+            Some(TokenUrl::new(
+                "https://oauth2.googleapis.com/token".to_string(),
+            )?),
         )
         .set_redirect_uri(RedirectUrl::new(config.redirect_uri.clone())?);
 
@@ -54,7 +56,9 @@ impl GoogleOAuthManager {
         let (auth_url, _csrf_token) = self
             .client
             .authorize_url(CsrfToken::new_random)
-            .add_scope(Scope::new("https://www.googleapis.com/auth/generative-language".to_string()))
+            .add_scope(Scope::new(
+                "https://www.googleapis.com/auth/generative-language".to_string(),
+            ))
             .add_scope(Scope::new("openid".to_string()))
             .add_scope(Scope::new("email".to_string()))
             .add_scope(Scope::new("profile".to_string()))
@@ -97,10 +101,8 @@ impl GoogleOAuthManager {
                     Err(_) => continue,
                 };
 
-                let query_params: HashMap<String, String> = parsed_url
-                    .query_pairs()
-                    .into_owned()
-                    .collect();
+                let query_params: HashMap<String, String> =
+                    parsed_url.query_pairs().into_owned().collect();
 
                 if let Some(code) = query_params.get("code") {
                     let success_html = r#"
@@ -127,8 +129,9 @@ impl GoogleOAuthManager {
                         </html>
                     "#;
 
-                    let response = Response::from_string(success_html)
-                        .with_header(Header::from_bytes(&b"Content-Type"[..], &b"text/html"[..]).unwrap());
+                    let response = Response::from_string(success_html).with_header(
+                        Header::from_bytes(&b"Content-Type"[..], &b"text/html"[..]).unwrap(),
+                    );
 
                     let _ = request.respond(response);
                     let _ = tx.send(code.clone());
@@ -136,7 +139,8 @@ impl GoogleOAuthManager {
                 }
 
                 if let Some(error) = query_params.get("error") {
-                    let error_html = format!(r#"
+                    let error_html = format!(
+                        r#"
                         <!DOCTYPE html>
                         <html>
                         <head>
@@ -158,10 +162,12 @@ impl GoogleOAuthManager {
                             </div>
                         </body>
                         </html>
-                    "#);
+                    "#
+                    );
 
-                    let response = Response::from_string(error_html)
-                        .with_header(Header::from_bytes(&b"Content-Type"[..], &b"text/html"[..]).unwrap());
+                    let response = Response::from_string(error_html).with_header(
+                        Header::from_bytes(&b"Content-Type"[..], &b"text/html"[..]).unwrap(),
+                    );
 
                     let _ = request.respond(response);
                     let _ = tx.send(format!("ERROR:{error}"));
@@ -173,8 +179,8 @@ impl GoogleOAuthManager {
         // Wait for callback with timeout
         let auth_code = match rx.recv_timeout(Duration::from_secs(300)) {
             Ok(code) => {
-                if code.starts_with("ERROR:") {
-                    return Err(format!("Authentication failed: {}", &code[6..]).into());
+                if let Some(stripped) = code.strip_prefix("ERROR:") {
+                    return Err(format!("Authentication failed: {stripped}").into());
                 }
                 code
             }
@@ -204,7 +210,10 @@ impl GoogleOAuthManager {
         Ok(oauth_token)
     }
 
-    pub async fn refresh_token(&self, refresh_token: &str) -> Result<OAuthToken, Box<dyn std::error::Error>> {
+    pub async fn refresh_token(
+        &self,
+        refresh_token: &str,
+    ) -> Result<OAuthToken, Box<dyn std::error::Error>> {
         let token_result = self
             .client
             .exchange_refresh_token(&oauth2::RefreshToken::new(refresh_token.to_string()))

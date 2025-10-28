@@ -1,6 +1,6 @@
-pub mod rpa;
-pub mod permissions;
 pub mod audit;
-pub mod rollback;
 pub mod confirmation;
+pub mod permissions;
+pub mod rollback;
+pub mod rpa;
 pub mod secure_rpa;

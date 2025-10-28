@@ -1,4 +1,4 @@
-use log::{info, error};
+use log::{error, info};
 
 pub struct AuthManager {
     // Placeholder for Firebase Authentication client

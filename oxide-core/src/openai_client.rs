@@ -1,8 +1,8 @@
+use crate::openai_key;
+use log::{error, info};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use log::{info, error};
 use thiserror::Error;
-use crate::openai_key;
 
 #[derive(Error, Debug)]
 pub enum OpenAIClientError {
@@ -102,7 +102,7 @@ mod tests {
     fn parse_sample_chat_response() {
         let sample = r#"{
           "choices": [
-            { "message": { "role": "assistant", "content": "{\\"risk_score\\": 50, \\"confidence\\\": 0.8}" } }
+            { "message": { "role": "assistant", "content": "{\"risk_score\": 50, \"confidence\": 0.8}" } }
           ]
         }"#;
 

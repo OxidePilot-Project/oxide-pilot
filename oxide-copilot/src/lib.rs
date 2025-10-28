@@ -1,9 +1,9 @@
 pub mod ai;
-pub mod copilot;
-pub mod oauth;
 pub mod auth_manager;
+pub mod collaborative_providers;
+pub mod copilot;
 pub mod errors;
 pub mod functions;
 pub mod gemini_api;
 pub mod llm_orchestrator;
-pub mod collaborative_providers;
+pub mod oauth;

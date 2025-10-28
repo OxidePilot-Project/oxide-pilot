@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+echo "🚀 Running pre-push validation..."
+echo ""
+
+# Run full test suite before push
+echo "▶ Running full test suite..."
+cargo test --workspace --features surrealdb-metrics || exit 1
+
+echo ""
+echo "✅ All pre-push checks passed!"

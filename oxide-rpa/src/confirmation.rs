@@ -97,7 +97,9 @@ impl ConfirmationManager {
 
     /// Add a permission to auto-approve list
     pub fn add_auto_approve(&self, permission: Permission) -> Result<(), ConfirmationError> {
-        let mut auto_approve = self.auto_approve.lock()
+        let mut auto_approve = self
+            .auto_approve
+            .lock()
             .map_err(|e| ConfirmationError::SystemError(e.to_string()))?;
         if !auto_approve.contains(&permission) {
             auto_approve.push(permission);
@@ -107,7 +109,9 @@ impl ConfirmationManager {
 
     /// Remove a permission from auto-approve list
     pub fn remove_auto_approve(&self, permission: Permission) -> Result<(), ConfirmationError> {
-        let mut auto_approve = self.auto_approve.lock()
+        let mut auto_approve = self
+            .auto_approve
+            .lock()
             .map_err(|e| ConfirmationError::SystemError(e.to_string()))?;
         auto_approve.retain(|p| *p != permission);
         Ok(())
@@ -115,7 +119,9 @@ impl ConfirmationManager {
 
     /// Check if a permission is auto-approved
     pub fn is_auto_approved(&self, permission: Permission) -> Result<bool, ConfirmationError> {
-        let auto_approve = self.auto_approve.lock()
+        let auto_approve = self
+            .auto_approve
+            .lock()
             .map_err(|e| ConfirmationError::SystemError(e.to_string()))?;
         Ok(auto_approve.contains(&permission))
     }
@@ -140,7 +146,9 @@ impl ConfirmationManager {
 
         // Add to pending
         {
-            let mut pending = self.pending.lock()
+            let mut pending = self
+                .pending
+                .lock()
                 .map_err(|e| ConfirmationError::SystemError(e.to_string()))?;
             pending.push(PendingConfirmation {
                 request: request.clone(),
@@ -167,10 +175,14 @@ impl ConfirmationManager {
         approved: bool,
         reason: Option<String>,
     ) -> Result<(), ConfirmationError> {
-        let mut pending = self.pending.lock()
+        let mut pending = self
+            .pending
+            .lock()
             .map_err(|e| ConfirmationError::SystemError(e.to_string()))?;
 
-        let pos = pending.iter().position(|p| p.request.id == request_id)
+        let pos = pending
+            .iter()
+            .position(|p| p.request.id == request_id)
             .ok_or_else(|| ConfirmationError::SystemError("Request not found".to_string()))?;
 
         let confirmation = pending.remove(pos);
@@ -181,7 +193,9 @@ impl ConfirmationManager {
             timestamp: chrono::Utc::now(),
         };
 
-        confirmation.sender.send(response)
+        confirmation
+            .sender
+            .send(response)
             .map_err(|_| ConfirmationError::SystemError("Failed to send response".to_string()))?;
 
         Ok(())
@@ -189,14 +203,18 @@ impl ConfirmationManager {
 
     /// Get all pending confirmation requests
     pub fn get_pending(&self) -> Result<Vec<ConfirmationRequest>, ConfirmationError> {
-        let pending = self.pending.lock()
+        let pending = self
+            .pending
+            .lock()
             .map_err(|e| ConfirmationError::SystemError(e.to_string()))?;
         Ok(pending.iter().map(|p| p.request.clone()).collect())
     }
 
     /// Remove a pending request
     fn remove_pending(&self, request_id: &str) -> Result<(), ConfirmationError> {
-        let mut pending = self.pending.lock()
+        let mut pending = self
+            .pending
+            .lock()
             .map_err(|e| ConfirmationError::SystemError(e.to_string()))?;
         pending.retain(|p| p.request.id != request_id);
         Ok(())
@@ -204,7 +222,9 @@ impl ConfirmationManager {
 
     /// Clear all pending requests
     pub fn clear_pending(&self) -> Result<(), ConfirmationError> {
-        let mut pending = self.pending.lock()
+        let mut pending = self
+            .pending
+            .lock()
             .map_err(|e| ConfirmationError::SystemError(e.to_string()))?;
         pending.clear();
         Ok(())
@@ -262,7 +282,8 @@ mod tests {
             "file_write".to_string(),
             Permission::FileWrite,
             "Write to file".to_string(),
-        ).with_timeout(5);
+        )
+        .with_timeout(5);
 
         let request_id = request.id.clone();
         let manager_clone = manager.clone();
@@ -270,7 +291,9 @@ mod tests {
         // Spawn task to respond
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(100)).await;
-            manager_clone.respond(&request_id, true, Some("Approved by user".to_string())).unwrap();
+            manager_clone
+                .respond(&request_id, true, Some("Approved by user".to_string()))
+                .unwrap();
         });
 
         let response = manager.request_confirmation(request).await.unwrap();
@@ -285,7 +308,8 @@ mod tests {
             "file_write".to_string(),
             Permission::FileWrite,
             "Write to file".to_string(),
-        ).with_timeout(1);
+        )
+        .with_timeout(1);
 
         let result = manager.request_confirmation(request).await;
         assert!(matches!(result, Err(ConfirmationError::Timeout)));

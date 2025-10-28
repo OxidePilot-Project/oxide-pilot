@@ -1,8 +1,8 @@
-use thiserror::Error;
 use keyring::Entry;
-use log::{info, warn, error};
+use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::env;
+use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum QwenAuthError {
@@ -39,8 +39,8 @@ pub struct DeviceAuthStart {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PollResult {
-    pub status: String,            // "pending" | "slow_down" | "success" | "error"
-    pub message: Option<String>,   // error or info
+    pub status: String,          // "pending" | "slow_down" | "success" | "error"
+    pub message: Option<String>, // error or info
 }
 
 pub struct QwenAuth {
@@ -49,7 +49,9 @@ pub struct QwenAuth {
 
 impl Default for QwenAuth {
     fn default() -> Self {
-        Self { keyring_service: QWEN_AUTH_SERVICE.to_string() }
+        Self {
+            keyring_service: QWEN_AUTH_SERVICE.to_string(),
+        }
     }
 }
 
@@ -75,11 +77,14 @@ impl QwenAuth {
             Ok(json) => {
                 let cfg: QwenAuthConfig = serde_json::from_str(&json)?;
                 if let Some(exp) = cfg.expires_at {
-                    if chrono::Utc::now() < exp { return Ok("OAuth Token".into()); }
-                    else { return Ok("OAuth Token Expired".into()); }
+                    if chrono::Utc::now() < exp {
+                        return Ok("OAuth Token".into());
+                    } else {
+                        return Ok("OAuth Token Expired".into());
+                    }
                 }
                 Ok("OAuth Token".into())
-            },
+            }
             Err(keyring::Error::NoEntry) => Ok("Not authenticated".into()),
             Err(e) => Err(e.into()),
         }
@@ -108,7 +113,10 @@ impl QwenAuth {
         let scope = env::var("QWEN_SCOPE").unwrap_or_else(|_| "openid,profile,email".to_string());
 
         #[derive(Serialize)]
-        struct Req<'a> { client_id: &'a str, scope: &'a str }
+        struct Req<'a> {
+            client_id: &'a str,
+            scope: &'a str,
+        }
         #[derive(Deserialize)]
         struct Resp {
             device_code: String,
@@ -124,7 +132,10 @@ impl QwenAuth {
         let client = reqwest::Client::new();
         let res = client
             .post(&device_url)
-            .form(&Req { client_id: &client_id, scope: &scope })
+            .form(&Req {
+                client_id: &client_id,
+                scope: &scope,
+            })
             .send()
             .await?;
 
@@ -135,7 +146,9 @@ impl QwenAuth {
         }
 
         let resp: Resp = res.json().await?;
-        let verification_uri = resp.verification_uri_complete.unwrap_or(resp.verification_uri);
+        let verification_uri = resp
+            .verification_uri_complete
+            .unwrap_or(resp.verification_uri);
 
         Ok(DeviceAuthStart {
             device_code: resp.device_code,
@@ -181,7 +194,11 @@ impl QwenAuth {
         }
 
         #[derive(Deserialize)]
-        struct TokenErr { error: String, #[serde(default)] error_description: Option<String> }
+        struct TokenErr {
+            error: String,
+            #[serde(default)]
+            error_description: Option<String>,
+        }
 
         let client = reqwest::Client::new();
         let res = client
@@ -197,7 +214,9 @@ impl QwenAuth {
 
         if res.status().is_success() {
             let ok: TokenOk = res.json().await?;
-            let expires_at = ok.expires_in.map(|sec| chrono::Utc::now() + chrono::Duration::seconds(sec as i64));
+            let expires_at = ok
+                .expires_in
+                .map(|sec| chrono::Utc::now() + chrono::Duration::seconds(sec as i64));
             let cfg = QwenAuthConfig {
                 access_token: ok.access_token.clone(),
                 refresh_token: ok.refresh_token.clone(),
@@ -205,21 +224,47 @@ impl QwenAuth {
             };
             self.store_auth_config(&cfg).await?;
             info!("Qwen OAuth token stored");
-            return Ok(PollResult { status: "success".into(), message: None });
+            return Ok(PollResult {
+                status: "success".into(),
+                message: None,
+            });
         }
 
         // Try to parse OAuth device errors
         let text = res.text().await.unwrap_or_default();
         if let Ok(e) = serde_json::from_str::<TokenErr>(&text) {
             match e.error.as_str() {
-                "authorization_pending" => return Ok(PollResult { status: "pending".into(), message: e.error_description }),
-                "slow_down" => return Ok(PollResult { status: "slow_down".into(), message: e.error_description }),
-                "expired_token" | "expired_token_code" => return Ok(PollResult { status: "error".into(), message: Some("expired".into()) }),
-                _ => return Ok(PollResult { status: "error".into(), message: Some(e.error_description.unwrap_or(e.error)) }),
+                "authorization_pending" => {
+                    return Ok(PollResult {
+                        status: "pending".into(),
+                        message: e.error_description,
+                    })
+                }
+                "slow_down" => {
+                    return Ok(PollResult {
+                        status: "slow_down".into(),
+                        message: e.error_description,
+                    })
+                }
+                "expired_token" | "expired_token_code" => {
+                    return Ok(PollResult {
+                        status: "error".into(),
+                        message: Some("expired".into()),
+                    })
+                }
+                _ => {
+                    return Ok(PollResult {
+                        status: "error".into(),
+                        message: Some(e.error_description.unwrap_or(e.error)),
+                    })
+                }
             }
         }
         warn!("Unexpected token error: {text}");
-        Ok(PollResult { status: "error".into(), message: Some(text) })
+        Ok(PollResult {
+            status: "error".into(),
+            message: Some(text),
+        })
     }
 }
 
@@ -236,7 +281,7 @@ impl QwenAuth {
                     }
                 }
                 Ok(cfg.access_token)
-            },
+            }
             Err(keyring::Error::NoEntry) => Err(QwenAuthError::Auth("Not authenticated".into())),
             Err(e) => Err(e.into()),
         }

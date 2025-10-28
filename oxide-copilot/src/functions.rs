@@ -120,10 +120,7 @@ impl ExecutableFunction for TakeScreenshotFunction {
     }
 
     async fn execute(&self, args: Value) -> Result<Value, String> {
-        let default_filename = format!(
-            "screenshot_{}.png",
-            chrono::Utc::now().timestamp()
-        );
+        let default_filename = format!("screenshot_{}.png", chrono::Utc::now().timestamp());
         let filename = args["filename"].as_str().unwrap_or(&default_filename);
 
         info!("Taking screenshot and saving to: {}", filename);
@@ -202,7 +199,10 @@ impl ExecutableFunction for ClickMouseFunction {
             .ok_or("Missing or invalid 'y' coordinate")? as i32;
         let button_str = args["button"].as_str().unwrap_or("left");
 
-        info!("Clicking mouse at ({}, {}) with {} button", x, y, button_str);
+        info!(
+            "Clicking mouse at ({}, {}) with {} button",
+            x, y, button_str
+        );
 
         // For now, we'll just use the mouse controller's basic functionality
         // The actual button type conversion would need to be handled by oxide-rpa
@@ -436,8 +436,8 @@ impl FunctionRegistry {
         self.functions.insert(function.name().to_string(), function);
     }
 
-    pub fn get_function(&self, name: &str) -> Option<&Box<dyn ExecutableFunction>> {
-        self.functions.get(name)
+    pub fn get_function(&self, name: &str) -> Option<&dyn ExecutableFunction> {
+        self.functions.get(name).map(|b| &**b)
     }
 
     pub async fn execute_function(&self, name: &str, args: Value) -> Result<Value, String> {

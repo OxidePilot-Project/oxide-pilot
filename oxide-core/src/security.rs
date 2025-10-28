@@ -1,15 +1,18 @@
-use aes_gcm::{Aes256Gcm, Nonce, KeyInit};
 use aes_gcm::aead::Aead;
+use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
 use rand::{thread_rng, RngCore};
 // use log::warn; // Reserved for future use
 
 pub fn encrypt_data(data: &[u8], key: &[u8]) -> Result<Vec<u8>, String> {
-    let cipher = Aes256Gcm::new_from_slice(key).map_err(|e| format!("Failed to create cipher: {e:?}"))?;
+    let cipher =
+        Aes256Gcm::new_from_slice(key).map_err(|e| format!("Failed to create cipher: {e:?}"))?;
     let mut nonce_bytes = [0u8; 12];
     thread_rng().fill_bytes(&mut nonce_bytes);
     let nonce = Nonce::from_slice(&nonce_bytes);
 
-    let ciphertext = cipher.encrypt(nonce, data).map_err(|e| format!("Encryption failed: {e:?}"))?;
+    let ciphertext = cipher
+        .encrypt(nonce, data)
+        .map_err(|e| format!("Encryption failed: {e:?}"))?;
 
     let mut result = Vec::with_capacity(nonce_bytes.len() + ciphertext.len());
     result.extend_from_slice(&nonce_bytes);
@@ -23,11 +26,14 @@ pub fn decrypt_data(encrypted_data: &[u8], key: &[u8]) -> Result<Vec<u8>, String
         return Err("Encrypted data too short".to_string());
     }
 
-    let cipher = Aes256Gcm::new_from_slice(key).map_err(|e| format!("Failed to create cipher: {e:?}"))?;
+    let cipher =
+        Aes256Gcm::new_from_slice(key).map_err(|e| format!("Failed to create cipher: {e:?}"))?;
     let nonce = Nonce::from_slice(&encrypted_data[..12]);
     let ciphertext = &encrypted_data[12..];
 
-    let plaintext = cipher.decrypt(nonce, ciphertext).map_err(|e| format!("Decryption failed: {e:?}"))?;
+    let plaintext = cipher
+        .decrypt(nonce, ciphertext)
+        .map_err(|e| format!("Decryption failed: {e:?}"))?;
     Ok(plaintext)
 }
 

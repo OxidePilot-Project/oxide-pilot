@@ -1,8 +1,8 @@
-use crate::oauth::{GoogleOAuthManager, GoogleOAuthConfig, OAuthToken};
+use crate::oauth::{GoogleOAuthConfig, GoogleOAuthManager, OAuthToken};
 use serde::{Deserialize, Serialize};
+use std::env;
 use std::fs;
 use std::path::PathBuf;
-use std::env;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -46,8 +46,8 @@ impl AuthManager {
 
         // Initialize OAuth manager with default config
         let oauth_config = GoogleOAuthConfig::default();
-        let oauth_manager = GoogleOAuthManager::new(oauth_config)
-            .map_err(|e| AuthError::OAuth(e.to_string()))?;
+        let oauth_manager =
+            GoogleOAuthManager::new(oauth_config).map_err(|e| AuthError::OAuth(e.to_string()))?;
 
         Ok(Self {
             config_path,
@@ -58,7 +58,9 @@ impl AuthManager {
     fn get_config_dir() -> Result<PathBuf, AuthError> {
         let home_dir = env::var("USERPROFILE")
             .or_else(|_| env::var("HOME"))
-            .map_err(|_| AuthError::Environment("Could not determine home directory".to_string()))?;
+            .map_err(|_| {
+                AuthError::Environment("Could not determine home directory".to_string())
+            })?;
 
         Ok(PathBuf::from(home_dir).join(".oxidepilot"))
     }
@@ -82,7 +84,8 @@ impl AuthManager {
                 AuthMethod::OAuth(token) => {
                     // Check if token is still valid (simple check)
                     if let Some(expires_in) = token.expires_in {
-                        let expires_at = config.created_at + chrono::Duration::seconds(expires_in as i64);
+                        let expires_at =
+                            config.created_at + chrono::Duration::seconds(expires_in as i64);
                         if chrono::Utc::now() < expires_at {
                             println!("🔐 Using saved OAuth token");
                             return Ok(token.access_token.clone());
@@ -134,11 +137,11 @@ impl AuthManager {
 
         loop {
             print!("Enter your choice (1-3): ");
-            std::io::Write::flush(&mut std::io::stdout())
-                .map_err(AuthError::Io)?;
+            std::io::Write::flush(&mut std::io::stdout()).map_err(AuthError::Io)?;
 
             let mut input = String::new();
-            std::io::stdin().read_line(&mut input)
+            std::io::stdin()
+                .read_line(&mut input)
                 .map_err(AuthError::Io)?;
             let choice = input.trim();
 
@@ -173,7 +176,10 @@ impl AuthManager {
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         println!();
 
-        let token = self.oauth_manager.authenticate().await
+        let token = self
+            .oauth_manager
+            .authenticate()
+            .await
             .map_err(|e| AuthError::OAuth(e.to_string()))?;
 
         let config = AuthConfig {
@@ -201,11 +207,11 @@ impl AuthManager {
 
         loop {
             print!("Enter your Gemini API key: ");
-            std::io::Write::flush(&mut std::io::stdout())
-                .map_err(AuthError::Io)?;
+            std::io::Write::flush(&mut std::io::stdout()).map_err(AuthError::Io)?;
 
             let mut api_key = String::new();
-            std::io::stdin().read_line(&mut api_key)
+            std::io::stdin()
+                .read_line(&mut api_key)
                 .map_err(AuthError::Io)?;
             let api_key = api_key.trim().to_string();
 
@@ -217,11 +223,11 @@ impl AuthManager {
             if !api_key.starts_with("AIza") {
                 println!("⚠️  Warning: API key doesn't look like a valid Gemini API key.");
                 print!("Continue anyway? (y/N): ");
-                std::io::Write::flush(&mut std::io::stdout())
-                    .map_err(AuthError::Io)?;
+                std::io::Write::flush(&mut std::io::stdout()).map_err(AuthError::Io)?;
 
                 let mut confirm = String::new();
-                std::io::stdin().read_line(&mut confirm)
+                std::io::stdin()
+                    .read_line(&mut confirm)
                     .map_err(AuthError::Io)?;
                 if confirm.trim().to_lowercase() != "y" {
                     continue;

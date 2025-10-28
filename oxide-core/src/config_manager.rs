@@ -1,8 +1,8 @@
 use crate::config::OxidePilotConfig;
+use notify::{recommended_watcher, RecursiveMode, Watcher};
 use std::fs;
 use std::path::Path;
-use notify::{Watcher, RecursiveMode, recommended_watcher};
-use std::sync::mpsc::{Sender, Receiver, channel};
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::Duration;
 
 pub fn load_config(path: &Path) -> Result<OxidePilotConfig, String> {
@@ -13,17 +13,22 @@ pub fn load_config(path: &Path) -> Result<OxidePilotConfig, String> {
 }
 
 pub fn watch_config(path: &Path, sender: Sender<OxidePilotConfig>) -> Result<(), String> {
-    let (tx, rx): (Sender<notify::Result<notify::Event>>, Receiver<notify::Result<notify::Event>>) = channel();
+    let (tx, rx): (
+        Sender<notify::Result<notify::Event>>,
+        Receiver<notify::Result<notify::Event>>,
+    ) = channel();
 
     let mut watcher = recommended_watcher(tx).map_err(|e| e.to_string())?;
 
-    watcher.watch(path, RecursiveMode::NonRecursive).map_err(|e| e.to_string())?;
+    watcher
+        .watch(path, RecursiveMode::NonRecursive)
+        .map_err(|e| e.to_string())?;
 
     // Initial load
     match load_config(path) {
         Ok(config) => {
             sender.send(config).map_err(|e| e.to_string())?;
-        },
+        }
         Err(e) => {
             eprintln!("Initial config load error: {e}");
         }
@@ -38,13 +43,13 @@ pub fn watch_config(path: &Path, sender: Sender<OxidePilotConfig>) -> Result<(),
                     match load_config(path) {
                         Ok(config) => {
                             sender.send(config).map_err(|e| e.to_string())?;
-                        },
+                        }
                         Err(e) => {
                             eprintln!("Config reload error: {e}");
                         }
                     }
                 }
-            },
+            }
             Err(e) => eprintln!("watch error: {e:?}"),
         }
     }

@@ -25,12 +25,31 @@ pub struct ReversibleAction {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ActionType {
-    MouseMove { from_x: i32, from_y: i32, to_x: i32, to_y: i32 },
-    MouseClick { x: i32, y: i32, button: String },
-    KeyboardType { text: String },
-    FileWrite { path: String, content_hash: String },
-    FileDelete { path: String, content: Vec<u8> },
-    SystemCommand { command: String },
+    MouseMove {
+        from_x: i32,
+        from_y: i32,
+        to_x: i32,
+        to_y: i32,
+    },
+    MouseClick {
+        x: i32,
+        y: i32,
+        button: String,
+    },
+    KeyboardType {
+        text: String,
+    },
+    FileWrite {
+        path: String,
+        content_hash: String,
+    },
+    FileDelete {
+        path: String,
+        content: Vec<u8>,
+    },
+    SystemCommand {
+        command: String,
+    },
 }
 
 impl ActionType {
@@ -55,9 +74,7 @@ impl ActionType {
             ActionType::FileWrite { path, .. } => {
                 Some(format!("Restore previous content of {path}"))
             }
-            ActionType::FileDelete { path, .. } => {
-                Some(format!("Restore deleted file {path}"))
-            }
+            ActionType::FileDelete { path, .. } => Some(format!("Restore deleted file {path}")),
             _ => None,
         }
     }
@@ -86,7 +103,9 @@ impl RollbackManager {
 
     /// Record an action for potential rollback
     pub fn record(&self, action: ReversibleAction) -> Result<(), RollbackError> {
-        let mut actions = self.actions.lock()
+        let mut actions = self
+            .actions
+            .lock()
             .map_err(|e| RollbackError::Failed(e.to_string()))?;
 
         if actions.len() >= self.max_history {
@@ -99,22 +118,27 @@ impl RollbackManager {
 
     /// Get the last action without removing it
     pub fn peek_last(&self) -> Result<Option<ReversibleAction>, RollbackError> {
-        let actions = self.actions.lock()
+        let actions = self
+            .actions
+            .lock()
             .map_err(|e| RollbackError::Failed(e.to_string()))?;
         Ok(actions.back().cloned())
     }
 
     /// Rollback the last action
     pub fn rollback_last(&self) -> Result<ReversibleAction, RollbackError> {
-        let mut actions = self.actions.lock()
+        let mut actions = self
+            .actions
+            .lock()
             .map_err(|e| RollbackError::Failed(e.to_string()))?;
 
         let action = actions.pop_back().ok_or(RollbackError::NoActions)?;
 
         if !action.action_type.is_reversible() {
-            return Err(RollbackError::NotReversible(
-                format!("Action {:?} cannot be reversed", action.action_type)
-            ));
+            return Err(RollbackError::NotReversible(format!(
+                "Action {:?} cannot be reversed",
+                action.action_type
+            )));
         }
 
         Ok(action)
@@ -141,16 +165,21 @@ impl RollbackManager {
 
     /// Get all recorded actions
     pub fn get_history(&self) -> Result<Vec<ReversibleAction>, RollbackError> {
-        let actions = self.actions.lock()
+        let actions = self
+            .actions
+            .lock()
             .map_err(|e| RollbackError::Failed(e.to_string()))?;
         Ok(actions.iter().cloned().collect())
     }
 
     /// Get reversible actions only
     pub fn get_reversible_history(&self) -> Result<Vec<ReversibleAction>, RollbackError> {
-        let actions = self.actions.lock()
+        let actions = self
+            .actions
+            .lock()
             .map_err(|e| RollbackError::Failed(e.to_string()))?;
-        Ok(actions.iter()
+        Ok(actions
+            .iter()
             .filter(|a| a.action_type.is_reversible())
             .cloned()
             .collect())
@@ -158,7 +187,9 @@ impl RollbackManager {
 
     /// Clear all history
     pub fn clear(&self) -> Result<(), RollbackError> {
-        let mut actions = self.actions.lock()
+        let mut actions = self
+            .actions
+            .lock()
             .map_err(|e| RollbackError::Failed(e.to_string()))?;
         actions.clear();
         Ok(())
@@ -166,9 +197,14 @@ impl RollbackManager {
 
     /// Get count of reversible actions
     pub fn reversible_count(&self) -> Result<usize, RollbackError> {
-        let actions = self.actions.lock()
+        let actions = self
+            .actions
+            .lock()
             .map_err(|e| RollbackError::Failed(e.to_string()))?;
-        Ok(actions.iter().filter(|a| a.action_type.is_reversible()).count())
+        Ok(actions
+            .iter()
+            .filter(|a| a.action_type.is_reversible())
+            .count())
     }
 }
 
@@ -188,15 +224,24 @@ mod tests {
 
     #[test]
     fn test_action_reversibility() {
-        let mouse_move = ActionType::MouseMove { from_x: 0, from_y: 0, to_x: 100, to_y: 100 };
+        let mouse_move = ActionType::MouseMove {
+            from_x: 0,
+            from_y: 0,
+            to_x: 100,
+            to_y: 100,
+        };
         assert!(mouse_move.is_reversible());
 
-        let mouse_click = ActionType::MouseClick { x: 50, y: 50, button: "left".to_string() };
+        let mouse_click = ActionType::MouseClick {
+            x: 50,
+            y: 50,
+            button: "left".to_string(),
+        };
         assert!(!mouse_click.is_reversible());
 
         let file_write = ActionType::FileWrite {
             path: "test.txt".to_string(),
-            content_hash: "abc123".to_string()
+            content_hash: "abc123".to_string(),
         };
         assert!(file_write.is_reversible());
     }
@@ -252,7 +297,10 @@ mod tests {
 
         let result = manager.rollback_last();
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), RollbackError::NotReversible(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            RollbackError::NotReversible(_)
+        ));
     }
 
     #[test]
@@ -277,18 +325,29 @@ mod tests {
     fn test_reversible_count() {
         let manager = RollbackManager::new(10);
 
-        manager.record(create_test_action(ActionType::MouseMove {
-            from_x: 0, from_y: 0, to_x: 10, to_y: 10
-        })).unwrap();
+        manager
+            .record(create_test_action(ActionType::MouseMove {
+                from_x: 0,
+                from_y: 0,
+                to_x: 10,
+                to_y: 10,
+            }))
+            .unwrap();
 
-        manager.record(create_test_action(ActionType::MouseClick {
-            x: 50, y: 50, button: "left".to_string()
-        })).unwrap();
+        manager
+            .record(create_test_action(ActionType::MouseClick {
+                x: 50,
+                y: 50,
+                button: "left".to_string(),
+            }))
+            .unwrap();
 
-        manager.record(create_test_action(ActionType::FileWrite {
-            path: "test.txt".to_string(),
-            content_hash: "abc".to_string()
-        })).unwrap();
+        manager
+            .record(create_test_action(ActionType::FileWrite {
+                path: "test.txt".to_string(),
+                content_hash: "abc".to_string(),
+            }))
+            .unwrap();
 
         assert_eq!(manager.reversible_count().unwrap(), 2);
     }

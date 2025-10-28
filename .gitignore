@@ -84,3 +84,42 @@ certs/
 
 # Archive docs with sensitive data
 docs/archive/
+# Hu
+sky (keep hooks in repo)
+# node_modules is already ignored above
+
+# Benchmark results
+target/criterion/
+
+# Coverage reports
+coverage/
+*.profdata
+
+# Security audit reports
+docs/SECURITY_AUDIT_REPORT.md
+docs/PERFORMANCE_BENCHMARK_REPORT.md
+docs/E2E_TEST_REPORT.md
+docs/VALIDATION_REPORT.md
+
+# Installer artifacts
+*.msi
+*.exe
+*.dmg
+*.deb
+*.rpm
+*.AppImage
+target/installer/
+target/OxidePilot-*.zip
+target/OxidePilot-*.msi
+
+# Flamegraph
+flamegraph.svg
+perf.data
+perf.data.old
+
+# Code signing
+certs/*.pfx
+certs/password.txt
+
+# Kiro IDE settings (contains sensitive tokens)
+.kiro/

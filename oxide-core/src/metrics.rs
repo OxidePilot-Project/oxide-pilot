@@ -1,7 +1,7 @@
-use std::time::Instant;
+use log::{debug, info};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use log::{info, debug};
-use serde::{Serialize, Deserialize};
+use std::time::Instant;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Metric {
@@ -38,7 +38,10 @@ impl MetricsCollector {
             unit: unit.to_string(),
             timestamp,
         };
-        self.metrics.entry(name.to_string()).or_default().push(metric);
+        self.metrics
+            .entry(name.to_string())
+            .or_default()
+            .push(metric);
         debug!("Recorded metric: {name} = {value} {unit}");
     }
 

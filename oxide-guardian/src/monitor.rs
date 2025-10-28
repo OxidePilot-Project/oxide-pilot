@@ -102,7 +102,7 @@ mod tests {
 
     #[test]
     fn test_system_monitor_creation() {
-        let monitor = SystemMonitor::new();
+        let _monitor = SystemMonitor::new();
         // Test that the monitor can be created successfully
         assert!(true); // Basic test to ensure compilation
     }

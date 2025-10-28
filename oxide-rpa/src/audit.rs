@@ -28,11 +28,7 @@ pub struct AuditEntry {
 }
 
 impl AuditEntry {
-    pub fn new(
-        action: String,
-        permission: Permission,
-        user_confirmed: bool,
-    ) -> Self {
+    pub fn new(action: String, permission: Permission, user_confirmed: bool) -> Self {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
             timestamp: Utc::now(),
@@ -85,7 +81,9 @@ impl AuditLogger {
 
     /// Log an audit entry
     pub fn log(&self, entry: AuditEntry) -> Result<(), AuditError> {
-        let mut entries = self.entries.lock()
+        let mut entries = self
+            .entries
+            .lock()
             .map_err(|e| AuditError::WriteError(e.to_string()))?;
 
         if entries.len() >= self.max_entries {
@@ -98,16 +96,21 @@ impl AuditLogger {
 
     /// Get all audit entries
     pub fn get_entries(&self) -> Result<Vec<AuditEntry>, AuditError> {
-        let entries = self.entries.lock()
+        let entries = self
+            .entries
+            .lock()
             .map_err(|e| AuditError::ReadError(e.to_string()))?;
         Ok(entries.iter().cloned().collect())
     }
 
     /// Get entries filtered by permission
     pub fn get_by_permission(&self, permission: Permission) -> Result<Vec<AuditEntry>, AuditError> {
-        let entries = self.entries.lock()
+        let entries = self
+            .entries
+            .lock()
             .map_err(|e| AuditError::ReadError(e.to_string()))?;
-        Ok(entries.iter()
+        Ok(entries
+            .iter()
             .filter(|e| e.permission == permission)
             .cloned()
             .collect())
@@ -115,12 +118,11 @@ impl AuditLogger {
 
     /// Get failed entries
     pub fn get_failed(&self) -> Result<Vec<AuditEntry>, AuditError> {
-        let entries = self.entries.lock()
+        let entries = self
+            .entries
+            .lock()
             .map_err(|e| AuditError::ReadError(e.to_string()))?;
-        Ok(entries.iter()
-            .filter(|e| !e.success)
-            .cloned()
-            .collect())
+        Ok(entries.iter().filter(|e| !e.success).cloned().collect())
     }
 
     /// Get entries within time range
@@ -129,9 +131,12 @@ impl AuditLogger {
         start: DateTime<Utc>,
         end: DateTime<Utc>,
     ) -> Result<Vec<AuditEntry>, AuditError> {
-        let entries = self.entries.lock()
+        let entries = self
+            .entries
+            .lock()
             .map_err(|e| AuditError::ReadError(e.to_string()))?;
-        Ok(entries.iter()
+        Ok(entries
+            .iter()
             .filter(|e| e.timestamp >= start && e.timestamp <= end)
             .cloned()
             .collect())
@@ -139,7 +144,9 @@ impl AuditLogger {
 
     /// Clear all entries
     pub fn clear(&self) -> Result<(), AuditError> {
-        let mut entries = self.entries.lock()
+        let mut entries = self
+            .entries
+            .lock()
             .map_err(|e| AuditError::WriteError(e.to_string()))?;
         entries.clear();
         Ok(())
@@ -147,7 +154,9 @@ impl AuditLogger {
 
     /// Get statistics
     pub fn get_stats(&self) -> Result<AuditStats, AuditError> {
-        let entries = self.entries.lock()
+        let entries = self
+            .entries
+            .lock()
             .map_err(|e| AuditError::ReadError(e.to_string()))?;
 
         let total = entries.len();
@@ -178,11 +187,7 @@ mod tests {
 
     #[test]
     fn test_audit_entry_creation() {
-        let entry = AuditEntry::new(
-            "mouse_click".to_string(),
-            Permission::MouseClick,
-            true,
-        );
+        let entry = AuditEntry::new("mouse_click".to_string(), Permission::MouseClick, true);
         assert_eq!(entry.action, "mouse_click");
         assert_eq!(entry.permission, Permission::MouseClick);
         assert!(entry.user_confirmed);
@@ -193,11 +198,8 @@ mod tests {
     fn test_audit_logger() {
         let logger = AuditLogger::new(10);
 
-        let entry = AuditEntry::new(
-            "test_action".to_string(),
-            Permission::MouseMove,
-            false,
-        ).mark_success();
+        let entry =
+            AuditEntry::new("test_action".to_string(), Permission::MouseMove, false).mark_success();
 
         logger.log(entry.clone()).unwrap();
 
@@ -211,11 +213,7 @@ mod tests {
         let logger = AuditLogger::new(3);
 
         for i in 0..5 {
-            let entry = AuditEntry::new(
-                format!("action_{i}"),
-                Permission::MouseMove,
-                false,
-            );
+            let entry = AuditEntry::new(format!("action_{i}"), Permission::MouseMove, false);
             logger.log(entry).unwrap();
         }
 
@@ -228,9 +226,27 @@ mod tests {
     fn test_filter_by_permission() {
         let logger = AuditLogger::new(10);
 
-        logger.log(AuditEntry::new("action1".to_string(), Permission::MouseMove, false)).unwrap();
-        logger.log(AuditEntry::new("action2".to_string(), Permission::MouseClick, false)).unwrap();
-        logger.log(AuditEntry::new("action3".to_string(), Permission::MouseMove, false)).unwrap();
+        logger
+            .log(AuditEntry::new(
+                "action1".to_string(),
+                Permission::MouseMove,
+                false,
+            ))
+            .unwrap();
+        logger
+            .log(AuditEntry::new(
+                "action2".to_string(),
+                Permission::MouseClick,
+                false,
+            ))
+            .unwrap();
+        logger
+            .log(AuditEntry::new(
+                "action3".to_string(),
+                Permission::MouseMove,
+                false,
+            ))
+            .unwrap();
 
         let filtered = logger.get_by_permission(Permission::MouseMove).unwrap();
         assert_eq!(filtered.len(), 2);
@@ -240,9 +256,18 @@ mod tests {
     fn test_stats() {
         let logger = AuditLogger::new(10);
 
-        logger.log(AuditEntry::new("a1".to_string(), Permission::MouseMove, true).mark_success()).unwrap();
-        logger.log(AuditEntry::new("a2".to_string(), Permission::MouseClick, false).mark_error("test".to_string())).unwrap();
-        logger.log(AuditEntry::new("a3".to_string(), Permission::MouseMove, true).mark_success()).unwrap();
+        logger
+            .log(AuditEntry::new("a1".to_string(), Permission::MouseMove, true).mark_success())
+            .unwrap();
+        logger
+            .log(
+                AuditEntry::new("a2".to_string(), Permission::MouseClick, false)
+                    .mark_error("test".to_string()),
+            )
+            .unwrap();
+        logger
+            .log(AuditEntry::new("a3".to_string(), Permission::MouseMove, true).mark_success())
+            .unwrap();
 
         let stats = logger.get_stats().unwrap();
         assert_eq!(stats.total, 3);

@@ -1,9 +1,9 @@
 use aes_gcm::{
     aead::{Aead, AeadCore, KeyInit, OsRng},
-    Aes256Gcm, Nonce, Key
+    Aes256Gcm, Key, Nonce,
 };
+use base64::{engine::general_purpose, Engine as _};
 use rand::RngCore;
-use base64::{Engine as _, engine::general_purpose};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -41,33 +41,39 @@ impl EncryptionManager {
         let mut roles = HashMap::new();
 
         // Define default roles
-        roles.insert("admin".to_string(), Role {
-            name: "admin".to_string(),
-            permissions: vec![
-                "system.monitor".to_string(),
-                "system.control".to_string(),
-                "rpa.execute".to_string(),
-                "config.modify".to_string(),
-                "data.access".to_string(),
-            ],
-        });
+        roles.insert(
+            "admin".to_string(),
+            Role {
+                name: "admin".to_string(),
+                permissions: vec![
+                    "system.monitor".to_string(),
+                    "system.control".to_string(),
+                    "rpa.execute".to_string(),
+                    "config.modify".to_string(),
+                    "data.access".to_string(),
+                ],
+            },
+        );
 
-        roles.insert("user".to_string(), Role {
-            name: "user".to_string(),
-            permissions: vec![
-                "system.monitor".to_string(),
-                "rpa.execute".to_string(),
-                "config.view".to_string(),
-            ],
-        });
+        roles.insert(
+            "user".to_string(),
+            Role {
+                name: "user".to_string(),
+                permissions: vec![
+                    "system.monitor".to_string(),
+                    "rpa.execute".to_string(),
+                    "config.view".to_string(),
+                ],
+            },
+        );
 
-        roles.insert("readonly".to_string(), Role {
-            name: "readonly".to_string(),
-            permissions: vec![
-                "system.monitor".to_string(),
-                "config.view".to_string(),
-            ],
-        });
+        roles.insert(
+            "readonly".to_string(),
+            Role {
+                name: "readonly".to_string(),
+                permissions: vec!["system.monitor".to_string(), "config.view".to_string()],
+            },
+        );
 
         Ok(Self {
             cipher,
@@ -76,9 +82,15 @@ impl EncryptionManager {
         })
     }
 
-    pub fn encrypt_data(&self, plaintext: &[u8], associated_data: Option<&[u8]>) -> Result<EncryptedData, Box<dyn std::error::Error>> {
+    pub fn encrypt_data(
+        &self,
+        plaintext: &[u8],
+        associated_data: Option<&[u8]>,
+    ) -> Result<EncryptedData, Box<dyn std::error::Error>> {
         let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
-        let ciphertext = self.cipher.encrypt(&nonce, plaintext)
+        let ciphertext = self
+            .cipher
+            .encrypt(&nonce, plaintext)
             .map_err(|e| format!("Encryption failed: {e:?}"))?;
 
         Ok(EncryptedData {
@@ -88,12 +100,17 @@ impl EncryptionManager {
         })
     }
 
-    pub fn decrypt_data(&self, encrypted: &EncryptedData) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    pub fn decrypt_data(
+        &self,
+        encrypted: &EncryptedData,
+    ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         let ciphertext = general_purpose::STANDARD.decode(&encrypted.ciphertext)?;
         let nonce = general_purpose::STANDARD.decode(&encrypted.nonce)?;
         let nonce = Nonce::from_slice(&nonce);
 
-        let plaintext = self.cipher.decrypt(nonce, ciphertext.as_ref())
+        let plaintext = self
+            .cipher
+            .decrypt(nonce, ciphertext.as_ref())
             .map_err(|e| format!("Decryption failed: {e:?}"))?;
         Ok(plaintext)
     }
@@ -128,11 +145,14 @@ impl EncryptionManager {
 
         permissions.dedup();
 
-        self.access_controls.insert(user_id.clone(), AccessControl {
-            user_id,
-            roles,
-            permissions,
-        });
+        self.access_controls.insert(
+            user_id.clone(),
+            AccessControl {
+                user_id,
+                roles,
+                permissions,
+            },
+        );
     }
 
     pub fn get_user_permissions(&self, user_id: &str) -> Option<&AccessControl> {

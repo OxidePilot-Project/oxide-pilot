@@ -1,12 +1,12 @@
-use crate::encryption::{EncryptionManager, EncryptedData};
-use log::{info, warn, error};
+use crate::encryption::{EncryptedData, EncryptionManager};
+use chrono::{DateTime, Utc};
+use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::time::{SystemTime, Duration};
+use std::time::{Duration, SystemTime};
+use thiserror::Error;
 use tokio::sync::RwLock;
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
-use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum SecurityError {
@@ -159,8 +159,10 @@ impl SecurityManager {
         let policy = self.policy.read().await;
         let session_id = Uuid::new_v4().to_string();
         let now = Utc::now();
-        let expires_at = now + chrono::Duration::from_std(policy.session_timeout)
-            .map_err(|_| SecurityError::AuthenticationFailed("Invalid session timeout".to_string()))?;
+        let expires_at = now
+            + chrono::Duration::from_std(policy.session_timeout).map_err(|_| {
+                SecurityError::AuthenticationFailed("Invalid session timeout".to_string())
+            })?;
 
         let session = SecuritySession {
             session_id: session_id.clone(),
@@ -186,13 +188,17 @@ impl SecurityManager {
             "Session created successfully".to_string(),
             HashMap::new(),
             ip_address,
-        ).await;
+        )
+        .await;
 
         info!("Created new session for user: {}", session.user_id);
         Ok(session)
     }
 
-    pub async fn validate_session(&self, session_id: &str) -> Result<SecuritySession, SecurityError> {
+    pub async fn validate_session(
+        &self,
+        session_id: &str,
+    ) -> Result<SecuritySession, SecurityError> {
         let mut sessions = self.sessions.write().await;
 
         if let Some(session) = sessions.get_mut(session_id) {
@@ -212,7 +218,8 @@ impl SecurityManager {
                     "Session expired".to_string(),
                     HashMap::new(),
                     session.ip_address.clone(),
-                ).await;
+                )
+                .await;
                 return Err(SecurityError::SessionExpired);
             }
 
@@ -221,14 +228,22 @@ impl SecurityManager {
 
             Ok(session.clone())
         } else {
-            Err(SecurityError::AuthenticationFailed("Invalid session".to_string()))
+            Err(SecurityError::AuthenticationFailed(
+                "Invalid session".to_string(),
+            ))
         }
     }
 
-    pub async fn check_permission(&self, session_id: &str, permission: &str) -> Result<bool, SecurityError> {
+    pub async fn check_permission(
+        &self,
+        session_id: &str,
+        permission: &str,
+    ) -> Result<bool, SecurityError> {
         let session = self.validate_session(session_id).await?;
 
-        let has_permission = self.encryption_manager.has_permission(&session.user_id, permission);
+        let has_permission = self
+            .encryption_manager
+            .has_permission(&session.user_id, permission);
 
         if !has_permission {
             self.log_security_event(
@@ -239,7 +254,8 @@ impl SecurityManager {
                 format!("Permission denied for: {permission}"),
                 HashMap::from([("permission".to_string(), permission.to_string())]),
                 session.ip_address,
-            ).await;
+            )
+            .await;
         }
 
         Ok(has_permission)
@@ -249,10 +265,12 @@ impl SecurityManager {
         let mut rate_limits = self.rate_limits.write().await;
         let now = SystemTime::now();
 
-        let entry = rate_limits.entry(identifier.to_string()).or_insert_with(|| RateLimitEntry {
-            requests: Vec::new(),
-            blocked_until: None,
-        });
+        let entry = rate_limits
+            .entry(identifier.to_string())
+            .or_insert_with(|| RateLimitEntry {
+                requests: Vec::new(),
+                blocked_until: None,
+            });
 
         // Check if currently blocked
         if let Some(blocked_until) = entry.blocked_until {
@@ -266,7 +284,9 @@ impl SecurityManager {
 
         // Clean old requests outside the window
         let window_start = now - self.rate_limit_config.window_duration;
-        entry.requests.retain(|&request_time| request_time > window_start);
+        entry
+            .requests
+            .retain(|&request_time| request_time > window_start);
 
         // Check if rate limit exceeded
         if entry.requests.len() >= self.rate_limit_config.max_requests as usize {
@@ -280,7 +300,8 @@ impl SecurityManager {
                 format!("Rate limit exceeded for: {identifier}"),
                 HashMap::from([("identifier".to_string(), identifier.to_string())]),
                 None,
-            ).await;
+            )
+            .await;
 
             return Err(SecurityError::RateLimitExceeded);
         }
@@ -324,7 +345,9 @@ impl SecurityManager {
 
         // Log based on severity
         match severity {
-            SecuritySeverity::Critical => error!("SECURITY [CRITICAL] {event_type:?}: {description}"),
+            SecuritySeverity::Critical => {
+                error!("SECURITY [CRITICAL] {event_type:?}: {description}")
+            }
             SecuritySeverity::High => warn!("SECURITY [HIGH] {event_type:?}: {description}"),
             SecuritySeverity::Medium => warn!("SECURITY [MEDIUM] {event_type:?}: {description}"),
             SecuritySeverity::Low => info!("SECURITY [LOW] {event_type:?}: {description}"),
@@ -335,11 +358,7 @@ impl SecurityManager {
         let events = self.security_events.read().await;
         let limit = limit.unwrap_or(100);
 
-        events.iter()
-            .rev()
-            .take(limit)
-            .cloned()
-            .collect()
+        events.iter().rev().take(limit).cloned().collect()
     }
 
     pub async fn invalidate_session(&self, session_id: &str) -> Result<(), SecurityError> {
@@ -356,7 +375,8 @@ impl SecurityManager {
                 "Session invalidated".to_string(),
                 HashMap::new(),
                 session.ip_address.clone(),
-            ).await;
+            )
+            .await;
 
             info!("Invalidated session: {session_id}");
         }
@@ -391,7 +411,8 @@ impl SecurityManager {
             "Security policy updated".to_string(),
             HashMap::new(),
             None,
-        ).await;
+        )
+        .await;
 
         info!("Security policy updated");
     }
@@ -403,8 +424,7 @@ impl SecurityManager {
     /// Decrypt data encrypted with the system's EncryptionManager.
     /// Returns plaintext bytes on success.
     pub fn decrypt_data(&self, encrypted: &EncryptedData) -> Result<Vec<u8>, SecurityError> {
-        self
-            .encryption_manager
+        self.encryption_manager
             .decrypt_data(encrypted)
             .map_err(|e| SecurityError::EncryptionError(e.to_string()))
     }

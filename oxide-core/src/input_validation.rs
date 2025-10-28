@@ -69,12 +69,16 @@ impl InputValidator {
 
     fn init_security_patterns(&mut self) {
         // SQL injection patterns
-        if let Ok(regex) = Regex::new(r"(?i)(union|select|insert|update|delete|drop|create|alter|exec|execute|\-\-|/\*|\*/|xp_|sp_)") {
+        if let Ok(regex) = Regex::new(
+            r"(?i)(union|select|insert|update|delete|drop|create|alter|exec|execute|\-\-|/\*|\*/|xp_|sp_)",
+        ) {
             self.security_patterns.push(regex);
         }
 
         // XSS patterns
-        if let Ok(regex) = Regex::new(r"(?i)(<script|</script|javascript:|vbscript:|onload|onerror|onclick|onmouseover)") {
+        if let Ok(regex) = Regex::new(
+            r"(?i)(<script|</script|javascript:|vbscript:|onload|onerror|onclick|onmouseover)",
+        ) {
             self.security_patterns.push(regex);
         }
 
@@ -91,81 +95,104 @@ impl InputValidator {
 
     fn init_default_rules(&mut self) {
         // User input validation
-        self.rules.insert("user_input".to_string(), ValidationRule {
-            min_length: Some(1),
-            max_length: Some(5000),
-            pattern: None,
-            allowed_chars: None,
-            forbidden_chars: Some("<>\"'&".to_string()),
-            required: true,
-            sanitize: true,
-        });
+        self.rules.insert(
+            "user_input".to_string(),
+            ValidationRule {
+                min_length: Some(1),
+                max_length: Some(5000),
+                pattern: None,
+                allowed_chars: None,
+                forbidden_chars: Some("<>\"'&".to_string()),
+                required: true,
+                sanitize: true,
+            },
+        );
 
         // Email validation
-        self.rules.insert("email".to_string(), ValidationRule {
-            min_length: Some(5),
-            max_length: Some(254),
-            pattern: Some(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$".to_string()),
-            allowed_chars: None,
-            forbidden_chars: None,
-            required: true,
-            sanitize: false,
-        });
+        self.rules.insert(
+            "email".to_string(),
+            ValidationRule {
+                min_length: Some(5),
+                max_length: Some(254),
+                pattern: Some(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$".to_string()),
+                allowed_chars: None,
+                forbidden_chars: None,
+                required: true,
+                sanitize: false,
+            },
+        );
 
         // Password validation
-        self.rules.insert("password".to_string(), ValidationRule {
-            min_length: Some(8),
-            max_length: Some(128),
-            pattern: Some(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]".to_string()),
-            allowed_chars: None,
-            forbidden_chars: None,
-            required: true,
-            sanitize: false,
-        });
+        self.rules.insert(
+            "password".to_string(),
+            ValidationRule {
+                min_length: Some(8),
+                max_length: Some(128),
+                pattern: Some(
+                    r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]".to_string(),
+                ),
+                allowed_chars: None,
+                forbidden_chars: None,
+                required: true,
+                sanitize: false,
+            },
+        );
 
         // Username validation
-        self.rules.insert("username".to_string(), ValidationRule {
-            min_length: Some(3),
-            max_length: Some(50),
-            pattern: Some(r"^[a-zA-Z0-9_-]+$".to_string()),
-            allowed_chars: None,
-            forbidden_chars: None,
-            required: true,
-            sanitize: false,
-        });
+        self.rules.insert(
+            "username".to_string(),
+            ValidationRule {
+                min_length: Some(3),
+                max_length: Some(50),
+                pattern: Some(r"^[a-zA-Z0-9_-]+$".to_string()),
+                allowed_chars: None,
+                forbidden_chars: None,
+                required: true,
+                sanitize: false,
+            },
+        );
 
         // File path validation
-        self.rules.insert("file_path".to_string(), ValidationRule {
-            min_length: Some(1),
-            max_length: Some(260),
-            pattern: None,
-            allowed_chars: None,
-            forbidden_chars: Some("<>:\"|?*".to_string()),
-            required: true,
-            sanitize: true,
-        });
+        self.rules.insert(
+            "file_path".to_string(),
+            ValidationRule {
+                min_length: Some(1),
+                max_length: Some(260),
+                pattern: None,
+                allowed_chars: None,
+                forbidden_chars: Some("<>:\"|?*".to_string()),
+                required: true,
+                sanitize: true,
+            },
+        );
 
         // URL validation
-        self.rules.insert("url".to_string(), ValidationRule {
-            min_length: Some(10),
-            max_length: Some(2048),
-            pattern: Some(r"^https?://[^\s/$.?#].[^\s]*$".to_string()),
-            allowed_chars: None,
-            forbidden_chars: None,
-            required: false,
-            sanitize: false,
-        });
+        self.rules.insert(
+            "url".to_string(),
+            ValidationRule {
+                min_length: Some(10),
+                max_length: Some(2048),
+                pattern: Some(r"^https?://[^\s/$.?#].[^\s]*$".to_string()),
+                allowed_chars: None,
+                forbidden_chars: None,
+                required: false,
+                sanitize: false,
+            },
+        );
 
         // Configuration key validation
-        self.rules.insert("config_key".to_string(), ValidationRule {
-            min_length: Some(1),
-            max_length: Some(100),
-            pattern: Some(r"^[a-zA-Z0-9._-]+$".to_string()),
-            allowed_chars: None,
-            forbidden_chars: None,
-            required: true,
-            sanitize: false,
-        });
+        self.rules.insert(
+            "config_key".to_string(),
+            ValidationRule {
+                min_length: Some(1),
+                max_length: Some(100),
+                pattern: Some(r"^[a-zA-Z0-9._-]+$".to_string()),
+                allowed_chars: None,
+                forbidden_chars: None,
+                required: true,
+                sanitize: false,
+            },
+        );
     }
 
     pub fn validate(&self, field_name: &str, value: &str) -> Result<String, ValidationError> {
@@ -205,9 +232,9 @@ impl InputValidator {
         if let Some(pattern_str) = &rule.pattern {
             if let Ok(pattern) = Regex::new(pattern_str) {
                 if !pattern.is_match(value) {
-                    return Err(ValidationError::InvalidFormat(
-                        format!("Value does not match required pattern for {field_name}")
-                    ));
+                    return Err(ValidationError::InvalidFormat(format!(
+                        "Value does not match required pattern for {field_name}"
+                    )));
                 }
             }
         }
@@ -216,9 +243,9 @@ impl InputValidator {
         if let Some(forbidden) = &rule.forbidden_chars {
             for forbidden_char in forbidden.chars() {
                 if value.contains(forbidden_char) {
-                    return Err(ValidationError::ForbiddenCharacters(
-                        format!("Contains forbidden character: {forbidden_char}")
-                    ));
+                    return Err(ValidationError::ForbiddenCharacters(format!(
+                        "Contains forbidden character: {forbidden_char}"
+                    )));
                 }
             }
         }
@@ -227,7 +254,7 @@ impl InputValidator {
         for pattern in &self.security_patterns {
             if pattern.is_match(value) {
                 return Err(ValidationError::SecurityThreat(
-                    "Input contains potential security threat".to_string()
+                    "Input contains potential security threat".to_string(),
                 ));
             }
         }
@@ -253,7 +280,10 @@ impl InputValidator {
             .to_string()
     }
 
-    pub fn validate_multiple(&self, inputs: HashMap<String, String>) -> Result<HashMap<String, String>, Vec<ValidationError>> {
+    pub fn validate_multiple(
+        &self,
+        inputs: HashMap<String, String>,
+    ) -> Result<HashMap<String, String>, Vec<ValidationError>> {
         let mut validated = HashMap::new();
         let mut errors = Vec::new();
 
@@ -287,7 +317,11 @@ impl InputValidator {
         self.rules.get(field_name)
     }
 
-    pub fn validate_json_structure(&self, json_str: &str, max_depth: usize) -> Result<(), ValidationError> {
+    pub fn validate_json_structure(
+        &self,
+        json_str: &str,
+        max_depth: usize,
+    ) -> Result<(), ValidationError> {
         // Basic JSON structure validation
         let parsed: Result<serde_json::Value, _> = serde_json::from_str(json_str);
 
@@ -296,17 +330,24 @@ impl InputValidator {
                 if self.check_json_depth(&value, 0, max_depth) {
                     Ok(())
                 } else {
-                    Err(ValidationError::InvalidValue(
-                        format!("JSON structure exceeds maximum depth of {max_depth}")
-                    ))
+                    Err(ValidationError::InvalidValue(format!(
+                        "JSON structure exceeds maximum depth of {max_depth}"
+                    )))
                 }
             }
-            Err(_) => Err(ValidationError::InvalidFormat("Invalid JSON format".to_string()))
+            Err(_) => Err(ValidationError::InvalidFormat(
+                "Invalid JSON format".to_string(),
+            )),
         }
     }
 
     #[allow(clippy::only_used_in_recursion)]
-    fn check_json_depth(&self, value: &serde_json::Value, current_depth: usize, max_depth: usize) -> bool {
+    fn check_json_depth(
+        &self,
+        value: &serde_json::Value,
+        current_depth: usize,
+        max_depth: usize,
+    ) -> bool {
         if current_depth > max_depth {
             return false;
         }
@@ -335,9 +376,9 @@ impl InputValidator {
     pub fn is_safe_filename(&self, filename: &str) -> bool {
         // Check for dangerous filename patterns
         let dangerous_patterns = [
-            "..", "/", "\\", ":", "*", "?", "\"", "<", ">", "|",
-            "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
-            "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+            "..", "/", "\\", ":", "*", "?", "\"", "<", ">", "|", "CON", "PRN", "AUX", "NUL",
+            "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2",
+            "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
         ];
 
         let filename_upper = filename.to_uppercase();
@@ -376,8 +417,12 @@ mod tests {
     fn test_security_threat_detection() {
         let validator = InputValidator::new();
 
-        assert!(validator.validate("user_input", "SELECT * FROM users").is_err());
-        assert!(validator.validate("user_input", "<script>alert('xss')</script>").is_err());
+        assert!(validator
+            .validate("user_input", "SELECT * FROM users")
+            .is_err());
+        assert!(validator
+            .validate("user_input", "<script>alert('xss')</script>")
+            .is_err());
         assert!(validator.validate("user_input", "normal input").is_ok());
     }
 
@@ -389,17 +434,22 @@ mod tests {
             security_patterns: Vec::new(), // No security patterns for this test
         };
 
-        test_validator.add_rule("test_input".to_string(), ValidationRule {
-            min_length: Some(1),
-            max_length: Some(1000),
-            pattern: None,
-            allowed_chars: None,
-            forbidden_chars: None,
-            required: true,
-            sanitize: true,
-        });
+        test_validator.add_rule(
+            "test_input".to_string(),
+            ValidationRule {
+                min_length: Some(1),
+                max_length: Some(1000),
+                pattern: None,
+                allowed_chars: None,
+                forbidden_chars: None,
+                required: true,
+                sanitize: true,
+            },
+        );
 
-        let result = test_validator.validate("test_input", "<div>Hello & World</div>").unwrap();
+        let result = test_validator
+            .validate("test_input", "<div>Hello & World</div>")
+            .unwrap();
         // The sanitization encodes & first, then < and >, so we get &amp;lt; instead of &lt;
         assert!(result.contains("&amp;lt;"));
         assert!(result.contains("&amp;gt;"));

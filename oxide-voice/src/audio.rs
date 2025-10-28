@@ -76,7 +76,13 @@ impl AudioManager {
     pub async fn list_input_devices(&self) -> Vec<String> {
         let (response_tx, response_rx) = oneshot::channel();
 
-        if self.command_sender.send(AudioCommand::GetInputDevices { response: response_tx }).is_err() {
+        if self
+            .command_sender
+            .send(AudioCommand::GetInputDevices {
+                response: response_tx,
+            })
+            .is_err()
+        {
             return Vec::new();
         }
 
@@ -86,7 +92,13 @@ impl AudioManager {
     pub async fn list_output_devices(&self) -> Vec<String> {
         let (response_tx, response_rx) = oneshot::channel();
 
-        if self.command_sender.send(AudioCommand::GetOutputDevices { response: response_tx }).is_err() {
+        if self
+            .command_sender
+            .send(AudioCommand::GetOutputDevices {
+                response: response_tx,
+            })
+            .is_err()
+        {
             return Vec::new();
         }
 
@@ -96,15 +108,20 @@ impl AudioManager {
     pub async fn start_recording(&self, duration_secs: f32) -> Result<Vec<u8>, String> {
         let (response_tx, response_rx) = oneshot::channel();
 
-        if self.command_sender.send(AudioCommand::StartRecording {
-            duration_secs,
-            response: response_tx
-        }).is_err() {
+        if self
+            .command_sender
+            .send(AudioCommand::StartRecording {
+                duration_secs,
+                response: response_tx,
+            })
+            .is_err()
+        {
             return Err("Audio worker is not available".to_string());
         }
 
-        response_rx.await.map_err(|_| "Audio worker response failed".to_string())?
-
+        response_rx
+            .await
+            .map_err(|_| "Audio worker response failed".to_string())?
     }
 
     #[allow(dead_code)]
@@ -145,26 +162,38 @@ impl AudioManager {
     pub async fn play_audio(&self, audio_data: &[u8]) -> Result<(), String> {
         let (response_tx, response_rx) = oneshot::channel();
 
-        if self.command_sender.send(AudioCommand::PlayAudio {
-            data: audio_data.to_vec(),
-            response: response_tx
-        }).is_err() {
+        if self
+            .command_sender
+            .send(AudioCommand::PlayAudio {
+                data: audio_data.to_vec(),
+                response: response_tx,
+            })
+            .is_err()
+        {
             return Err("Audio worker is not available".to_string());
         }
 
-        response_rx.await.map_err(|_| "Audio worker response failed".to_string())?
+        response_rx
+            .await
+            .map_err(|_| "Audio worker response failed".to_string())?
     }
 
     pub async fn get_input_volume(&self) -> Result<f32, String> {
         let (response_tx, response_rx) = oneshot::channel();
 
-        if self.command_sender.send(AudioCommand::GetInputVolume {
-            response: response_tx
-        }).is_err() {
+        if self
+            .command_sender
+            .send(AudioCommand::GetInputVolume {
+                response: response_tx,
+            })
+            .is_err()
+        {
             return Err("Audio worker is not available".to_string());
         }
 
-        response_rx.await.map_err(|_| "Audio worker response failed".to_string())?
+        response_rx
+            .await
+            .map_err(|_| "Audio worker response failed".to_string())?
     }
 }
 
@@ -172,7 +201,10 @@ impl AudioWorker {
     fn run(mut self) {
         while let Some(command) = self.command_receiver.blocking_recv() {
             match command {
-                AudioCommand::StartRecording { duration_secs, response } => {
+                AudioCommand::StartRecording {
+                    duration_secs,
+                    response,
+                } => {
                     let result = self.handle_start_recording(duration_secs);
                     let _ = response.send(result);
                 }
@@ -220,14 +252,13 @@ impl AudioWorker {
         let (_stream, stream_handle) = OutputStream::try_default()
             .map_err(|e| format!("Failed to create output stream: {e}"))?;
 
-        let sink = Sink::try_new(&stream_handle)
-            .map_err(|e| format!("Failed to create sink: {e}"))?;
+        let sink =
+            Sink::try_new(&stream_handle).map_err(|e| format!("Failed to create sink: {e}"))?;
 
         // Clone the audio data to avoid lifetime issues
         let audio_data_owned = audio_data.to_vec();
         let cursor = Cursor::new(audio_data_owned);
-        let decoder = Decoder::new(cursor)
-            .map_err(|e| format!("Failed to decode audio: {e}"))?;
+        let decoder = Decoder::new(cursor).map_err(|e| format!("Failed to decode audio: {e}"))?;
 
         sink.append(decoder);
         sink.sleep_until_end();
