@@ -1,10 +1,25 @@
 # Oxide Pilot
 
 > ⚠️ **ESTADO DE DESARROLLO**: Este proyecto está actualmente en **fase de desarrollo activo**. Aunque funcional, algunas características pueden ser experimentales o estar sujetas a cambios.
-
-[![CI/CD Pipeline](https://github.com/yourusername/oxide-pilot/actions/workflows/ci.yml/badge.svg)](https://github.com/yourusername/oxide-pilot/actions/workflows/ci.yml)
-[![Build Release](https://github.com/yourusername/oxide-pilot/actions/workflows/build-release.yml/badge.svg)](https://github.com/yourusername/oxide-pilot/actions/workflows/build-release.yml)
+[![Validation Pipeline](https://github.com/OxidePilot-Project/oxide-pilot/actions/workflows/validate.yml/badge.svg)](https://github.com/OxidePilot-Project/oxide-pilot/actions/workflows/validate.yml)
+[![Build Release](https://github.com/OxidePilot-Project/oxide-pilot/actions/workflows/build-release.yml/badge.svg)](https://github.com/OxidePilot-Project/oxide-pilot/actions/workflows/build-release.yml)
+[![Release Workflow](https://github.com/OxidePilot-Project/oxide-pilot/actions/workflows/release.yml/badge.svg)](https://github.com/OxidePilot-Project/oxide-pilot/actions/workflows/release.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+
+<!-- Project logo (use repository-root `logo.svg` if present) -->
+<p align="center">
+  <img src="/logo.svg" alt="Oxide Pilot logo" width="240" />
+</p>
+
+<!-- Technology badges -->
+[![Rust](https://img.shields.io/badge/rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![Tauri](https://img.shields.io/badge/tauri-%2324C8DB.svg?style=for-the-badge&logo=tauri&logoColor=%23FFFFFF)](https://tauri.app/)
+[![Svelte](https://img.shields.io/badge/svelte-%23f1413d.svg?style=for-the-badge&logo=svelte&logoColor=white)](https://svelte.dev/)
+[![Node.js](https://img.shields.io/badge/node-%23339933.svg?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Playwright](https://img.shields.io/badge/playwright-%23167cff.svg?style=for-the-badge&logo=playwright&logoColor=white)](https://playwright.dev/)
+[![SurrealDB](https://img.shields.io/badge/SurrealDB-FF00A0?style=for-the-badge&logo=surrealdb&logoColor=white)](https://surrealdb.com/)
+[![Google Cloud](https://img.shields.io/badge/GoogleCloud-%234285F4.svg?style=for-the-badge&logo=google-cloud&logoColor=white)](https://cloud.google.com/)
+
 
 Oxide Pilot es un **asistente de automatización empresarial** con backend en Rust (Tauri) y UI Svelte. Incluye un sistema avanzado de permisos RPA, agentes Guardian/Copilot, memoria local y soporte para múltiples LLMs.
 
