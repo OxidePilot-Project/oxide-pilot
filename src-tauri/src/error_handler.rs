@@ -342,9 +342,7 @@ where
                     return Err(oxide_error);
                 }
 
-                warn!(
-                    "Attempt {attempt} failed: {oxide_error:?}. Retrying in {delay}ms..."
-                );
+                warn!("Attempt {attempt} failed: {oxide_error:?}. Retrying in {delay}ms...");
 
                 // Attempt recovery
                 if let Err(recovery_error) = ErrorHandler::attempt_recovery(&oxide_error).await {

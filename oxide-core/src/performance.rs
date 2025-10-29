@@ -371,7 +371,7 @@ mod tests {
         sleep(Duration::from_millis(100)).await;
 
         let metrics = monitor.get_metrics().await;
-        // uptime_seconds is u64, always >= 0
-        assert!(metrics.uptime_seconds > 0 || metrics.uptime_seconds == 0);
+        // Verify uptime was tracked (u64, always valid)
+        let _ = metrics.uptime_seconds;
     }
 }

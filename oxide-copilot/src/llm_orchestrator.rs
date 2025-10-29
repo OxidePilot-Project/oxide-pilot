@@ -301,10 +301,7 @@ impl LLMOrchestrator {
     }
 
     /// Find provider by role
-    fn find_provider_by_role(
-        &self,
-        role: LLMRole,
-    ) -> Result<&dyn CollaborativeLLM, CopilotError> {
+    fn find_provider_by_role(&self, role: LLMRole) -> Result<&dyn CollaborativeLLM, CopilotError> {
         self.providers
             .values()
             .find(|provider| provider.role() == role)

@@ -362,21 +362,21 @@
     <div class="card">
       <h3>Create Security Session</h3>
       <div class="field">
-        <label>User ID</label>
-        <input type="text" bind:value={userId} placeholder="user-123" />
+        <label for="user-id">User ID</label>
+        <input id="user-id" type="text" bind:value={userId} placeholder="user-123" />
       </div>
       <div class="field">
-        <label>Permissions (CSV)</label>
-        <input type="text" bind:value={permissionsCsv} placeholder="read,write,admin" />
+        <label for="permissions-csv">Permissions (CSV)</label>
+        <input id="permissions-csv" type="text" bind:value={permissionsCsv} placeholder="read,write,admin" />
       </div>
       <div class="field inline">
         <div>
-          <label>IP Address (optional)</label>
-          <input type="text" bind:value={ipAddress} placeholder="127.0.0.1" />
+          <label for="ip-address">IP Address (optional)</label>
+          <input id="ip-address" type="text" bind:value={ipAddress} placeholder="127.0.0.1" />
         </div>
         <div>
-          <label>User Agent (optional)</label>
-          <input type="text" bind:value={userAgent} placeholder="OxidePilot/1.0" />
+          <label for="user-agent">User Agent (optional)</label>
+          <input id="user-agent" type="text" bind:value={userAgent} placeholder="OxidePilot/1.0" />
         </div>
       </div>
       <button class="btn primary" on:click={createSession} disabled={$loading || !isTauri}>Create Session</button>
@@ -415,8 +415,8 @@
     <div class="card">
       <h3>Validate / Check Permission</h3>
       <div class="field">
-        <label>Session ID</label>
-        <input type="text" bind:value={checkSessionId} placeholder="paste session id" />
+        <label for="check-session-id">Session ID</label>
+        <input id="check-session-id" type="text" bind:value={checkSessionId} placeholder="paste session id" />
       </div>
       <div class="row">
         <button class="btn" on:click={validateSession} disabled={$loading || !isTauri}>Validate Session</button>
@@ -426,8 +426,8 @@
       </div>
 
       <div class="field">
-        <label>Permission</label>
-        <input type="text" bind:value={permissionToCheck} placeholder="admin" />
+        <label for="permission-check">Permission</label>
+        <input id="permission-check" type="text" bind:value={permissionToCheck} placeholder="admin" />
       </div>
       <div class="row">
         <button class="btn" on:click={checkPermission} disabled={$loading || !isTauri}>Check Permission</button>
@@ -440,9 +440,9 @@
     <div class="card">
       <h3>Antivirus: File Scan</h3>
       <div class="field">
-        <label>File</label>
+        <label for="file-path">File</label>
         <div class="row">
-          <input type="text" bind:value={filePath} placeholder="Select a file..." readonly />
+          <input id="file-path" type="text" bind:value={filePath} placeholder="Select a file..." readonly />
           <button class="btn" on:click={pickFile} disabled={!isTauri}>Browse…</button>
         </div>
       </div>
@@ -465,9 +465,9 @@
     <div class="card">
       <h3>Antivirus: Folder Scan</h3>
       <div class="field">
-        <label>Folder</label>
+        <label for="folder-path">Folder</label>
         <div class="row">
-          <input type="text" bind:value={folderPath} placeholder="Select a folder..." readonly />
+          <input id="folder-path" type="text" bind:value={folderPath} placeholder="Select a folder..." readonly />
           <button class="btn" on:click={pickFolder} disabled={!isTauri}>Browse…</button>
         </div>
       </div>
@@ -509,8 +509,8 @@
       <div class="events-header">
         <h3>Security Events</h3>
         <div class="controls">
-          <label>Limit</label>
-          <input type="number" min="1" max="200" bind:value={eventsLimit} />
+          <label for="events-limit">Limit</label>
+          <input id="events-limit" type="number" min="1" max="200" bind:value={eventsLimit} />
         </div>
       </div>
       {#if $events.length === 0}

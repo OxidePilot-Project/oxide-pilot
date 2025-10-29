@@ -69,7 +69,7 @@ windows = { version = "0.52", features = [
 tauri-build = { version = "1.5", features = [] }
 
 [features]
-default = ["custom-protocol", "surrealdb-metrics"]
+default = ["custom-protocol"]  # Removed surrealdb-metrics to avoid librocksdb-sys build issues
 custom-protocol = ["tauri/custom-protocol"]
 cognee = []
 surrealdb-metrics = ["oxide-memory/surrealdb", "oxide-guardian/surrealdb-metrics"]

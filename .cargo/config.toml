@@ -7,5 +7,15 @@
 # This avoids duplicate targets across workspace members and Tauri crate.
 target-dir = "target"
 
+# Limit parallel jobs to reduce memory consumption (critical for release builds)
+jobs = 4
+
 # Optional: speed up builds with sccache (if installed)
 # rustc-wrapper = "sccache"
+
+# Reduce memory usage during compilation
+[target.x86_64-pc-windows-msvc]
+rustflags = [
+  "-C", "debuginfo=0",        # Disable debug info in release to save memory
+  "-C", "codegen-units=16",   # Parallel code generation
+]

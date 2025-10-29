@@ -47,9 +47,7 @@ async fn analyze_with_openai(snapshot: &Value) -> Result<ModelReport, String> {
                 Ok(mr)
             }
             Err(e) => {
-                warn!(
-                    "OpenAI JSON parse failed, returning low-confidence fallback: {e}"
-                );
+                warn!("OpenAI JSON parse failed, returning low-confidence fallback: {e}");
                 Ok(ModelReport {
                     provider: "openai".to_string(),
                     risk_score: 15.0,
@@ -264,9 +262,7 @@ async fn analyze_with_gemini(snapshot: &Value, grounded: bool) -> Result<ModelRe
                     Ok(mr)
                 }
                 Err(e) => {
-                    warn!(
-                        "Gemini JSON parse failed, returning low-confidence fallback: {e}"
-                    );
+                    warn!("Gemini JSON parse failed, returning low-confidence fallback: {e}");
                     Ok(ModelReport {
                         provider: "gemini".to_string(),
                         risk_score: 15.0,
@@ -355,9 +351,7 @@ async fn analyze_with_qwen(snapshot: &Value) -> Result<ModelReport, String> {
             Ok(mr)
         }
         Err(e) => {
-            warn!(
-                "Qwen JSON parse failed, returning low-confidence fallback: {e}"
-            );
+            warn!("Qwen JSON parse failed, returning low-confidence fallback: {e}");
             Ok(ModelReport {
                 provider: "qwen".to_string(),
                 risk_score: 15.0,

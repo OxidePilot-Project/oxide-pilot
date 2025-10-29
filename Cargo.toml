@@ -21,12 +21,14 @@ anyhow = "1"
 tracing = "0.1"
 
 # Profile optimizations for production builds
+# Reduced settings to prevent OOM errors on systems with limited RAM
 [profile.release]
-opt-level = 3          # Maximum optimization
-lto = "thin"           # Link-time optimization (thin for faster builds)
-codegen-units = 1      # Better optimization, slower compile
+opt-level = 2          # Good optimization without excessive memory usage
+lto = false            # Disabled LTO to reduce memory consumption
+codegen-units = 16     # Parallel codegen units to reduce per-unit memory
 strip = true           # Strip symbols for smaller binary
 panic = "abort"        # Smaller binary, faster panic handling
+incremental = true     # Enable incremental compilation
 
 [profile.release-with-debug]
 inherits = "release"

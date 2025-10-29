@@ -104,7 +104,7 @@ mod tests {
     fn test_system_monitor_creation() {
         let _monitor = SystemMonitor::new();
         // Test that the monitor can be created successfully
-        assert!(true); // Basic test to ensure compilation
+        // Creation itself is the test - if it panics, test fails
     }
 
     #[test]

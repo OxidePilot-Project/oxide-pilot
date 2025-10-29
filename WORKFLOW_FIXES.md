@@ -181,5 +181,5 @@ Según `GITHUB_SECRETS_SETUP.md`, los siguientes secrets están configurados:
 
 ---
 
-**Fecha de actualización**: 29 de octubre de 2025  
+**Fecha de actualización**: 29 de octubre de 2025
 **Estado**: ✅ Correcciones aplicadas y listas para testing

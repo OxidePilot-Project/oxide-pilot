@@ -122,10 +122,11 @@
   <!-- Filters -->
   <div class="flex gap-4 mb-4">
     <div class="flex-1">
-      <label class="block text-sm font-medium text-gray-700 mb-1">
+      <label for="filter-permission" class="block text-sm font-medium text-gray-700 mb-1">
         Filter by Permission
       </label>
       <select
+        id="filter-permission"
         bind:value={filterPermission}
         on:change={loadAuditData}
         class="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -142,10 +143,11 @@
     </div>
 
     <div class="flex-1">
-      <label class="block text-sm font-medium text-gray-700 mb-1">
+      <label for="filter-status" class="block text-sm font-medium text-gray-700 mb-1">
         Filter by Status
       </label>
       <select
+        id="filter-status"
         bind:value={filterStatus}
         on:change={loadAuditData}
         class="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"

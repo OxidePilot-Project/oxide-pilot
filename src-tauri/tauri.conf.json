@@ -6,7 +6,7 @@
   },
   "build": {
     "beforeDevCommand": "npm --prefix ./src-frontend run dev -- --port 5317",
-    "beforeBuildCommand": "npm --prefix ./src-frontend ci && npm --prefix ./src-frontend run build",
+    "beforeBuildCommand": "echo 'Frontend ya compilado'",
     "devPath": "http://localhost:5317",
     "distDir": "../src-frontend/dist"
   },
@@ -29,13 +29,12 @@
       "identifier": "com.oxide.pilot",
       "publisher": "Oxide Systems",
       "copyright": "© 2025 Oxide Systems",
+      "icon": [
+        "icons/icon.ico"
+      ],
       "targets": [
         "nsis",
-        "msi",
-        "app",
-        "dmg",
-        "deb",
-        "appimage"
+        "msi"
       ],
       "windows": {
         "nsis": {

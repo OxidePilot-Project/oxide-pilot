@@ -3,16 +3,15 @@
 //! This module exposes Guardian functionality to the Tauri frontend,
 //! including metrics queries, process analysis, and threat detection.
 
-use chrono::{DateTime, Duration, Utc};
-use log::debug;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use tauri::State;
 
 #[cfg(feature = "surrealdb-metrics")]
 use oxide_memory::{BackendSearchItem, SurrealBackend, SystemMetric};
+#[cfg(feature = "surrealdb-metrics")]
+use std::sync::Arc;
 
 /// Shared state for Guardian commands
+#[allow(dead_code)]
 pub struct GuardianState {
     #[cfg(feature = "surrealdb-metrics")]
     pub backend: Arc<SurrealBackend>,
@@ -28,6 +27,7 @@ pub struct TimeRange {
 }
 
 /// Response for metrics query
+#[cfg(feature = "surrealdb-metrics")]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MetricsResponse {
     pub metrics: Vec<SystemMetric>,
@@ -42,6 +42,7 @@ pub struct HighCpuProcessesResponse {
 }
 
 /// Response for memory search
+#[cfg(feature = "surrealdb-metrics")]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemorySearchResponse {
     pub results: Vec<BackendSearchItem>,
@@ -105,9 +106,7 @@ pub async fn get_high_cpu_processes(
     threshold: f64,
     hours: i64,
 ) -> Result<HighCpuProcessesResponse, String> {
-    debug!(
-        "Fetching high CPU processes: threshold={threshold:.2}%, hours={hours}"
-    );
+    debug!("Fetching high CPU processes: threshold={threshold:.2}%, hours={hours}");
 
     let processes = state
         .backend
@@ -184,13 +183,13 @@ pub async fn get_guardian_status(
 // Stub implementations when surrealdb feature is disabled
 #[cfg(not(feature = "surrealdb-metrics"))]
 #[tauri::command]
-pub async fn get_system_metrics(_time_range: TimeRange) -> Result<MetricsResponse, String> {
+pub async fn get_system_metrics(_time_range: TimeRange) -> Result<String, String> {
     Err("SurrealDB metrics feature not enabled".to_string())
 }
 
 #[cfg(not(feature = "surrealdb-metrics"))]
 #[tauri::command]
-pub async fn get_recent_metrics(_hours: i64) -> Result<MetricsResponse, String> {
+pub async fn get_recent_metrics(_hours: i64) -> Result<String, String> {
     Err("SurrealDB metrics feature not enabled".to_string())
 }
 
@@ -208,7 +207,7 @@ pub async fn get_high_cpu_processes(
 pub async fn search_agent_memory(
     _query: String,
     _limit: usize,
-) -> Result<MemorySearchResponse, String> {
+) -> Result<String, String> {
     Err("SurrealDB metrics feature not enabled".to_string())
 }
 

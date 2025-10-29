@@ -260,9 +260,7 @@ impl OxideSystem {
 
         let input_devices = voice_processor.get_input_devices().await;
         let output_devices = voice_processor.get_output_devices().await;
-        info!(
-            "Audio devices - Input: {input_devices:?}, Output: {output_devices:?}"
-        );
+        info!("Audio devices - Input: {input_devices:?}, Output: {output_devices:?}");
 
         // Initialize Performance Monitor
         let performance_monitor = Arc::new(PerformanceMonitor::new());

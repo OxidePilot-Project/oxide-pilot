@@ -399,10 +399,7 @@ async fn initialize_system(
                 let system = OxideSystem::new(config_clone)
                     .await
                     .map_err(OxideError::SystemInit)?;
-                system
-                    .start()
-                    .await
-                    .map_err(OxideError::SystemInit)?;
+                system.start().await.map_err(OxideError::SystemInit)?;
                 Ok::<OxideSystem, OxideError>(system)
             })
         },
@@ -535,10 +532,7 @@ async fn start_folder_scan(
     let cfg = system_clone.get_config().await;
     let max_workers = cfg.guardian.folder_scan_max_workers.unwrap_or(8).max(1);
     let max_depth = cfg.guardian.folder_scan_max_depth.unwrap_or(usize::MAX);
-    let max_file_size_bytes: Option<u64> = cfg
-        .guardian
-        .max_file_size_mb
-        .map(|mb| mb * 1024 * 1024);
+    let max_file_size_bytes: Option<u64> = cfg.guardian.max_file_size_mb.map(|mb| mb * 1024 * 1024);
 
     // Create cancel flag and scan id
     let scan_id = uuid::Uuid::new_v4().to_string();
