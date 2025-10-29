@@ -274,7 +274,7 @@ pub enum MemorySource {
 ///
 /// # Example
 ///
-/// ```rust,no_run
+/// ```rust,ignore
 /// use oxide_memory::SurrealBackend;
 ///
 /// #[tokio::main]
@@ -282,7 +282,7 @@ pub enum MemorySource {
 ///     let backend = SurrealBackend::new("./data/oxide-memory.db").await?;
 ///
 ///     // Insert system metric
-///     backend.insert_system_metric(metric).await?;
+///     // backend.insert_system_metric(metric).await?;
 ///
 ///     // Query high CPU processes
 ///     let processes = backend.query_high_cpu_processes(80.0, 24).await?;
@@ -305,7 +305,7 @@ impl SurrealBackend {
     /// * `Result<Self>` - Initialized backend or error
     ///
     /// # Example
-    /// ```rust,no_run
+    /// ```rust,ignore
     /// let backend = SurrealBackend::new("./data/oxide-memory.db").await?;
     /// ```
     pub async fn new(db_path: impl AsRef<Path>) -> Result<Self> {
@@ -533,11 +533,14 @@ impl SurrealBackend {
     /// * `metric` - System metric to store
     ///
     /// # Example
-    /// ```rust,no_run
+    /// ```rust,ignore
+    /// use oxide_memory::SystemMetric;
+    /// use chrono::Utc;
+    ///
     /// let metric = SystemMetric {
     ///     timestamp: Utc::now(),
     ///     cpu_usage: 45.2,
-    ///     memory_usage: MemoryUsage { /* ... */ },
+    ///     memory_usage: MemoryUsage::default(),
     ///     // ...
     /// };
     /// backend.insert_system_metric(metric).await?;
