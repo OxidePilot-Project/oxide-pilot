@@ -47,7 +47,7 @@ jobs:
           python-version: '3.x'
 
       - name: Install Tauri CLI
-        run: cargo install tauri-cli
+        run: cargo install tauri-cli --locked
 
       - name: Install NSIS & WiX
         run: |
@@ -82,9 +82,9 @@ jobs:
           echo "bundle_dir=src-tauri/target/release/bundle" >> $env:GITHUB_OUTPUT
           Get-ChildItem -Path src-tauri/target/release/bundle -Recurse
 
-      # Optional code signing if secrets are provided
-      - name: Code sign installers (optional)
-        if: ${{ secrets.SIGN_PFX_BASE64 != '' && secrets.SIGN_PFX_PASSWORD != '' }}
+      # Code signing if secrets are provided
+      - name: Code sign installers
+        if: ${{ secrets.SIGN_PFX_BASE64 != '' }}
         shell: pwsh
         env:
           SIGN_PFX_BASE64: ${{ secrets.SIGN_PFX_BASE64 }}
@@ -99,7 +99,13 @@ jobs:
           Get-ChildItem -Path $env:BUNDLE_DIR -Include *.exe,*.msi -Recurse | ForEach-Object {
             Write-Host "Signing $($_.FullName)"
             signtool sign /f $pfx /p $env:SIGN_PFX_PASSWORD /tr $ts /td sha256 /fd sha256 $_.FullName
+            if ($LASTEXITCODE -ne 0) {
+              Write-Error "Failed to sign $($_.FullName)"
+              exit 1
+            }
+            Write-Host "✅ Successfully signed $($_.Name)"
           }
+          Write-Host "All files signed successfully"
 
       - name: Generate release tag
         id: tag

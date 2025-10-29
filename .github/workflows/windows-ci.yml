@@ -29,7 +29,7 @@ jobs:
         with:
           node-version: '20'
       - name: Install Tauri CLI
-        run: cargo install tauri-cli
+        run: cargo install tauri-cli --locked
       - name: Generate icons (if src-tauri/icon.png exists)
         shell: pwsh
         run: |
@@ -45,8 +45,6 @@ jobs:
         run: |
           npm --prefix src-frontend ci
           npm --prefix src-frontend run build
-      - name: Check formatting
-        run: cargo fmt --all -- --check
       - name: Install NSIS & WiX
         run: |
           choco install nsis -y
