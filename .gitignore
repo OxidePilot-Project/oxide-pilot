@@ -43,6 +43,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+build-log.txt
+src-tauri/build-log.txt
 
 # Project artifacts
 .gemini/
@@ -53,6 +55,8 @@ temp-pattern-craft/
 temp-qwen-code/
 temp-superdesign/
 pattern-craft/
+release-bundle/
+*.zip
 .vscode/
 .idea/
 
