@@ -29,13 +29,14 @@ Oxide Pilot es un **asistente de automatización empresarial** con backend en Ru
 ### Opcionales
 - **GPU**: Para aceleración de modelos locales
 
+
 ## 📥 Descarga e Instalación
 
-### Releases Oficiales (Automáticas)
+### Releases Oficiales
 
-Las releases se generan automáticamente en cada push a `main` y están disponibles en [GitHub Releases](https://github.com/yourusername/oxide-pilot/releases):
+Las releases automáticas y estables están disponibles en [GitHub Releases](https://github.com/OxidePilot-Project/oxide-pilot/releases). Los instaladores y artefactos de build NO se incluyen en el repositorio, solo en la sección de releases de GitHub.
 
-- **Windows x64**: Descarga el instalador `.msi` o `.exe`
+- **Windows x64**: Descarga el instalador `.msi` o `.exe` desde la página de releases
 - **Etiquetado Automático**: Cada release incluye timestamp y commit SHA
 - **Pre-releases**: Las builds de `main` se marcan como pre-release
 - **Releases Estables**: Las versiones etiquetadas con `v*` son releases estables
@@ -46,30 +47,9 @@ Las releases se generan automáticamente en cada push a `main` y están disponib
 - `bootstrap-YYYYMMDD-HHmmss-commit` - Build automática desde main
 - `bootstrap-*` - Build específica con etiqueta personalizada
 
-### Verificación de Integridad
-
-Cada release incluye múltiples checksums para verificar la integridad de los archivos:
-
-```powershell
-# Verificar checksum SHA256 (Windows PowerShell)
-Get-FileHash oxide-pilot-setup.exe -Algorithm SHA256
-# Comparar con CHECKSUMS-sha256.txt
-
-# También disponibles: MD5, SHA512
-Get-FileHash oxide-pilot-setup.exe -Algorithm MD5
-Get-FileHash oxide-pilot-setup.exe -Algorithm SHA512
-```
-
-```bash
-# Verificar checksum (Linux/macOS)
-sha256sum -c CHECKSUMS-sha256.txt
-md5sum -c CHECKSUMS-md5.txt
-sha512sum -c CHECKSUMS-sha512.txt
-```
-
 ### Instalación desde Código Fuente
 
-Si prefieres compilar desde el código fuente:
+Si prefieres compilar desde el código fuente, sigue las instrucciones en `AGENTS.md` y `docs/README.md`.
 
 ## Desarrollo rápido
 
