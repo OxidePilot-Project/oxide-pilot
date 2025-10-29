@@ -60,9 +60,15 @@ pattern-craft/
 coverage/
 .target-workspace
 
-# Markdown files (ignore all except README.md)
+# Markdown files (ignore all except the root README.md)
 *.md
-!README.md
+!/README.md
+# Docs except main README
+docs/archive/
+docs/SECURITY_AUDIT_REPORT.md
+docs/PERFORMANCE_BENCHMARK_REPORT.md
+docs/E2E_TEST_REPORT.md
+docs/VALIDATION_REPORT.md
 
 # Additional sensitive files
 *.key
@@ -77,10 +83,19 @@ secrets/
 config/secrets/
 
 # Code signing certificates and related files
+
 certs/
-*.pfx
-*certificate*.txt
-*password*.txt
+certs/*.pfx
+certs/password.txt
+certs/certificate-base64.txt
+certs/OxidePilot-CodeSigning.pfx
+certs/*.key
+certs/*.pem
+certs/*.crt
+certs/*.p12
+certs/*.keystore
+certs/*.jks
+certs/*.p8
 
 # Archive docs with sensitive data
 docs/archive/
@@ -102,6 +117,7 @@ docs/E2E_TEST_REPORT.md
 docs/VALIDATION_REPORT.md
 
 # Installer artifacts
+
 *.msi
 *.exe
 *.dmg
@@ -111,6 +127,10 @@ docs/VALIDATION_REPORT.md
 target/installer/
 target/OxidePilot-*.zip
 target/OxidePilot-*.msi
+src-tauri/target/release/bundle/
+src-tauri/target/release/*.exe
+src-tauri/target/release/*.msi
+src-tauri/target/release/*.zip
 
 # Flamegraph
 flamegraph.svg
