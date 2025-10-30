@@ -10,11 +10,11 @@ const config = {
   kit: {
     // Use static adapter for Tauri integration
     adapter: adapter({
-      pages: 'dist',
-      assets: 'dist',
-      fallback: 'index.html',
+      pages: "dist",
+      assets: "dist",
+      fallback: "index.html",
       precompress: false,
-      strict: true
+      strict: true,
     }),
   },
 };

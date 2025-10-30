@@ -1,42 +1,42 @@
 <script lang="ts">
-  import { fade, fly } from 'svelte/transition';
-  import { onMount } from 'svelte';
+import { onMount } from "svelte";
+import { fade, fly } from "svelte/transition";
 
-  export let message: string;
-  export let type: 'success' | 'error' | 'warning' | 'info' = 'info';
-  export let duration: number = 3000;
-  export let onClose: () => void = () => {};
+export let message: string;
+export const type: "success" | "error" | "warning" | "info" = "info";
+export const duration: number = 3000;
+export const onClose: () => void = () => {};
 
-  let visible = true;
+let visible = true;
 
-  const icons = {
-    success: '✅',
-    error: '❌',
-    warning: '⚠️',
-    info: 'ℹ️'
-  };
+const icons = {
+  success: "✅",
+  error: "❌",
+  warning: "⚠️",
+  info: "ℹ️",
+};
 
-  const colors = {
-    success: '#10b981',
-    error: '#ef4444',
-    warning: '#f59e0b',
-    info: '#3b82f6'
-  };
+const colors = {
+  success: "#10b981",
+  error: "#ef4444",
+  warning: "#f59e0b",
+  info: "#3b82f6",
+};
 
-  onMount(() => {
-    if (duration > 0) {
-      const timer = setTimeout(() => {
-        close();
-      }, duration);
+onMount(() => {
+  if (duration > 0) {
+    const timer = setTimeout(() => {
+      close();
+    }, duration);
 
-      return () => clearTimeout(timer);
-    }
-  });
-
-  function close() {
-    visible = false;
-    setTimeout(onClose, 300);
+    return () => clearTimeout(timer);
   }
+});
+
+function close() {
+  visible = false;
+  setTimeout(onClose, 300);
+}
 </script>
 
 {#if visible}

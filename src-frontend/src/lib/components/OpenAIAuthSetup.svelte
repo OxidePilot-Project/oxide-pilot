@@ -1,123 +1,162 @@
 <script lang="ts">
-  import { createEventDispatcher, onMount, onDestroy } from "svelte";
-  import { isTauri } from "$lib/utils/env";
-  import { tauriInvoke } from "$lib/utils/tauri";
+import { createEventDispatcher, onDestroy, onMount } from "svelte";
+import { isTauri } from "$lib/utils/env";
+import { tauriInvoke } from "$lib/utils/tauri";
 
-  const dispatch = createEventDispatcher();
+const dispatch = createEventDispatcher();
 
-  // Preferred: API Key flow
-  let apiKey = "";
-  // Optional: OAuth flow (advanced)
-  let clientId = "";
-  let clientSecret = "";
-  let isAuthenticating = false;
-  let hasExistingSession = false;
-  let status: { message: string; type: "success" | "error" | "info" | "warning" } = { message: "", type: "info" };
-  let useAdvancedOAuth = false;
+// Preferred: API Key flow
+const apiKey = "";
+// Optional: OAuth flow (advanced)
+let clientId = "";
+let clientSecret = "";
+let isAuthenticating = false;
+let hasExistingSession = false;
+let status: {
+  message: string;
+  type: "success" | "error" | "info" | "warning";
+} = { message: "", type: "info" };
+const useAdvancedOAuth = false;
 
-  async function checkStatus() {
-    if (!isTauri) return;
-    try {
-      const res = await tauriInvoke<string>("openai_get_auth_status");
-      const s = String(res || "");
-      hasExistingSession = (/auth/i.test(s) && !/not\s+auth/i.test(s)) || /api\s*key/i.test(s);
-      if (hasExistingSession) status = { message: "OpenAI session is active.", type: "success" };
-    } catch {
-      hasExistingSession = false;
-    }
+async function checkStatus() {
+  if (!isTauri) return;
+  try {
+    const res = await tauriInvoke<string>("openai_get_auth_status");
+    const s = String(res || "");
+    hasExistingSession =
+      (/auth/i.test(s) && !/not\s+auth/i.test(s)) || /api\s*key/i.test(s);
+    if (hasExistingSession)
+      status = { message: "OpenAI session is active.", type: "success" };
+  } catch {
+    hasExistingSession = false;
   }
+}
 
-  async function connectWithApiKey() {
-    if (!isTauri) {
-      status = { message: "Desktop application required for authentication", type: "error" };
-      return;
-    }
-    if (!apiKey.trim()) {
-      status = { message: "Enter your OpenAI API Key", type: "warning" };
-      return;
-    }
-    isAuthenticating = true;
-    status = { message: "Saving API key...", type: "info" };
-    try {
-      await tauriInvoke("openai_set_api_key", { api_key: apiKey });
-      await checkStatus();
-      if (hasExistingSession) {
-        status = { message: "API key saved. OpenAI is ready.", type: "success" };
-        dispatch("authComplete");
-      } else {
-        status = { message: "API key saved but not active; please try again.", type: "warning" };
-      }
-    } catch (e) {
-      status = { message: `Failed to save API key: ${e}`, type: "error" };
-    } finally {
-      isAuthenticating = false;
-    }
+async function connectWithApiKey() {
+  if (!isTauri) {
+    status = {
+      message: "Desktop application required for authentication",
+      type: "error",
+    };
+    return;
   }
-
-  async function startOAuth() {
-    if (!isTauri) {
-      status = { message: "Desktop application required for authentication", type: "error" };
-      return;
-    }
-    if (!clientId.trim() || !clientSecret.trim()) {
-      status = { message: "Enter Client ID and Client Secret", type: "warning" };
-      return;
-    }
-
-    isAuthenticating = true;
-    status = { message: "Starting OpenAI OAuth2 authentication...", type: "info" };
-    try {
-      await tauriInvoke("openai_start_oauth", { client_id: clientId, client_secret: clientSecret });
-      status = { message: "OAuth2 authentication completed successfully!", type: "success" };
-      hasExistingSession = true;
+  if (!apiKey.trim()) {
+    status = { message: "Enter your OpenAI API Key", type: "warning" };
+    return;
+  }
+  isAuthenticating = true;
+  status = { message: "Saving API key...", type: "info" };
+  try {
+    await tauriInvoke("openai_set_api_key", { api_key: apiKey });
+    await checkStatus();
+    if (hasExistingSession) {
+      status = { message: "API key saved. OpenAI is ready.", type: "success" };
       dispatch("authComplete");
-    } catch (e) {
-      status = { message: `OAuth2 authentication failed: ${e}`, type: "error" };
-    } finally {
-      isAuthenticating = false;
-    }
-  }
-
-  async function clearSession() {
-    if (!isTauri) {
-      status = { message: "Desktop-only operation", type: "info" };
-      return;
-    }
-    try {
-      await tauriInvoke("openai_clear_auth");
-      hasExistingSession = false;
-      status = { message: "OpenAI session cleared", type: "info" };
-    } catch (e) {
-      status = { message: `Failed to clear session: ${e}` , type: "error" };
-    }
-  }
-
-  let unlisten: null | (() => void) = null;
-  onMount(() => {
-    checkStatus();
-    // Browser-mode simulation for E2E tests
-    if (!isTauri && typeof window !== 'undefined') {
-      const handler = (ev: Event) => {
-        try {
-          const detail: any = (ev as CustomEvent).detail || {};
-          const action = String(detail.action || '').toLowerCase();
-          if (action === 'success') {
-            hasExistingSession = true;
-            status = { message: 'OAuth2 authentication completed successfully! (simulated)', type: 'success' };
-            dispatch('authComplete');
-          } else if (action === 'error') {
-            status = { message: detail.message || 'OAuth2 authentication failed (simulated)', type: 'error' };
-          } else if (action === 'clear') {
-            hasExistingSession = false;
-            status = { message: 'OpenAI session cleared (simulated)', type: 'info' };
-          }
-        } catch {}
+    } else {
+      status = {
+        message: "API key saved but not active; please try again.",
+        type: "warning",
       };
-      window.addEventListener('openai_oauth', handler as EventListener);
-      unlisten = () => window.removeEventListener('openai_oauth', handler as EventListener);
     }
-  });
-  onDestroy(() => { try { unlisten && unlisten(); } catch {} });
+  } catch (e) {
+    status = { message: `Failed to save API key: ${e}`, type: "error" };
+  } finally {
+    isAuthenticating = false;
+  }
+}
+
+async function startOAuth() {
+  if (!isTauri) {
+    status = {
+      message: "Desktop application required for authentication",
+      type: "error",
+    };
+    return;
+  }
+  if (!clientId.trim() || !clientSecret.trim()) {
+    status = { message: "Enter Client ID and Client Secret", type: "warning" };
+    return;
+  }
+
+  isAuthenticating = true;
+  status = {
+    message: "Starting OpenAI OAuth2 authentication...",
+    type: "info",
+  };
+  try {
+    await tauriInvoke("openai_start_oauth", {
+      client_id: clientId,
+      client_secret: clientSecret,
+    });
+    status = {
+      message: "OAuth2 authentication completed successfully!",
+      type: "success",
+    };
+    hasExistingSession = true;
+    dispatch("authComplete");
+  } catch (e) {
+    status = { message: `OAuth2 authentication failed: ${e}`, type: "error" };
+  } finally {
+    isAuthenticating = false;
+  }
+}
+
+async function clearSession() {
+  if (!isTauri) {
+    status = { message: "Desktop-only operation", type: "info" };
+    return;
+  }
+  try {
+    await tauriInvoke("openai_clear_auth");
+    hasExistingSession = false;
+    status = { message: "OpenAI session cleared", type: "info" };
+  } catch (e) {
+    status = { message: `Failed to clear session: ${e}`, type: "error" };
+  }
+}
+
+let unlisten: null | (() => void) = null;
+onMount(() => {
+  checkStatus();
+  // Browser-mode simulation for E2E tests
+  if (!isTauri && typeof window !== "undefined") {
+    const handler = (ev: Event) => {
+      try {
+        const detail: any = (ev as CustomEvent).detail || {};
+        const action = String(detail.action || "").toLowerCase();
+        if (action === "success") {
+          hasExistingSession = true;
+          status = {
+            message:
+              "OAuth2 authentication completed successfully! (simulated)",
+            type: "success",
+          };
+          dispatch("authComplete");
+        } else if (action === "error") {
+          status = {
+            message:
+              detail.message || "OAuth2 authentication failed (simulated)",
+            type: "error",
+          };
+        } else if (action === "clear") {
+          hasExistingSession = false;
+          status = {
+            message: "OpenAI session cleared (simulated)",
+            type: "info",
+          };
+        }
+      } catch {}
+    };
+    window.addEventListener("openai_oauth", handler as EventListener);
+    unlisten = () =>
+      window.removeEventListener("openai_oauth", handler as EventListener);
+  }
+});
+onDestroy(() => {
+  try {
+    unlisten && unlisten();
+  } catch {}
+});
 </script>
 
 <div class="openai-auth-setup">

@@ -1,68 +1,68 @@
 <script lang="ts">
-  import { invoke } from '@tauri-apps/api/tauri';
-  import { onMount } from 'svelte';
+import { invoke } from "@tauri-apps/api/tauri";
+import { onMount } from "svelte";
 
-  interface RollbackAction {
-    timestamp: string;
-    action_type: string;
-    details: string;
-    reversible: boolean;
+interface RollbackAction {
+  timestamp: string;
+  action_type: string;
+  details: string;
+  reversible: boolean;
+}
+
+let rollbackHistory: RollbackAction[] = [];
+let reversibleCount = 0;
+let loading = false;
+let error = "";
+let success = "";
+
+async function loadRollbackData() {
+  loading = true;
+  error = "";
+
+  try {
+    const history = await invoke<RollbackAction[]>("rpa_get_rollback_history");
+    rollbackHistory = history;
+
+    const count = await invoke<number>("rpa_get_reversible_count");
+    reversibleCount = count;
+  } catch (err) {
+    error = `Failed to load rollback data: ${err}`;
+  } finally {
+    loading = false;
+  }
+}
+
+async function rollbackLast() {
+  if (reversibleCount === 0) {
+    error = "No reversible actions available";
+    return;
   }
 
-  let rollbackHistory: RollbackAction[] = [];
-  let reversibleCount = 0;
-  let loading = false;
-  let error = '';
-  let success = '';
+  loading = true;
+  error = "";
+  success = "";
 
-  async function loadRollbackData() {
-    loading = true;
-    error = '';
+  try {
+    await invoke("rpa_rollback_last");
+    success = "Successfully rolled back last action";
 
-    try {
-      const history = await invoke<RollbackAction[]>('rpa_get_rollback_history');
-      rollbackHistory = history;
-
-      const count = await invoke<number>('rpa_get_reversible_count');
-      reversibleCount = count;
-    } catch (err) {
-      error = `Failed to load rollback data: ${err}`;
-    } finally {
-      loading = false;
-    }
+    // Reload data
+    await loadRollbackData();
+  } catch (err) {
+    error = `Failed to rollback: ${err}`;
+  } finally {
+    loading = false;
   }
+}
 
-  async function rollbackLast() {
-    if (reversibleCount === 0) {
-      error = 'No reversible actions available';
-      return;
-    }
+function formatTimestamp(timestamp: string): string {
+  const date = new Date(timestamp);
+  return date.toLocaleString();
+}
 
-    loading = true;
-    error = '';
-    success = '';
-
-    try {
-      await invoke('rpa_rollback_last');
-      success = 'Successfully rolled back last action';
-
-      // Reload data
-      await loadRollbackData();
-    } catch (err) {
-      error = `Failed to rollback: ${err}`;
-    } finally {
-      loading = false;
-    }
-  }
-
-  function formatTimestamp(timestamp: string): string {
-    const date = new Date(timestamp);
-    return date.toLocaleString();
-  }
-
-  onMount(() => {
-    loadRollbackData();
-  });
+onMount(() => {
+  loadRollbackData();
+});
 </script>
 
 <div class="bg-white rounded-lg shadow p-6">

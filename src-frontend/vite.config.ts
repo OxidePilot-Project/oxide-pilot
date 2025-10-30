@@ -9,7 +9,7 @@ const istanbulPlugin = istanbul({
   requireEnv: false,
   forceBuildInstrument: true,
 }) as unknown as { enforce?: string };
-(istanbulPlugin as any).enforce = 'post';
+(istanbulPlugin as any).enforce = "post";
 
 export default defineConfig({
   plugins: [
@@ -18,18 +18,18 @@ export default defineConfig({
     istanbulPlugin as any,
   ],
   build: {
-    target: 'esnext',
-    minify: 'esbuild',
+    target: "esnext",
+    minify: "esbuild",
     cssMinify: true,
     rollupOptions: {
       output: {
         manualChunks: {
-          'vendor': ['svelte'],
+          vendor: ["svelte"],
         },
       },
     },
   },
   optimizeDeps: {
-    include: ['@tauri-apps/api'],
+    include: ["@tauri-apps/api"],
   },
 });

@@ -1,26 +1,35 @@
 <script lang="ts">
 import { onMount } from "svelte";
 import { writable } from "svelte/store";
-import ModernAuthSetup from "./ModernAuthSetup.svelte";
-import GoogleAuthSetup from "./GoogleAuthSetup.svelte";
-import QwenAuthSetup from "./QwenAuthSetup.svelte";
-import LocalModelsPanel from "./LocalModelsPanel.svelte";
-import OpenAIAuthSetup from "./OpenAIAuthSetup.svelte";
-import SystemDashboard from "./SystemDashboard.svelte";
-import SystemAnalysisPanel from "./SystemAnalysisPanel.svelte";
-import AdvancedSettings from "./AdvancedSettings.svelte";
-import ConversationInterface from "./ConversationInterface.svelte";
-import PatternDashboard from "./PatternDashboard.svelte";
-import CollaborativeAnalysis from "./CollaborativeAnalysis.svelte";
-import RPAConfirmationDialog from "./RPAConfirmationDialog.svelte";
-import RPADashboard from "./RPADashboard.svelte";
-import GuardianDashboard from "./GuardianDashboard.svelte";
-import GuardianAlertsPanel from "./GuardianAlertsPanel.svelte";
-import GuardianProcessesPanel from "./GuardianProcessesPanel.svelte";
 import { isTauri } from "$lib/utils/env";
 import { tauriInvoke } from "$lib/utils/tauri";
+import AdvancedSettings from "./AdvancedSettings.svelte";
+import CollaborativeAnalysis from "./CollaborativeAnalysis.svelte";
+import ConversationInterface from "./ConversationInterface.svelte";
+import GoogleAuthSetup from "./GoogleAuthSetup.svelte";
+import GuardianAlertsPanel from "./GuardianAlertsPanel.svelte";
+import GuardianDashboard from "./GuardianDashboard.svelte";
+import GuardianProcessesPanel from "./GuardianProcessesPanel.svelte";
+import GuardianThreatTrainer from "./GuardianThreatTrainer.svelte";
+import LocalModelsPanel from "./LocalModelsPanel.svelte";
+import ModernAuthSetup from "./ModernAuthSetup.svelte";
+import OpenAIAuthSetup from "./OpenAIAuthSetup.svelte";
+import PatternDashboard from "./PatternDashboard.svelte";
+import QwenAuthSetup from "./QwenAuthSetup.svelte";
+import RPAConfirmationDialog from "./RPAConfirmationDialog.svelte";
+import RPADashboard from "./RPADashboard.svelte";
+import SystemAnalysisPanel from "./SystemAnalysisPanel.svelte";
+import SystemDashboard from "./SystemDashboard.svelte";
 
-type ActiveTab = "dashboard" | "conversation" | "analysis" | "collaborative" | "guardian" | "rpa" | "settings" | "advanced";
+type ActiveTab =
+  | "dashboard"
+  | "conversation"
+  | "analysis"
+  | "collaborative"
+  | "guardian"
+  | "rpa"
+  | "settings"
+  | "advanced";
 
 const activeTab = writable<ActiveTab>("dashboard");
 let isAuthSetupComplete = false;
@@ -59,23 +68,33 @@ async function exitToMedium() {
     const mod = await import("@tauri-apps/api/window");
     const size = new mod.LogicalSize(1280, 800);
     await win.setSize(size);
-    try { await win.center(); } catch {}
+    try {
+      await win.center();
+    } catch {}
   }
 }
 
 onMount(async () => {
   try {
-    const saved = typeof localStorage !== 'undefined' ? localStorage.getItem(PROVIDER_KEY) : null;
-    if (saved === 'gemini' || saved === 'qwen' || saved === 'openai' || saved === 'local') {
+    const saved =
+      typeof localStorage !== "undefined"
+        ? localStorage.getItem(PROVIDER_KEY)
+        : null;
+    if (
+      saved === "gemini" ||
+      saved === "qwen" ||
+      saved === "openai" ||
+      saved === "local"
+    ) {
       selectedProvider = saved as any;
     }
   } catch {}
   providerInitialized = true;
   // E2E test bypass: allow dashboard in browser mode when ?e2e=1 is present
   try {
-    if (!isTauri && typeof window !== 'undefined') {
+    if (!isTauri && typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
-      if (params.get('e2e') === '1') {
+      if (params.get("e2e") === "1") {
         isAuthSetupComplete = true;
       }
     }
@@ -91,18 +110,29 @@ async function checkAuthStatus() {
     return;
   }
   try {
-    const [geminiStatus, qwenStatus, openaiStatus, localStatus] = await Promise.allSettled([
-      tauriInvoke<string>("get_auth_status"),
-      tauriInvoke<string>("qwen_get_auth_status"),
-      tauriInvoke<string>("openai_get_auth_status"),
-      tauriInvoke<{ running: boolean }>("local_llm_server_status"),
-    ]);
+    const [geminiStatus, qwenStatus, openaiStatus, localStatus] =
+      await Promise.allSettled([
+        tauriInvoke<string>("get_auth_status"),
+        tauriInvoke<string>("qwen_get_auth_status"),
+        tauriInvoke<string>("openai_get_auth_status"),
+        tauriInvoke<{ running: boolean }>("local_llm_server_status"),
+      ]);
 
-    const geminiOk = geminiStatus.status === 'fulfilled' && /auth/i.test(geminiStatus.value) && !/not\s+auth/i.test(geminiStatus.value);
-    const qwenOk = qwenStatus.status === 'fulfilled' && /auth/i.test(qwenStatus.value) && !/not\s+auth/i.test(qwenStatus.value);
-    const openaiVal = openaiStatus.status === 'fulfilled' ? String(openaiStatus.value) : '';
-    const openaiOk = (/auth/i.test(openaiVal) && !/not\s+auth/i.test(openaiVal)) || /api\s*key/i.test(openaiVal);
-    const localOk = localStatus.status === 'fulfilled' && !!localStatus.value?.running;
+    const geminiOk =
+      geminiStatus.status === "fulfilled" &&
+      /auth/i.test(geminiStatus.value) &&
+      !/not\s+auth/i.test(geminiStatus.value);
+    const qwenOk =
+      qwenStatus.status === "fulfilled" &&
+      /auth/i.test(qwenStatus.value) &&
+      !/not\s+auth/i.test(qwenStatus.value);
+    const openaiVal =
+      openaiStatus.status === "fulfilled" ? String(openaiStatus.value) : "";
+    const openaiOk =
+      (/auth/i.test(openaiVal) && !/not\s+auth/i.test(openaiVal)) ||
+      /api\s*key/i.test(openaiVal);
+    const localOk =
+      localStatus.status === "fulfilled" && !!localStatus.value?.running;
     isAuthSetupComplete = !!(geminiOk || qwenOk || openaiOk || localOk);
   } catch (_) {
     isAuthSetupComplete = false;
@@ -117,9 +147,18 @@ async function refreshProviderStatuses() {
       tauriInvoke<string>("qwen_get_auth_status"),
       tauriInvoke<string>("openai_get_auth_status"),
     ]);
-    geminiConnected = geminiStatus.status === 'fulfilled' && /auth/i.test(geminiStatus.value) && !/not\s+auth/i.test(geminiStatus.value);
-    qwenConnected = qwenStatus.status === 'fulfilled' && /auth/i.test(qwenStatus.value) && !/not\s+auth/i.test(qwenStatus.value);
-    openaiConnected = openaiStatus.status === 'fulfilled' && /auth/i.test(openaiStatus.value) && !/not\s+auth/i.test(openaiStatus.value);
+    geminiConnected =
+      geminiStatus.status === "fulfilled" &&
+      /auth/i.test(geminiStatus.value) &&
+      !/not\s+auth/i.test(geminiStatus.value);
+    qwenConnected =
+      qwenStatus.status === "fulfilled" &&
+      /auth/i.test(qwenStatus.value) &&
+      !/not\s+auth/i.test(qwenStatus.value);
+    openaiConnected =
+      openaiStatus.status === "fulfilled" &&
+      /auth/i.test(openaiStatus.value) &&
+      !/not\s+auth/i.test(openaiStatus.value);
   } catch {
     geminiConnected = false;
     qwenConnected = false;
@@ -138,13 +177,20 @@ function onAuthComplete() {
 
 // Write provider changes to localStorage
 $: try {
-  if (providerInitialized && typeof localStorage !== 'undefined' && (selectedProvider === 'gemini' || selectedProvider === 'qwen' || selectedProvider === 'openai' || selectedProvider === 'local')) {
+  if (
+    providerInitialized &&
+    typeof localStorage !== "undefined" &&
+    (selectedProvider === "gemini" ||
+      selectedProvider === "qwen" ||
+      selectedProvider === "openai" ||
+      selectedProvider === "local")
+  ) {
     localStorage.setItem(PROVIDER_KEY, selectedProvider);
   }
 } catch {}
 
 // When switching to Settings, refresh provider badges
-$: if ($activeTab === 'settings') {
+$: if ($activeTab === "settings") {
   void refreshProviderStatuses();
 }
 </script>
@@ -314,6 +360,7 @@ $: if ($activeTab === 'settings') {
           <div class="guardian-panels">
             <GuardianAlertsPanel />
             <GuardianProcessesPanel />
+            <GuardianThreatTrainer />
           </div>
         </div>
       {:else if $activeTab === 'rpa'}

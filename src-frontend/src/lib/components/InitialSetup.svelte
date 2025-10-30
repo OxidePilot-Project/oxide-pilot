@@ -1,65 +1,65 @@
 <script lang="ts">
- import { onMount } from "svelte";
- import { systemConfig } from "$lib/stores/systemConfig";
- import { isTauri } from "$lib/utils/env";
+import { onMount } from "svelte";
+import { systemConfig } from "$lib/stores/systemConfig";
+import { isTauri } from "$lib/utils/env";
 
- import { tauriInvoke } from "$lib/utils/tauri";
+import { tauriInvoke } from "$lib/utils/tauri";
 
- let googleApiKey = "";
- let isLoading = false;
- let error = "";
- let showSetup = false;
+let googleApiKey = "";
+let isLoading = false;
+let error = "";
+let showSetup = false;
 
- onMount(async () => {
-   if (!isTauri) {
-     // In browser/SSR, show setup UI but skip invoking backend
-     showSetup = true;
-     return;
-   }
-   try {
-     const config = await tauriInvoke<any>("get_system_config");
-     if (!config.ai_providers?.google?.api_key) {
-       showSetup = true;
-     }
-   } catch (err) {
-     console.error("Error checking config:", err);
-     showSetup = true;
-   }
- });
+onMount(async () => {
+  if (!isTauri) {
+    // In browser/SSR, show setup UI but skip invoking backend
+    showSetup = true;
+    return;
+  }
+  try {
+    const config = await tauriInvoke<any>("get_system_config");
+    if (!config.ai_providers?.google?.api_key) {
+      showSetup = true;
+    }
+  } catch (err) {
+    console.error("Error checking config:", err);
+    showSetup = true;
+  }
+});
 
- async function saveGoogleApiKey() {
-   if (!googleApiKey.trim()) {
-     error = "Por favor ingresa tu clave API de Google Gemini";
-     return;
-   }
+async function saveGoogleApiKey() {
+  if (!googleApiKey.trim()) {
+    error = "Por favor ingresa tu clave API de Google Gemini";
+    return;
+  }
 
-   isLoading = true;
-   error = "";
+  isLoading = true;
+  error = "";
 
-   try {
-     const currentConfig = await tauriInvoke<any>("get_system_config");
-     const updatedConfig = {
-       ...currentConfig,
-       ai_providers: {
-         ...currentConfig.ai_providers,
-         google: {
-           api_key: googleApiKey.trim(),
-           model: "gemini-1.5-pro",
-           max_tokens: 8192,
-           temperature: 0.7,
-         },
-       },
-     };
+  try {
+    const currentConfig = await tauriInvoke<any>("get_system_config");
+    const updatedConfig = {
+      ...currentConfig,
+      ai_providers: {
+        ...currentConfig.ai_providers,
+        google: {
+          api_key: googleApiKey.trim(),
+          model: "gemini-1.5-pro",
+          max_tokens: 8192,
+          temperature: 0.7,
+        },
+      },
+    };
 
-     await tauriInvoke("update_system_config", { config: updatedConfig });
-     systemConfig.set(updatedConfig);
-     showSetup = false;
-   } catch (err) {
-     error = `Error al guardar la configuración: ${err}`;
-   } finally {
-     isLoading = false;
-   }
- }
+    await tauriInvoke("update_system_config", { config: updatedConfig });
+    systemConfig.set(updatedConfig);
+    showSetup = false;
+  } catch (err) {
+    error = `Error al guardar la configuración: ${err}`;
+  } finally {
+    isLoading = false;
+  }
+}
 </script>
 
 {#if showSetup}
@@ -71,10 +71,11 @@
       </p>
 
       <div class="mb-4">
-        <label class="block text-sm font-medium text-gray-700 mb-2">
+        <label for="google-api-key" class="block text-sm font-medium text-gray-700 mb-2">
           Clave API de Google Gemini
         </label>
         <input
+          id="google-api-key"
           type="password"
           bind:value={googleApiKey}
           placeholder="Ingresa tu clave API aquí..."

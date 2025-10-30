@@ -56,7 +56,7 @@ async function saveConfig() {
 
   try {
     // For now, we'll just simulate saving
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 1000));
     saveStatus.set({
       message: "Configuration saved successfully!",
       type: "success",
@@ -352,6 +352,7 @@ function resetToDefaults() {
     border-radius: 3px;
     background: #ddd;
     outline: none;
+    appearance: none;
     -webkit-appearance: none;
   }
 

@@ -2,11 +2,10 @@
 import { onDestroy, onMount } from "svelte";
 import { writable } from "svelte/store";
 import { isTauri } from "$lib/utils/env";
-
+import { tauriInvoke } from "$lib/utils/tauri";
+import AudioControls from "./AudioControls.svelte";
 // Centralized invoke utility
 import PerformancePanel from "./PerformancePanel.svelte";
-import AudioControls from "./AudioControls.svelte";
-import { tauriInvoke } from "$lib/utils/tauri";
 
 interface SystemStatus {
   cpu_usage: number;
@@ -46,7 +45,7 @@ onMount(async () => {
   // Update every 5 seconds
   updateInterval = setInterval(async () => {
     await updateDashboard();
-  }, 5000);
+  }, 5000) as unknown as number;
 });
 
 onDestroy(() => {

@@ -11,5 +11,5 @@ pub use backend::{BackendSearchItem, MemoryBackend};
 pub use surreal_backend::{
     AgentMemory, AgentType, DiskIO, IncidentInfo, IncidentSeverity, MemorySource, MemoryUsage,
     MitigationStatus, NetworkStats, ProcessInfo, ProcessStatus, ResolutionStatus, SurrealBackend,
-    SystemMetric, ThreatInfo, ThreatSeverity,
+    SystemMetric, ThreatInfo, ThreatSeverity, ThreatTrainingSample,
 };

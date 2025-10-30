@@ -39,18 +39,22 @@
 //! - Bulk inserts: >1000/sec
 //! - Memory footprint: ~30MB idle
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use oxide_core::openai_key;
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
 use surrealdb::engine::local::{Db, RocksDb};
 use surrealdb::sql::Thing;
 use surrealdb::Surreal;
-use tokio::sync::RwLock;
-use tracing::{debug, info};
+use tokio::sync::broadcast::Receiver;
+use tokio::sync::{broadcast, RwLock};
+use tracing::{debug, info, warn};
 
 use crate::backend::{BackendSearchItem, MemoryBackend};
 
@@ -60,14 +64,14 @@ const NAMESPACE: &str = "oxide";
 /// SurrealDB database name
 const DATABASE: &str = "memory";
 
-/// Embedding dimension for vector search (OpenAI text-embedding-3-small)
-const EMBEDDING_DIM: usize = 1536;
+/// Default embedding dimension for vector search (OpenAI text-embedding-3-small)
+const DEFAULT_EMBEDDING_DIM: usize = 1536;
 
 /// Default HNSW parameters for vector index (reserved for future use)
 #[allow(dead_code)]
 const HNSW_M: usize = 12; // Connectivity parameter (higher = better recall, more memory)
 #[allow(dead_code)]
-const HNSW_EFC: usize = 150; // Construction quality (higher = better index, slower build)
+const HNSW_EF_CONSTRUCTION: usize = 200; // Construction quality (higher = better index, slower build)
 
 // ============================================================================
 // Data Models
@@ -232,6 +236,18 @@ pub enum ResolutionStatus {
     Ignored,
 }
 
+/// Supervised training sample for threat risk analysis (SurrealML integration)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThreatTrainingSample {
+    pub severity: String,
+    pub cpu_usage: f64,
+    pub memory_pressure: f64,
+    pub network_score: f64,
+    pub anomaly_score: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<Value>,
+}
+
 /// Agent memory with vector embeddings for semantic search
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentMemory {
@@ -293,6 +309,339 @@ pub enum MemorySource {
 pub struct SurrealBackend {
     /// SurrealDB instance wrapped in Arc<RwLock> for thread-safe access
     db: Arc<RwLock<Surreal<Db>>>,
+    /// Optional embedding service (OpenAI or local endpoint)
+    embedding_service: Option<Arc<EmbeddingService>>,
+    /// Expected embedding dimensionality
+    embedding_dim: usize,
+    /// Broadcast channel for realtime metric updates
+    metrics_tx: broadcast::Sender<SystemMetric>,
+}
+
+#[derive(Clone)]
+struct EmbeddingService {
+    client: Client,
+    provider: EmbeddingProvider,
+}
+
+#[derive(Clone)]
+enum EmbeddingProvider {
+    OpenAI {
+        base_url: String,
+        model: String,
+    },
+    Local {
+        endpoint: String,
+        model: Option<String>,
+        authorization: Option<String>,
+    },
+}
+
+#[derive(Deserialize)]
+struct EmbeddingApiResponse {
+    data: Vec<EmbeddingApiData>,
+}
+
+#[derive(Deserialize)]
+struct EmbeddingApiData {
+    embedding: Vec<f64>,
+}
+
+impl EmbeddingService {
+    async fn from_env() -> Result<(Option<Arc<Self>>, usize)> {
+        let requested_dim = std::env::var("OXIDE_EMBEDDINGS_DIM")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .filter(|dim| *dim > 0);
+
+        if parse_env_bool("OXIDE_EMBEDDINGS_DISABLE") {
+            return Ok((None, requested_dim.unwrap_or(DEFAULT_EMBEDDING_DIM)));
+        }
+
+        if let Some(endpoint) = std::env::var("OXIDE_EMBEDDINGS_ENDPOINT")
+            .ok()
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty())
+        {
+            let client = Self::build_client()?;
+            let model = std::env::var("OXIDE_EMBEDDINGS_MODEL")
+                .ok()
+                .map(|m| m.trim().to_string())
+                .filter(|m| !m.is_empty());
+            let authorization = std::env::var("OXIDE_EMBEDDINGS_AUTHORIZATION")
+                .ok()
+                .map(|v| v.trim().to_string())
+                .filter(|v| !v.is_empty())
+                .or_else(|| {
+                    std::env::var("OXIDE_EMBEDDINGS_API_KEY")
+                        .ok()
+                        .map(|v| v.trim().to_string())
+                        .filter(|v| !v.is_empty())
+                        .map(|token| format!("Bearer {token}"))
+                });
+
+            let dim = requested_dim.unwrap_or(DEFAULT_EMBEDDING_DIM);
+            let service = Self {
+                client,
+                provider: EmbeddingProvider::Local {
+                    endpoint,
+                    model,
+                    authorization,
+                },
+            };
+            return Ok((Some(Arc::new(service)), dim));
+        }
+
+        // Default to OpenAI embeddings if available (even if key is provided later)
+        let client = Self::build_client()?;
+        let model = std::env::var("OPENAI_EMBEDDING_MODEL")
+            .unwrap_or_else(|_| "text-embedding-3-small".to_string());
+        let base_url = std::env::var("OPENAI_API_BASE")
+            .unwrap_or_else(|_| "https://api.openai.com/v1".to_string());
+
+        let dim = requested_dim
+            .or_else(|| embedding_dimension_for_model(&model))
+            .unwrap_or(DEFAULT_EMBEDDING_DIM);
+
+        let service = Self {
+            client,
+            provider: EmbeddingProvider::OpenAI { base_url, model },
+        };
+
+        Ok((Some(Arc::new(service)), dim))
+    }
+
+    fn build_client() -> Result<Client> {
+        let timeout_secs = std::env::var("OXIDE_EMBEDDINGS_TIMEOUT_SECS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .filter(|v| *v > 0)
+            .unwrap_or(30);
+
+        Client::builder()
+            .timeout(Duration::from_secs(timeout_secs))
+            .build()
+            .context("Failed to construct embeddings HTTP client")
+    }
+
+    fn describe(&self) -> String {
+        match &self.provider {
+            EmbeddingProvider::OpenAI { model, .. } => format!("OpenAI ({model})"),
+            EmbeddingProvider::Local {
+                endpoint, model, ..
+            } => {
+                if let Some(model) = model {
+                    format!("Local ({endpoint}, model={model})")
+                } else {
+                    format!("Local ({endpoint})")
+                }
+            }
+        }
+    }
+
+    async fn embed(&self, text: &str) -> Result<Vec<f64>> {
+        match &self.provider {
+            EmbeddingProvider::OpenAI { base_url, model } => {
+                self.embed_openai(base_url, model, text).await
+            }
+            EmbeddingProvider::Local {
+                endpoint,
+                model,
+                authorization,
+            } => {
+                self.embed_local(endpoint, model.as_ref(), authorization.as_ref(), text)
+                    .await
+            }
+        }
+    }
+
+    async fn embed_openai(&self, base_url: &str, model: &str, text: &str) -> Result<Vec<f64>> {
+        let api_key = openai_key::get_api_key()
+            .await
+            .map_err(|e| anyhow!("Failed to read OpenAI API key: {e}"))?
+            .ok_or_else(|| anyhow!("OpenAI API key not configured"))?;
+
+        let url = format!("{}/embeddings", base_url.trim_end_matches('/'));
+        let payload = serde_json::json!({
+            "input": text,
+            "model": model,
+        });
+
+        let response = self
+            .client
+            .post(url)
+            .bearer_auth(api_key)
+            .json(&payload)
+            .send()
+            .await
+            .context("OpenAI embeddings request failed")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(anyhow!(
+                "OpenAI embeddings request failed: {status} - {body}"
+            ));
+        }
+
+        let parsed: EmbeddingApiResponse = response
+            .json()
+            .await
+            .context("Failed to parse OpenAI embeddings response")?;
+
+        parsed
+            .data
+            .into_iter()
+            .next()
+            .map(|item| item.embedding)
+            .ok_or_else(|| anyhow!("OpenAI embeddings response missing data"))
+    }
+
+    async fn embed_local(
+        &self,
+        endpoint: &str,
+        model: Option<&String>,
+        authorization: Option<&String>,
+        text: &str,
+    ) -> Result<Vec<f64>> {
+        let url = format!("{}/embeddings", endpoint.trim_end_matches('/'));
+        let mut payload = serde_json::json!({
+            "input": [text],
+        });
+
+        if let Some(model_name) = model {
+            payload["model"] = serde_json::json!(model_name);
+        }
+
+        let mut request = self.client.post(url).json(&payload);
+        if let Some(header) = authorization {
+            request = request.header("Authorization", header);
+        }
+
+        let response = request
+            .send()
+            .await
+            .context("Local embeddings request failed")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(anyhow!(
+                "Local embeddings request failed: {status} - {body}"
+            ));
+        }
+
+        let parsed: EmbeddingApiResponse = response
+            .json()
+            .await
+            .context("Failed to parse local embeddings response")?;
+
+        parsed
+            .data
+            .into_iter()
+            .next()
+            .map(|item| item.embedding)
+            .ok_or_else(|| anyhow!("Local embeddings response missing data"))
+    }
+}
+
+fn parse_env_bool(key: &str) -> bool {
+    std::env::var(key)
+        .ok()
+        .map(|v| v.trim().to_ascii_lowercase())
+        .filter(|v| !v.is_empty())
+        .map(|v| matches!(v.as_str(), "1" | "true" | "yes" | "on"))
+        .unwrap_or(false)
+}
+
+fn embedding_dimension_for_model(model: &str) -> Option<usize> {
+    let normalized = model.trim().to_ascii_lowercase();
+    match normalized.as_str() {
+        "text-embedding-3-small" => Some(1536),
+        "text-embedding-3-large" => Some(3072),
+        "text-embedding-ada-002" => Some(1536),
+        _ => None,
+    }
+}
+
+fn normalize_embedding(mut vector: Vec<f64>, target: usize) -> Vec<f64> {
+    if vector.len() == target {
+        return vector;
+    }
+
+    if vector.len() > target {
+        vector.truncate(target);
+        vector
+    } else {
+        vector.resize(target, 0.0);
+        vector
+    }
+}
+
+fn infer_agent_type(tag: &str) -> AgentType {
+    match tag.trim().to_ascii_lowercase().as_str() {
+        "copilot" | "conversation" | "user" | "assistant" => AgentType::Copilot,
+        _ => AgentType::Guardian,
+    }
+}
+
+fn infer_memory_source(tag: &str) -> MemorySource {
+    match tag.trim().to_ascii_lowercase().as_str() {
+        "user" | "conversation" | "assistant" | "copilot" => MemorySource::UserQuery,
+        "threat" | "security" | "incident" => MemorySource::ThreatReport,
+        "performance" | "metric" | "monitor" => MemorySource::PerformanceAnalysis,
+        _ => MemorySource::SystemLog,
+    }
+}
+
+fn build_metadata_with_source(metadata: &Value, source_tag: &str) -> Value {
+    match metadata {
+        Value::Object(map) => {
+            let mut updated = map.clone();
+            updated
+                .entry("source_tag".to_string())
+                .or_insert_with(|| Value::String(source_tag.to_string()));
+            Value::Object(updated)
+        }
+        Value::Null => serde_json::json!({ "source_tag": source_tag }),
+        other => serde_json::json!({
+            "source_tag": source_tag,
+            "legacy_metadata": other,
+        }),
+    }
+}
+
+fn extract_feature(features: &Value, key: &str, default: f64) -> f64 {
+    features.get(key).and_then(Value::as_f64).unwrap_or(default)
+}
+
+fn categorize_severity(normalized_score: f64) -> &'static str {
+    if normalized_score < 0.3 {
+        "low"
+    } else if normalized_score < 0.6 {
+        "medium"
+    } else if normalized_score < 0.8 {
+        "high"
+    } else {
+        "critical"
+    }
+}
+
+fn fallback_threat_prediction(features: &Value) -> Value {
+    let cpu = extract_feature(features, "cpu_usage", 0.0);
+    let mem = extract_feature(features, "memory_pressure", 0.0);
+    let network = extract_feature(features, "network_score", 0.0);
+    let anomaly = extract_feature(features, "anomaly_score", 0.0);
+
+    let weighted = (cpu * 0.4) + (mem * 0.3) + (network * 0.2) + (anomaly * 0.1);
+    let normalized = (weighted / 100.0).clamp(0.0, 1.0);
+    let severity = categorize_severity(normalized);
+
+    json!({
+        "provider": "heuristic",
+        "severity": severity,
+        "score": normalized,
+        "confidence": 0.35
+    })
 }
 
 impl SurrealBackend {
@@ -343,9 +692,67 @@ impl SurrealBackend {
             .context("Failed to initialize schema")?;
 
         info!("SurrealDB backend initialized successfully");
+        let (embedding_service, embedding_dim) = EmbeddingService::from_env().await?;
+        let (metrics_tx, _) = broadcast::channel(512);
+
+        if let Some(service) = &embedding_service {
+            info!(
+                "Embedding provider ready: {} (dimension={embedding_dim})",
+                service.describe()
+            );
+        } else {
+            warn!(
+                "No embedding provider configured; using zero-vector fallback (dimension={embedding_dim})"
+            );
+        }
+
         Ok(Self {
             db: Arc::new(RwLock::new(db)),
+            embedding_service,
+            embedding_dim,
+            metrics_tx,
         })
+    }
+
+    /// Returns the configured embedding dimensionality.
+    pub fn embedding_dimension(&self) -> usize {
+        self.embedding_dim
+    }
+
+    /// Generate an embedding vector for the provided text using the configured provider.
+    ///
+    /// Falls back to a zero-vector when the provider is unavailable or an error occurs.
+    pub async fn embed_text(&self, text: &str) -> Result<Vec<f64>, String> {
+        if text.trim().is_empty() {
+            return Ok(vec![0.0; self.embedding_dim]);
+        }
+
+        if let Some(service) = &self.embedding_service {
+            match service.embed(text).await {
+                Ok(vector) => {
+                    if vector.len() == self.embedding_dim {
+                        Ok(vector)
+                    } else {
+                        warn!(
+                            "Embedding dimension mismatch (expected {}, got {}). Normalizing vector.",
+                            self.embedding_dim,
+                            vector.len()
+                        );
+                        Ok(normalize_embedding(vector, self.embedding_dim))
+                    }
+                }
+                Err(err) => {
+                    warn!(
+                        "Embedding generation failed: {:#}. Falling back to zero vector.",
+                        err
+                    );
+                    Ok(vec![0.0; self.embedding_dim])
+                }
+            }
+        } else {
+            debug!("Embedding service not configured; returning zero-vector embedding.");
+            Ok(vec![0.0; self.embedding_dim])
+        }
     }
 
     /// Initialize all database tables, indices, and constraints
@@ -504,20 +911,95 @@ impl SurrealBackend {
         .await
         .context("Failed to create agent_memory table")?;
 
-        // Note: HNSW vector index requires SurrealDB 2.3+ and proper syntax
-        // Commenting out for now until stable API is confirmed
-        /*
-        db.query(format!(
+        // Attempt to enable HNSW vector index support. Not all SurrealDB builds expose it,
+        // so treat failures as warnings rather than hard errors.
+        match db
+            .query(format!(
+                r#"
+                DEFINE INDEX IF NOT EXISTS idx_embedding ON agent_memory
+                    FIELDS embedding
+                    HNSW DIMENSION {DEFAULT_EMBEDDING_DIM} DIST COSINE EF {HNSW_EF_CONSTRUCTION} M {HNSW_M};
+                "#
+            ))
+            .await
+        {
+            Ok(_) => info!("HNSW vector index ready on agent_memory.embedding"),
+            Err(err) => warn!(
+                "HNSW index creation skipped (feature may be unavailable on this build): {:#}",
+                err
+            ),
+        };
+
+        // Supervised training dataset for SurrealML threat analytics
+        db.query(
             r#"
-            DEFINE INDEX IF NOT EXISTS idx_embedding ON agent_memory
-                FIELDS embedding
-                HNSW DIMENSION {} DIST COSINE EFC {} M {};
+            DEFINE TABLE IF NOT EXISTS threat_training SCHEMAFULL
+                COMMENT "Training samples for threat risk predictions";
+
+            DEFINE FIELD IF NOT EXISTS severity ON threat_training TYPE string
+                ASSERT $value INSIDE ['low','medium','high','critical'];
+            DEFINE FIELD IF NOT EXISTS cpu_usage ON threat_training TYPE float;
+            DEFINE FIELD IF NOT EXISTS memory_pressure ON threat_training TYPE float;
+            DEFINE FIELD IF NOT EXISTS network_score ON threat_training TYPE float;
+            DEFINE FIELD IF NOT EXISTS anomaly_score ON threat_training TYPE float;
+            DEFINE FIELD IF NOT EXISTS metadata ON threat_training TYPE option<object>;
             "#,
-            EMBEDDING_DIM, HNSW_EFC, HNSW_M
-        ))
+        )
         .await
-        .context("Failed to create HNSW vector index")?;
-        */
+        .context("Failed to create threat_training table")?;
+
+        if let Err(err) = db
+            .query(
+                r#"
+                DEFINE MODEL IF NOT EXISTS threat_risk_model
+                    ON threat_training
+                    TARGET severity
+                    FEATURES cpu_usage, memory_pressure, network_score, anomaly_score
+                    TYPE BAYES;
+                "#,
+            )
+            .await
+        {
+            warn!(
+                "SurrealML model definition skipped (may require enterprise build): {:#}",
+                err
+            );
+        }
+
+        if let Err(err) = db
+            .query(
+                r#"
+                DEFINE VIEW IF NOT EXISTS view_hourly_metrics AS
+                    SELECT math::mean(cpu_usage) AS avg_cpu,
+                           math::max(cpu_usage) AS peak_cpu,
+                           math::mean(memory_usage.percent) AS avg_mem_percent,
+                           time::floor(timestamp, 1h) AS hour_bucket,
+                           count() AS samples
+                    FROM system_metrics
+                    GROUP BY hour_bucket
+                    ORDER BY hour_bucket DESC;
+                "#,
+            )
+            .await
+        {
+            warn!("Computed view view_hourly_metrics unavailable: {:#}", err);
+        }
+
+        if let Err(err) = db
+            .query(
+                r#"
+                DEFINE FUNCTION IF NOT EXISTS fn::risk::resource($cpu, $mem, $threats) {
+                    RETURN math::clamp(($cpu * 0.5) + ($mem * 0.3) + ($threats * 0.2), 0, 100);
+                };
+                "#,
+            )
+            .await
+        {
+            warn!(
+                "Custom risk scoring function unavailable (JS functions may be disabled): {:#}",
+                err
+            );
+        }
 
         debug!("Database schema initialized successfully");
         Ok(())
@@ -552,6 +1034,7 @@ impl SurrealBackend {
         );
 
         let db = self.db.read().await;
+        let metric_clone = metric.clone();
 
         // Use query with datetime conversion to avoid serialization issues
         let query = format!(
@@ -579,6 +1062,8 @@ impl SurrealBackend {
             .query(query)
             .await
             .context("Failed to insert system metric")?;
+
+        let _ = self.metrics_tx.send(metric_clone);
 
         // For now, just return a dummy Thing since the insertion worked
         // TODO: Fix deserialization issue with Thing
@@ -696,7 +1181,7 @@ impl SurrealBackend {
     /// Semantic search using vector embeddings (cosine similarity)
     ///
     /// # Arguments
-    /// * `query_embedding` - Query vector (1536 dimensions)
+    /// * `query_embedding` - Query vector (must match configured dimension)
     /// * `agent_type` - Filter by agent type ("guardian" or "copilot")
     /// * `limit` - Max number of results
     ///
@@ -713,10 +1198,10 @@ impl SurrealBackend {
             agent_type, limit
         );
 
-        if query_embedding.len() != EMBEDDING_DIM {
+        if query_embedding.len() != self.embedding_dim {
             anyhow::bail!(
                 "Invalid embedding dimension: expected {}, got {}",
-                EMBEDDING_DIM,
+                self.embedding_dim,
                 query_embedding.len()
             );
         }
@@ -724,26 +1209,49 @@ impl SurrealBackend {
         let agent_type_owned = agent_type.to_string();
         let db = self.db.read().await;
 
-        // Note: Using manual cosine similarity until HNSW index is stable
-        // TODO: Switch to native vector search when SurrealDB 2.3+ HNSW is production-ready
-        let mut result = db
+        let mut result = match db
             .query(
                 r#"
                 SELECT content,
-                       vector::similarity::cosine(embedding, $query_vec) AS score,
+                       1.0 - vector::distance::cosine(embedding, $query_vec) AS score,
                        source,
                        metadata
                 FROM agent_memory
                 WHERE agent_type = $agent_type
-                ORDER BY score DESC
+                ORDER BY embedding <-> $query_vec
                 LIMIT $limit
                 "#,
             )
-            .bind(("query_vec", query_embedding))
-            .bind(("agent_type", agent_type_owned))
-            .bind(("limit", limit))
+            .bind(("query_vec", query_embedding.clone()))
+            .bind(("agent_type", agent_type_owned.clone()))
+            .bind(("limit", limit as i64))
             .await
-            .context("Failed to execute vector search")?;
+        {
+            Ok(result) => result,
+            Err(err) => {
+                warn!(
+                    "Native HNSW ordering unavailable, falling back to cosine ranking: {:#}",
+                    err
+                );
+                db.query(
+                    r#"
+                    SELECT content,
+                           vector::similarity::cosine(embedding, $fallback_vec) AS score,
+                           source,
+                           metadata
+                    FROM agent_memory
+                    WHERE agent_type = $agent_type
+                    ORDER BY score DESC
+                    LIMIT $limit
+                    "#,
+                )
+                .bind(("fallback_vec", query_embedding))
+                .bind(("agent_type", agent_type_owned))
+                .bind(("limit", limit as i64))
+                .await
+                .context("Failed to execute fallback vector search")?
+            }
+        };
 
         #[derive(Deserialize)]
         struct SearchResult {
@@ -770,12 +1278,107 @@ impl SurrealBackend {
         Ok(items)
     }
 
+    /// Subscribe to realtime metric updates emitted by the MetricsCollector.
+    pub fn subscribe_metrics(&self) -> Receiver<SystemMetric> {
+        self.metrics_tx.subscribe()
+    }
+
+    /// Upsert a threat training sample to enrich SurrealML datasets.
+    pub async fn upsert_threat_training_sample(&self, sample: ThreatTrainingSample) -> Result<()> {
+        let payload =
+            serde_json::to_value(&sample).context("Failed to serialize threat training sample")?;
+
+        let db = self.db.read().await;
+        db.query("CREATE threat_training CONTENT $payload")
+            .bind(("payload", payload))
+            .await
+            .context("Failed to store threat training sample")?;
+
+        Ok(())
+    }
+
+    /// Predict threat severity using SurrealML (with heuristic fallback if unavailable).
+    pub async fn ml_predict_threat(&self, features: Value) -> Result<Value> {
+        let db = self.db.read().await;
+        match db
+            .query(
+                r#"
+                SELECT ml::predict::bayes('threat_risk_model', $features) AS prediction
+                "#,
+            )
+            .bind(("features", features.clone()))
+            .await
+        {
+            Ok(mut result) => {
+                let prediction: Option<Value> = result
+                    .take(0)
+                    .context("Failed to extract SurrealML prediction")?;
+                Ok(prediction.unwrap_or_else(|| fallback_threat_prediction(&features)))
+            }
+            Err(err) => {
+                warn!(
+                    "SurrealML prediction failed; using heuristic fallback: {:#}",
+                    err
+                );
+                Ok(fallback_threat_prediction(&features))
+            }
+        }
+    }
+
+    /// Query computed hourly metrics view for performance dashboards.
+    pub async fn query_hourly_metrics(&self, hours: i64) -> Result<Vec<Value>> {
+        let db = self.db.read().await;
+        let mut result = db
+            .query(
+                r#"
+                SELECT *
+                FROM view_hourly_metrics
+                WHERE hour_bucket >= time::now() - type::duration(string::concat($hours, "h"))
+                ORDER BY hour_bucket DESC
+                "#,
+            )
+            .bind(("hours", hours))
+            .await
+            .context("Failed to query hourly metrics view")?;
+
+        let rows: Vec<Value> = result.take(0).context("Failed to extract hourly metrics")?;
+        Ok(rows)
+    }
+
+    /// Compute process hotspots based on recent metrics.
+    pub async fn query_process_hotspots(&self, hours: i64) -> Result<Vec<Value>> {
+        let db = self.db.read().await;
+        let mut result = db
+            .query(
+                r#"
+                SELECT name,
+                       math::mean(cpu_percent) AS avg_cpu,
+                       math::max(cpu_percent) AS peak_cpu,
+                       math::mean(memory_mb) AS avg_memory_mb,
+                       count() AS samples
+                FROM process
+                WHERE start_time >= time::now() - type::duration(string::concat($hours, "h"))
+                GROUP BY name
+                ORDER BY peak_cpu DESC
+                LIMIT 15
+                "#,
+            )
+            .bind(("hours", hours))
+            .await
+            .context("Failed to query process hotspots")?;
+
+        let rows: Vec<Value> = result
+            .take(0)
+            .context("Failed to extract process hotspots")?;
+        Ok(rows)
+    }
+
     /// Insert agent memory with embedding
     pub async fn insert_agent_memory(&self, memory: AgentMemory) -> Result<Thing> {
-        if memory.embedding.len() != EMBEDDING_DIM {
+        if memory.embedding.len() != self.embedding_dim {
             anyhow::bail!(
                 "Invalid embedding dimension: expected {}, got {}",
-                EMBEDDING_DIM,
+                self.embedding_dim,
                 memory.embedding.len()
             );
         }
@@ -833,19 +1436,36 @@ impl MemoryBackend for SurrealBackend {
     ) -> Result<(), String> {
         debug!("Adding {} text items to agent memory", items.len());
 
-        for (_source, texts) in items {
+        for (source_tag, texts) in items {
+            let agent_type = infer_agent_type(&source_tag);
+            let memory_source = infer_memory_source(&source_tag);
+
             for text in texts {
-                // TODO: Generate real embeddings using text-embeddings-inference or OpenAI API
-                // For now, using zero vector as placeholder
-                let embedding = vec![0.0; EMBEDDING_DIM];
+                let embedding = self.embed_text(&text).await?;
+                let mut metadata_value = build_metadata_with_source(&metadata, &source_tag);
+
+                // Ensure metadata is optional (avoid storing explicit null)
+                let memory_metadata = match &metadata_value {
+                    Value::Null => None,
+                    Value::Object(_) => Some(metadata_value),
+                    _ => {
+                        // build_metadata_with_source ensures object unless metadata itself is null,
+                        // but handle other cases defensively.
+                        metadata_value = serde_json::json!({
+                            "legacy_metadata": metadata,
+                            "source_tag": source_tag,
+                        });
+                        Some(metadata_value)
+                    }
+                };
 
                 let memory = AgentMemory {
-                    agent_type: AgentType::Guardian,
+                    agent_type: agent_type.clone(),
                     content: text.clone(),
                     embedding,
                     timestamp: Utc::now(),
-                    source: MemorySource::SystemLog,
-                    metadata: Some(metadata.clone()),
+                    source: memory_source.clone(),
+                    metadata: memory_metadata,
                 };
 
                 self.insert_agent_memory(memory)
@@ -860,8 +1480,7 @@ impl MemoryBackend for SurrealBackend {
     async fn search(&self, query: String, top_k: usize) -> Result<Vec<BackendSearchItem>, String> {
         debug!("Searching for: '{}' (top_k={})", query, top_k);
 
-        // TODO: Generate real query embedding
-        let query_embedding = vec![0.0; EMBEDDING_DIM];
+        let query_embedding = self.embed_text(&query).await?;
 
         self.vector_search(query_embedding, "guardian", top_k)
             .await
@@ -971,7 +1590,16 @@ mod tests {
             .unwrap();
 
         // Invalid dimension should fail
-        let result = backend.vector_search(vec![0.0; 128], "guardian", 5).await;
+        let expected_dim = backend.embedding_dimension();
+        let invalid_dim = if expected_dim > 1 {
+            expected_dim - 1
+        } else {
+            expected_dim + 1
+        };
+
+        let result = backend
+            .vector_search(vec![0.0; invalid_dim], "guardian", 5)
+            .await;
 
         assert!(result.is_err());
         assert!(result

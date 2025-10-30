@@ -134,6 +134,14 @@ pub struct SurrealDbConfig {
     pub collect_metrics: bool,
     #[serde(default)]
     pub metrics_interval_secs: Option<u64>,
+    #[serde(default)]
+    pub distributed: bool,
+    #[serde(default)]
+    pub tikv_endpoints: Option<Vec<String>>,
+    #[serde(default)]
+    pub enable_js_functions: bool,
+    #[serde(default)]
+    pub enable_computed_views: bool,
 }
 
 impl SurrealDbConfig {
@@ -148,6 +156,19 @@ impl SurrealDbConfig {
                 if interval == 0 {
                     return Err(
                         "SurrealDB metrics interval must be greater than 0 seconds".to_string()
+                    );
+                }
+            }
+            if self.distributed {
+                let endpoint_count = self
+                    .tikv_endpoints
+                    .as_ref()
+                    .map(|v| v.iter().filter(|item| !item.trim().is_empty()).count())
+                    .unwrap_or(0);
+                if endpoint_count == 0 {
+                    return Err(
+                        "SurrealDB distributed mode requires at least one TiKV endpoint"
+                            .to_string(),
                     );
                 }
             }

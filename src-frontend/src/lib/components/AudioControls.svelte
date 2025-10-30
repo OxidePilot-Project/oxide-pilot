@@ -33,7 +33,10 @@ onDestroy(() => {
 
 async function loadAudioDevices() {
   try {
-    const devices = (await tauriInvoke("get_audio_devices")) as [string[], string[]];
+    const devices = (await tauriInvoke("get_audio_devices")) as [
+      string[],
+      string[],
+    ];
     audioDevices.set({
       input: devices[0],
       output: devices[1],
@@ -51,7 +54,7 @@ function startVolumeMonitoring() {
     } catch (_error) {
       // Silently handle errors to avoid spam
     }
-  }, 100);
+  }, 100) as unknown as number;
 }
 
 async function startRecording() {

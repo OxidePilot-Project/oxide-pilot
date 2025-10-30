@@ -1604,9 +1604,15 @@ fn main() {
             // Guardian Commands
             guardian_commands::get_system_metrics,
             guardian_commands::get_recent_metrics,
+            guardian_commands::get_metrics_summary,
+            guardian_commands::get_hourly_metrics,
+            guardian_commands::get_process_hotspots,
             guardian_commands::get_high_cpu_processes,
             guardian_commands::search_agent_memory,
-            guardian_commands::get_guardian_status
+            guardian_commands::get_guardian_status,
+            guardian_commands::predict_threat_risk,
+            guardian_commands::submit_threat_training_sample,
+            guardian_commands::subscribe_guardian_metrics
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

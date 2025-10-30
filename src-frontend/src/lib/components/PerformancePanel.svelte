@@ -28,7 +28,7 @@ onMount(async () => {
   // Update every 2 seconds
   updateInterval = setInterval(async () => {
     await updatePerformanceMetrics();
-  }, 2000);
+  }, 2000) as unknown as number;
 });
 
 onDestroy(() => {
@@ -54,7 +54,11 @@ function simulateMetrics(): { metrics: PerformanceMetrics; score: number } {
   // Simple score heuristic
   const score = Math.max(
     0,
-    100 - (cpu * 0.4 + (mem / (500 * 1024 * 1024)) * 30 + (errors * 10) + (getAverageResponseTime(times) / 10))
+    100 -
+      (cpu * 0.4 +
+        (mem / (500 * 1024 * 1024)) * 30 +
+        errors * 10 +
+        getAverageResponseTime(times) / 10),
   );
   return { metrics, score };
 }
@@ -64,7 +68,9 @@ async function updatePerformanceMetrics() {
     if (isTauri) {
       // Attempt real backend calls; if unavailable, fall back to simulation
       try {
-        const metrics = (await tauriInvoke("get_performance_metrics")) as PerformanceMetrics;
+        const metrics = (await tauriInvoke(
+          "get_performance_metrics",
+        )) as PerformanceMetrics;
         const score = (await tauriInvoke("get_performance_score")) as number;
         performanceMetrics.set(metrics);
         performanceScore.set(score);

@@ -1,4 +1,4 @@
-:root{
+:root {
   /* Colors */
   --color-bg: #0b1220;
   --color-surface: #121a2a;
@@ -18,9 +18,9 @@
   --radius-pill: 9999px;
 
   /* Shadow */
-  --shadow-sm: 0 1px 2px rgba(0,0,0,.40);
-  --shadow-md: 0 6px 18px rgba(0,0,0,.50);
-  --shadow-lg: 0 18px 45px rgba(0,0,0,.60);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 18px 45px rgba(0, 0, 0, 0.6);
 
   /* Spacing */
   --space-1: 4px;
@@ -34,38 +34,59 @@
   --space-12: 48px;
 
   /* Typography */
-  --font-sans: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Inter,system-ui,sans-serif;
-  --fs-xs: 12px; --fs-sm: 13px; --fs-md: 14px; --fs-lg: 16px; --fs-xl: 20px; --fs-2xl: 24px; --fs-3xl: 32px;
-  --lh-tight: 1.2; --lh-normal: 1.45; --lh-relaxed: 1.7;
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, system-ui,
+    sans-serif;
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+  --fs-2xl: 24px;
+  --fs-3xl: 32px;
+  --lh-tight: 1.2;
+  --lh-normal: 1.45;
+  --lh-relaxed: 1.7;
 }
 
-@media (prefers-color-scheme: light){
-  :root{
+@media (prefers-color-scheme: light) {
+  :root {
     --color-bg: #f7f9fc;
     --color-surface: #ffffff;
     --color-text: #1f2937;
     --color-muted: #6b7280;
     --color-primary: #4f46e5;
     --color-danger: #e11d48;
-    --shadow-sm: 0 1px 2px rgba(0,0,0,.06);
-    --shadow-md: 0 4px 12px rgba(0,0,0,.10);
-    --shadow-lg: 0 10px 30px rgba(0,0,0,.15);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.15);
   }
 }
 
-html,body{ background: var(--color-bg); color: var(--color-text); font-family: var(--font-sans); }
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+}
 
 /* Layout helpers for 1280x800 medium window and fullscreen */
-.container{
+.container {
   width: min(1100px, 100% - 32px);
   margin-inline: auto;
 }
-.container-wide{
+.container-wide {
   width: min(1400px, 100% - 32px);
   margin-inline: auto;
 }
 
 /* Elevations */
-.elev-sm{ box-shadow: var(--shadow-sm); }
-.elev-md{ box-shadow: var(--shadow-md); }
-.elev-lg{ box-shadow: var(--shadow-lg); }
+.elev-sm {
+  box-shadow: var(--shadow-sm);
+}
+.elev-md {
+  box-shadow: var(--shadow-md);
+}
+.elev-lg {
+  box-shadow: var(--shadow-lg);
+}

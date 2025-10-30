@@ -1,4 +1,5 @@
 use chrono::Utc;
+#[allow(unused_imports)]
 use log::{debug, error, info, warn};
 use oxide_copilot::ai::AIOrchestrator;
 use oxide_copilot::copilot::CopilotAgent;
@@ -11,8 +12,11 @@ use oxide_core::input_validation::InputValidator;
 use oxide_core::security_manager::{SecurityEvent, SecurityManager, SecurityPolicy};
 use oxide_core::types::{Context, Interaction};
 use oxide_guardian::guardian::{Guardian, SystemStatus, ThreatEvent};
+#[cfg(feature = "surrealdb-metrics")]
+use oxide_guardian::{MetricsCollector as GuardianMetricsCollector, MetricsConfig as GuardianMetricsConfig};
 use oxide_guardian::scanner::FileScanReport;
 use oxide_memory::memory::{ContextQuery, MemoryManager, MemoryStats};
+#[cfg(feature = "surrealdb-metrics")]
 use oxide_memory::MemoryBackend;
 #[cfg(feature = "surrealdb-metrics")]
 use oxide_memory::SurrealBackend;
@@ -20,8 +24,55 @@ use oxide_voice::voice::{GoogleSTTProvider, GoogleTTSProvider, VoiceProcessor};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, Mutex};
+#[cfg(feature = "surrealdb-metrics")]
+use tokio::task::JoinHandle;
 // use std::env; // Reserved for future use
 // use crate::cognee_supervisor::CogneeSupervisor; // Reserved for future use
+
+#[cfg(feature = "surrealdb-metrics")]
+struct MetricsRuntime {
+    collector: Arc<Mutex<GuardianMetricsCollector>>,
+    task: Mutex<Option<JoinHandle<()>>>,
+}
+
+#[cfg(feature = "surrealdb-metrics")]
+impl MetricsRuntime {
+    fn new(collector: GuardianMetricsCollector) -> Self {
+        Self {
+            collector: Arc::new(Mutex::new(collector)),
+            task: Mutex::new(None),
+        }
+    }
+
+    async fn start(&self) {
+        let mut task_guard = self.task.lock().await;
+        if task_guard.is_some() {
+            return;
+        }
+
+        let collector = Arc::clone(&self.collector);
+        let handle = tokio::spawn(async move {
+            let mut guard = collector.lock().await;
+            if let Err(err) = guard.start().await {
+                error!("Guardian metrics collector terminated: {:#}", err);
+            }
+        });
+
+        *task_guard = Some(handle);
+    }
+
+    async fn stop(&self) {
+        let mut task_guard = self.task.lock().await;
+        if let Some(mut handle) = task_guard.take() {
+            handle.abort();
+            if let Err(err) = handle.await {
+                if !err.is_cancelled() {
+                    error!("Guardian metrics collector join error: {err}");
+                }
+            }
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct OxideSystem {
@@ -38,6 +89,8 @@ pub struct OxideSystem {
     is_running: Arc<Mutex<bool>>,
     #[cfg(feature = "surrealdb-metrics")]
     surreal_backend: Option<Arc<SurrealBackend>>,
+    #[cfg(feature = "surrealdb-metrics")]
+    metrics_runtime: Option<Arc<MetricsRuntime>>,
 }
 
 #[allow(dead_code)] // Some methods reserved for future use
@@ -72,6 +125,20 @@ impl OxideSystem {
             };
 
             let surreal_cfg = config.surreal.clone();
+            if let Some(cfg) = surreal_cfg.as_ref() {
+                if cfg.distributed {
+                    info!(
+                        "SurrealDB distributed mode requested (TiKV endpoints: {:?})",
+                        cfg.tikv_endpoints
+                    );
+                }
+                if cfg.enable_js_functions {
+                    info!("SurrealDB custom JS functions explicitly enabled");
+                }
+                if cfg.enable_computed_views {
+                    info!("SurrealDB computed views explicitly enabled");
+                }
+            }
             let env_disable = std::env::var("OXIDE_SURREAL_DISABLE")
                 .ok()
                 .filter(|v| parse_bool(v));
@@ -144,7 +211,7 @@ impl OxideSystem {
             )
         };
 
-        #[cfg(feature = "surrealdb-metrics")]
+#[cfg(feature = "surrealdb-metrics")]
         if surreal_metrics_enabled {
             if let Some(interval) = surreal_metrics_interval {
                 info!(
@@ -153,6 +220,34 @@ impl OxideSystem {
                 );
             }
         }
+
+        #[cfg(feature = "surrealdb-metrics")]
+        let metrics_runtime = if surreal_metrics_enabled {
+            if let Some(backend_arc) = surreal_backend_arc.clone() {
+                let mut metrics_config = GuardianMetricsConfig::default();
+                if let Some(interval) = surreal_metrics_interval {
+                    if interval > 0 {
+                        metrics_config.interval_secs = interval;
+                    }
+                } else {
+                    metrics_config.interval_secs = config.guardian.monitor_interval_secs.max(1);
+                }
+
+                info!(
+                    "Configuring Guardian metrics collector (interval {}s)",
+                    metrics_config.interval_secs
+                );
+
+                Some(Arc::new(MetricsRuntime::new(
+                    GuardianMetricsCollector::new(backend_arc.clone(), metrics_config),
+                )))
+            } else {
+                warn!("Metrics collection enabled but Surreal backend is unavailable");
+                None
+            }
+        } else {
+            None
+        };
 
         #[cfg(all(feature = "cognee", feature = "surrealdb-metrics"))]
         {
@@ -418,6 +513,8 @@ impl OxideSystem {
             is_running: Arc::new(Mutex::new(false)),
             #[cfg(feature = "surrealdb-metrics")]
             surreal_backend: surreal_backend_arc,
+            #[cfg(feature = "surrealdb-metrics")]
+            metrics_runtime,
         };
 
         info!("Oxide Pilot System initialized successfully");
@@ -440,8 +537,15 @@ impl OxideSystem {
         info!("Guardian Agent started");
 
         #[cfg(feature = "surrealdb-metrics")]
-        if self.surreal_backend.is_some() {
-            debug!("SurrealDB backend is active for background metrics storage");
+        match (&self.surreal_backend, &self.metrics_runtime) {
+            (Some(_backend), Some(runtime)) => {
+                runtime.start().await;
+                info!("Guardian metrics collector started");
+            }
+            (Some(_), None) => {
+                debug!("SurrealDB backend active without metrics collector runtime");
+            }
+            _ => {}
         }
 
         // Start voice processing
@@ -460,6 +564,12 @@ impl OxideSystem {
         {
             let mut running = self.is_running.lock().await;
             *running = false;
+        }
+
+        #[cfg(feature = "surrealdb-metrics")]
+        if let Some(runtime) = &self.metrics_runtime {
+            runtime.stop().await;
+            info!("Guardian metrics collector stopped");
         }
 
         // Stop voice processing

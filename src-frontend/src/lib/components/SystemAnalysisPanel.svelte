@@ -1,71 +1,71 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import { writable } from "svelte/store";
-  import { isTauri } from "$lib/utils/env";
+import { onMount } from "svelte";
+import { writable } from "svelte/store";
+import { isTauri } from "$lib/utils/env";
 
-  import { tauriInvoke } from "$lib/utils/tauri";
+import { tauriInvoke } from "$lib/utils/tauri";
 
-  // Optional model overrides
-  let geminiModel: string = "";
-  let qwenModel: string = "";
+// Optional model overrides
+let geminiModel: string = "";
+let qwenModel: string = "";
 
-  const loading = writable(false);
-  const error = writable<string | null>(null);
-  const geminiSummary = writable<string | null>(null);
-  const qwenDeepAnalysis = writable<string | null>(null);
-  const snapshot = writable<any | null>(null);
+const loading = writable(false);
+const error = writable<string | null>(null);
+const geminiSummary = writable<string | null>(null);
+const qwenDeepAnalysis = writable<string | null>(null);
+const snapshot = writable<any | null>(null);
 
-  async function runAnalysis() {
-    if (!isTauri) {
-      error.set("Not running in Tauri context. Please use the desktop app.");
+async function runAnalysis() {
+  if (!isTauri) {
+    error.set("Not running in Tauri context. Please use the desktop app.");
+    return;
+  }
+  loading.set(true);
+  error.set(null);
+  geminiSummary.set(null);
+  qwenDeepAnalysis.set(null);
+  snapshot.set(null);
+
+  try {
+    const args: Record<string, unknown> = {};
+    if (geminiModel.trim()) args.gemini_model = geminiModel.trim();
+    if (qwenModel.trim()) args.qwen_model = qwenModel.trim();
+
+    const res = await tauriInvoke<string>("run_multi_agent_analysis", args);
+    // Backend returns a JSON string
+    let parsed: any = null;
+    try {
+      parsed = JSON.parse(res);
+    } catch {
+      // Fallback: show raw text in Gemini panel
+      geminiSummary.set(res);
+      qwenDeepAnalysis.set("(No structured response)");
+      snapshot.set(null);
       return;
     }
-    loading.set(true);
-    error.set(null);
-    geminiSummary.set(null);
-    qwenDeepAnalysis.set(null);
-    snapshot.set(null);
 
-    try {
-      const args: Record<string, unknown> = {};
-      if (geminiModel.trim()) args.gemini_model = geminiModel.trim();
-      if (qwenModel.trim()) args.qwen_model = qwenModel.trim();
-
-      const res = await tauriInvoke<string>("run_multi_agent_analysis", args);
-      // Backend returns a JSON string
-      let parsed: any = null;
-      try {
-        parsed = JSON.parse(res);
-      } catch {
-        // Fallback: show raw text in Gemini panel
-        geminiSummary.set(res);
-        qwenDeepAnalysis.set("(No structured response)");
-        snapshot.set(null);
-        return;
-      }
-
-      geminiSummary.set(parsed?.gemini_summary ?? null);
-      qwenDeepAnalysis.set(parsed?.qwen_deep_analysis ?? null);
-      snapshot.set(parsed?.snapshot ?? null);
-    } catch (e: any) {
-      console.error("run_multi_agent_analysis failed", e);
-      error.set(e?.toString?.() ?? String(e));
-    } finally {
-      loading.set(false);
-    }
+    geminiSummary.set(parsed?.gemini_summary ?? null);
+    qwenDeepAnalysis.set(parsed?.qwen_deep_analysis ?? null);
+    snapshot.set(parsed?.snapshot ?? null);
+  } catch (e: any) {
+    console.error("run_multi_agent_analysis failed", e);
+    error.set(e?.toString?.() ?? String(e));
+  } finally {
+    loading.set(false);
   }
+}
 
-  function copy(text: string) {
-    try {
-      navigator.clipboard.writeText(text);
-    } catch (_) {
-      // ignore
-    }
+function copy(text: string) {
+  try {
+    navigator.clipboard.writeText(text);
+  } catch (_) {
+    // ignore
   }
+}
 
-  onMount(() => {
-    // no-op for now
-  });
+onMount(() => {
+  // no-op for now
+});
 </script>
 
 <div class="analysis-panel">

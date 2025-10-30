@@ -1,96 +1,124 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
-  import { invoke } from '@tauri-apps/api/tauri';
+import { invoke } from "@tauri-apps/api/tauri";
+import { onDestroy, onMount } from "svelte";
+import { getProcessHotspots, type ProcessHotspot } from "../utils/guardian";
 
-  interface Process {
-    name: string;
-    pid: number;
-    cpu_usage: number;
-    memory_mb: number;
-    timestamp: string;
-  }
+interface Process {
+  name: string;
+  pid: number;
+  cpu_usage: number;
+  memory_mb: number;
+  timestamp: string;
+}
 
-  let processes: Process[] = [];
-  let loading = true;
-  let error: string | null = null;
-  let refreshInterval: number;
-  let cpuThreshold = 50.0;
-  let timeRange = 1; // hours
+let processes: Process[] = [];
+let loading = true;
+let hotspotLoading = true;
+let error: string | null = null;
+let hotspotsError: string | null = null;
+let refreshInterval: number;
+let cpuThreshold = 50.0;
+let timeRange = 1; // hours
+let hotspots: ProcessHotspot[] = [];
 
-  async function fetchHighCpuProcesses() {
-    try {
-      const response = await invoke<{ processes: any[]; count: number }>('get_high_cpu_processes', {
+async function fetchHighCpuProcesses() {
+  try {
+    const response = await invoke<{ processes: any[]; count: number }>(
+      "get_high_cpu_processes",
+      {
         threshold: cpuThreshold,
-        hours: timeRange
-      });
+        hours: timeRange,
+      },
+    );
 
-      // Parse and deduplicate processes
-      const processMap = new Map<number, Process>();
+    // Parse and deduplicate processes
+    const processMap = new Map<number, Process>();
 
-      for (const proc of response.processes) {
-        const pid = proc.pid || 0;
-        const existing = processMap.get(pid);
+    for (const proc of response.processes) {
+      const pid = proc.pid || 0;
+      const existing = processMap.get(pid);
 
-        if (!existing || new Date(proc.timestamp) > new Date(existing.timestamp)) {
-          processMap.set(pid, {
-            name: proc.name || 'Unknown',
-            pid: pid,
-            cpu_usage: proc.cpu_usage || 0,
-            memory_mb: proc.memory_mb || 0,
-            timestamp: proc.timestamp || new Date().toISOString()
-          });
-        }
+      if (
+        !existing ||
+        new Date(proc.timestamp) > new Date(existing.timestamp)
+      ) {
+        processMap.set(pid, {
+          name: proc.name || "Unknown",
+          pid: pid,
+          cpu_usage: proc.cpu_usage || 0,
+          memory_mb: proc.memory_mb || 0,
+          timestamp: proc.timestamp || new Date().toISOString(),
+        });
       }
-
-      processes = Array.from(processMap.values())
-        .sort((a, b) => b.cpu_usage - a.cpu_usage)
-        .slice(0, 20); // Top 20 processes
-
-      loading = false;
-      error = null;
-    } catch (e) {
-      error = `Failed to fetch processes: ${e}`;
-      loading = false;
-      console.error(error);
     }
-  }
 
-  onMount(() => {
+    processes = Array.from(processMap.values())
+      .sort((a, b) => b.cpu_usage - a.cpu_usage)
+      .slice(0, 20); // Top 20 processes
+
+    loading = false;
+    error = null;
+  } catch (e) {
+    error = `Failed to fetch processes: ${e}`;
+    loading = false;
+    console.error(error);
+  }
+}
+
+async function fetchHotspots() {
+  try {
+    hotspotLoading = true;
+    hotspots = await getProcessHotspots(timeRange);
+    hotspotsError = null;
+  } catch (e) {
+    console.error(e);
+    hotspotsError = `Failed to load process hotspots: ${e}`;
+  } finally {
+    hotspotLoading = false;
+  }
+}
+
+onMount(() => {
+  fetchHighCpuProcesses();
+  fetchHotspots();
+  refreshInterval = window.setInterval(() => {
     fetchHighCpuProcesses();
-    refreshInterval = window.setInterval(fetchHighCpuProcesses, 10000); // Refresh every 10 seconds
-  });
+    fetchHotspots();
+  }, 10000); // Refresh every 10 seconds
+});
 
-  onDestroy(() => {
-    if (refreshInterval) {
-      clearInterval(refreshInterval);
-    }
-  });
-
-  function formatMemory(mb: number): string {
-    if (mb >= 1024) {
-      return `${(mb / 1024).toFixed(2)} GB`;
-    }
-    return `${mb.toFixed(0)} MB`;
+onDestroy(() => {
+  if (refreshInterval) {
+    clearInterval(refreshInterval);
   }
+});
 
-  function getCpuColor(usage: number): string {
-    if (usage >= 90) return '#ef4444';
-    if (usage >= 70) return '#f59e0b';
-    if (usage >= 50) return '#3b82f6';
-    return '#10b981';
+function formatMemory(mb: number): string {
+  if (mb >= 1024) {
+    return `${(mb / 1024).toFixed(2)} GB`;
   }
+  return `${mb.toFixed(0)} MB`;
+}
 
-  function handleThresholdChange(event: Event) {
-    const target = event.target as HTMLInputElement;
-    cpuThreshold = parseFloat(target.value);
-    fetchHighCpuProcesses();
-  }
+function getCpuColor(usage: number): string {
+  if (usage >= 90) return "#ef4444";
+  if (usage >= 70) return "#f59e0b";
+  if (usage >= 50) return "#3b82f6";
+  return "#10b981";
+}
 
-  function handleTimeRangeChange(event: Event) {
-    const target = event.target as HTMLSelectElement;
-    timeRange = parseInt(target.value);
-    fetchHighCpuProcesses();
-  }
+function handleThresholdChange(event: Event) {
+  const target = event.target as HTMLInputElement;
+  cpuThreshold = parseFloat(target.value);
+  fetchHighCpuProcesses();
+}
+
+function handleTimeRangeChange(event: Event) {
+  const target = event.target as HTMLSelectElement;
+  timeRange = parseInt(target.value);
+  fetchHighCpuProcesses();
+  fetchHotspots();
+}
 </script>
 
 <div class="processes-panel">
@@ -180,6 +208,48 @@
 
     <div class="summary">
       <p>Showing {processes.length} process{processes.length !== 1 ? 'es' : ''} exceeding {cpuThreshold.toFixed(0)}% CPU usage</p>
+    </div>
+
+    <div class="hotspot-panel">
+      <div class="hotspot-header">
+        <h4>Process Hotspots (last {timeRange}h)</h4>
+        {#if hotspotLoading}
+          <span class="hotspot-status">Updating…</span>
+        {:else if hotspotsError}
+          <span class="hotspot-status error">{hotspotsError}</span>
+        {/if}
+      </div>
+      {#if hotspotLoading && !hotspots.length}
+        <div class="hotspot-empty">Loading hotspot analytics…</div>
+      {:else if hotspots.length === 0}
+        <div class="hotspot-empty">No hotspot activity detected in this window.</div>
+      {:else}
+        <div class="hotspot-grid">
+          {#each hotspots.slice(0, 6) as hotspot}
+            <div class="hotspot-card">
+              <div class="hotspot-name" title={hotspot.name}>{hotspot.name}</div>
+              <div class="hotspot-stats">
+                <div>
+                  <span class="stat-label">Avg CPU</span>
+                  <span class="stat-value">{hotspot.avg_cpu.toFixed(1)}%</span>
+                </div>
+                <div>
+                  <span class="stat-label">Peak CPU</span>
+                  <span class="stat-value">{hotspot.peak_cpu.toFixed(1)}%</span>
+                </div>
+                <div>
+                  <span class="stat-label">Samples</span>
+                  <span class="stat-value">{hotspot.samples}</span>
+                </div>
+              </div>
+              <div class="hotspot-memory">
+                <span class="stat-label">Avg Memory</span>
+                <span class="stat-value">{formatMemory(hotspot.avg_memory_mb)}</span>
+              </div>
+            </div>
+          {/each}
+        </div>
+      {/if}
     </div>
   {/if}
 </div>
@@ -271,6 +341,7 @@
     background: #e5e7eb;
     border-radius: 0.25rem;
     outline: none;
+    appearance: none;
     -webkit-appearance: none;
   }
 
@@ -456,6 +527,87 @@
     text-align: center;
     color: #6b7280;
     font-size: 0.875rem;
+  }
+
+  .hotspot-panel {
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #e5e7eb;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .hotspot-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .hotspot-header h4 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #1f2937;
+  }
+
+  .hotspot-status {
+    font-size: 0.875rem;
+    color: #6b7280;
+  }
+
+  .hotspot-status.error {
+    color: #b91c1c;
+  }
+
+  .hotspot-empty {
+    padding: 1rem;
+    background: #f9fafb;
+    border-radius: 0.5rem;
+    text-align: center;
+    color: #6b7280;
+  }
+
+  .hotspot-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+  }
+
+  .hotspot-card {
+    padding: 1rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    background: #fdfdfd;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .hotspot-name {
+    font-weight: 600;
+    color: #1f2937;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .hotspot-stats {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .hotspot-stats div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .hotspot-memory {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.875rem;
+    color: #374151;
   }
 
   @media (max-width: 768px) {

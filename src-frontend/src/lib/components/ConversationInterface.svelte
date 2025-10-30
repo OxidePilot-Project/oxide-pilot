@@ -18,13 +18,16 @@ let inputText = "";
 let isProcessing = false;
 let charCount = 0;
 
-const PROVIDER_LABELS: Record<"gemini"|"qwen"|"openai"|"local", string> = {
-  gemini: "Gemini",
-  qwen: "Qwen",
-  openai: "OpenAI",
-  local: "Local",
-};
-function providerLabel() { return PROVIDER_LABELS[provider] ?? provider; }
+const PROVIDER_LABELS: Record<"gemini" | "qwen" | "openai" | "local", string> =
+  {
+    gemini: "Gemini",
+    qwen: "Qwen",
+    openai: "OpenAI",
+    local: "Local",
+  };
+function providerLabel() {
+  return PROVIDER_LABELS[provider] ?? provider;
+}
 
 async function sendMessage() {
   if (!inputText.trim() || isProcessing) return;
@@ -34,10 +37,10 @@ async function sendMessage() {
     text: inputText.trim(),
     sender: "user",
     timestamp: new Date(),
-    status: "sending"
+    status: "sending",
   };
 
-  messages.update(msgs => [...msgs, userMessage]);
+  messages.update((msgs) => [...msgs, userMessage]);
   const currentInput = inputText;
   inputText = "";
   charCount = 0;
@@ -48,26 +51,29 @@ async function sendMessage() {
     if (isTauri) {
       if (provider === "local") {
         response = await tauriInvoke<string>("local_llm_chat", {
-          userPrompt: currentInput
+          userPrompt: currentInput,
         });
       } else {
         response = await tauriInvoke<string>("handle_user_input_command", {
-          user_input: currentInput
+          user_input: currentInput,
         });
       }
     } else {
       // Browser/SSR fallback
       if (provider === "local") {
-        response = "Local models are only available in the desktop (Tauri) app.";
+        response =
+          "Local models are only available in the desktop (Tauri) app.";
       } else {
         response = `Web preview: I received your message: "${currentInput}"`;
       }
     }
 
     // Update user message status
-    messages.update(msgs => {
+    messages.update((msgs) => {
       const updated = [...msgs];
-      const userMsgIndex = updated.findIndex(msg => msg.id === userMessage.id);
+      const userMsgIndex = updated.findIndex(
+        (msg) => msg.id === userMessage.id,
+      );
       if (userMsgIndex !== -1) {
         updated[userMsgIndex].status = "delivered";
       }
@@ -78,15 +84,17 @@ async function sendMessage() {
       id: (Date.now() + 1).toString(),
       text: response as string,
       sender: "assistant",
-      timestamp: new Date()
+      timestamp: new Date(),
     };
 
-    messages.update(msgs => [...msgs, assistantMessage]);
+    messages.update((msgs) => [...msgs, assistantMessage]);
   } catch (error) {
     // Update user message status to error
-    messages.update(msgs => {
+    messages.update((msgs) => {
       const updated = [...msgs];
-      const userMsgIndex = updated.findIndex(msg => msg.id === userMessage.id);
+      const userMsgIndex = updated.findIndex(
+        (msg) => msg.id === userMessage.id,
+      );
       if (userMsgIndex !== -1) {
         updated[userMsgIndex].status = "error";
         updated[userMsgIndex].text += `\n\n⚠️ Error: ${error}`;

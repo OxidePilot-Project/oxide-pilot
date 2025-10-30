@@ -1,73 +1,73 @@
 <script lang="ts">
-  import { invoke } from '@tauri-apps/api/tauri';
-  import { onMount } from 'svelte';
+import { invoke } from "@tauri-apps/api/tauri";
+import { onMount } from "svelte";
 
-  interface AuditEntry {
-    timestamp: string;
-    permission: string;
-    action: string;
-    status: string;
-    error: string | null;
+interface AuditEntry {
+  timestamp: string;
+  permission: string;
+  action: string;
+  status: string;
+  error: string | null;
+}
+
+interface AuditStats {
+  total_actions: number;
+  successful_actions: number;
+  failed_actions: number;
+  denied_actions: number;
+}
+
+let auditEntries: AuditEntry[] = [];
+let auditStats: AuditStats | null = null;
+let loading = false;
+let error = "";
+let filterPermission = "";
+let filterStatus = "";
+
+// Status colors
+const statusColors: Record<string, string> = {
+  Success: "bg-green-100 text-green-800",
+  Failed: "bg-red-100 text-red-800",
+  Denied: "bg-orange-100 text-orange-800",
+  Pending: "bg-yellow-100 text-yellow-800",
+};
+
+async function loadAuditData() {
+  loading = true;
+  error = "";
+
+  try {
+    // Load audit entries
+    const entries = await invoke<AuditEntry[]>("rpa_get_audit_entries", {
+      permission: filterPermission || null,
+      status: filterStatus || null,
+      limit: 100,
+    });
+    auditEntries = entries;
+
+    // Load audit stats
+    const stats = await invoke<AuditStats>("rpa_get_audit_stats");
+    auditStats = stats;
+  } catch (err) {
+    error = `Failed to load audit data: ${err}`;
+  } finally {
+    loading = false;
   }
+}
 
-  interface AuditStats {
-    total_actions: number;
-    successful_actions: number;
-    failed_actions: number;
-    denied_actions: number;
-  }
+function formatTimestamp(timestamp: string): string {
+  const date = new Date(timestamp);
+  return date.toLocaleString();
+}
 
-  let auditEntries: AuditEntry[] = [];
-  let auditStats: AuditStats | null = null;
-  let loading = false;
-  let error = '';
-  let filterPermission = '';
-  let filterStatus = '';
+function getSuccessRate(): number {
+  if (!auditStats || auditStats.total_actions === 0) return 0;
+  return (auditStats.successful_actions / auditStats.total_actions) * 100;
+}
 
-  // Status colors
-  const statusColors: Record<string, string> = {
-    Success: 'bg-green-100 text-green-800',
-    Failed: 'bg-red-100 text-red-800',
-    Denied: 'bg-orange-100 text-orange-800',
-    Pending: 'bg-yellow-100 text-yellow-800'
-  };
-
-  async function loadAuditData() {
-    loading = true;
-    error = '';
-
-    try {
-      // Load audit entries
-      const entries = await invoke<AuditEntry[]>('rpa_get_audit_entries', {
-        permission: filterPermission || null,
-        status: filterStatus || null,
-        limit: 100
-      });
-      auditEntries = entries;
-
-      // Load audit stats
-      const stats = await invoke<AuditStats>('rpa_get_audit_stats');
-      auditStats = stats;
-    } catch (err) {
-      error = `Failed to load audit data: ${err}`;
-    } finally {
-      loading = false;
-    }
-  }
-
-  function formatTimestamp(timestamp: string): string {
-    const date = new Date(timestamp);
-    return date.toLocaleString();
-  }
-
-  function getSuccessRate(): number {
-    if (!auditStats || auditStats.total_actions === 0) return 0;
-    return (auditStats.successful_actions / auditStats.total_actions) * 100;
-  }
-
-  onMount(() => {
-    loadAuditData();
-  });
+onMount(() => {
+  loadAuditData();
+});
 </script>
 
 <div class="bg-white rounded-lg shadow p-6">

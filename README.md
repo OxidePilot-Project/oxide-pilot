@@ -728,7 +728,7 @@ DEFINE TABLE performance_pattern AS
   - Multi-nodo para alta disponibilidad
   - Sincronización cross-device
 - [ ] **4.4** Deprecar Cognee (breaking change)
-  - Migrar datos históricos JSON → SurrealDB
+  - Migrar datos históricos JSON → SurrealDB (`cargo run -p oxide-memory --bin migrate-json-to-surreal -- --json-dir oxide_memory --surreal-db ./data/oxide.db`; ver `docs/MEMORY_MIGRATION.md`)
   - Eliminar `oxide-cognee-bridge` del workspace
   - Actualizar docs con ejemplos SurrealDB
 - [ ] **4.5** UI de administración
@@ -758,6 +758,14 @@ DEFINE TABLE performance_pattern AS
 | **Escalabilidad** | Horizontal (TiKV cluster opcional) | 🟢 Distribuido cuando necesario |
 | **Tamaño despliegue** | +20MB (binary Rust) | 🟢 Minimal footprint |
 | **Dependencias** | 0 (autocontenido) | 🟢 Zero deps |
+**Implementaciones recientes**
+
+- ✅ Búsqueda vectorial con embeddings reales e índice HNSW autoconfigurable.
+- ✅ Stream guardian://metrics para suscripciones en tiempo real (subscribe_guardian_metrics).
+- ✅ Analítica SurrealML (predict_threat_risk) y dataset 	hreat_training.
+- ✅ Vistas computadas (iew_hourly_metrics) y función JS n::risk::resource.
+- ✅ Formulario GuardianThreatTrainer para etiquetar muestras y mejorar SurrealML.
+
 
 ### 🎯 Beneficios Clave
 

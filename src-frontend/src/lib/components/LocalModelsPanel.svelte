@@ -1,152 +1,155 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { isTauri } from '$lib/utils/env';
-  import { tauriInvoke } from '$lib/utils/tauri';
+import { onMount } from "svelte";
+import { isTauri } from "$lib/utils/env";
+import { tauriInvoke } from "$lib/utils/tauri";
 
-  // Server status
-  let status: { running: boolean; port?: number; message?: string } | null = null;
-  let statusError: string | null = null;
-  let port: number = 1234;
-  let cors: boolean = true;
-  let busy: boolean = false;
+// Server status
+let status: { running: boolean; port?: number; message?: string } | null = null;
+let statusError: string | null = null;
+let port: number = 1234;
+let cors: boolean = true;
+let busy: boolean = false;
 
-  // Models
-  let modelsJson: string = '';
-  let modelListError: string | null = null;
+// Models
+let modelsJson: string = "";
+let modelListError: string | null = null;
 
-  // Download
-  let modelSpec: string = 'ui-tars-1.5';
-  let useGguf: boolean = true;
-  let assumeYes: boolean = true;
-  let downloadMsg: string = '';
+// Download
+let modelSpec: string = "ui-tars-1.5";
+let useGguf: boolean = true;
+let assumeYes: boolean = true;
+let downloadMsg: string = "";
 
-  // Load
-  let modelKey: string = 'ui-tars-1.5-7b-q4_K_M.gguf';
-  let identifier: string = 'ui-tars-local';
-  let contextLen: number = 4096;
-  let gpu: string = 'auto';
-  let ttlSecs: number = 3600;
-  let loadMsg: string = '';
+// Load
+let modelKey: string = "ui-tars-1.5-7b-q4_K_M.gguf";
+let identifier: string = "ui-tars-local";
+let contextLen: number = 4096;
+let gpu: string = "auto";
+let ttlSecs: number = 3600;
+let loadMsg: string = "";
 
-  // Chat
-  let baseUrl: string = '';
-  let apiKey: string = '';
-  let chatModel: string = '';
-  let systemPrompt: string = '';
-  let userPrompt: string = '';
-  let chatResp: string = '';
-  let chatError: string | null = null;
+// Chat
+let baseUrl: string = "";
+let apiKey: string = "";
+let chatModel: string = "";
+let systemPrompt: string = "";
+let userPrompt: string = "";
+let chatResp: string = "";
+let chatError: string | null = null;
 
-  onMount(async () => {
+onMount(async () => {
+  await refreshStatus();
+});
+
+async function refreshStatus() {
+  if (!isTauri) return;
+  statusError = null;
+  try {
+    status = await tauriInvoke("local_llm_server_status");
+  } catch (e) {
+    status = null;
+    statusError = e instanceof Error ? e.message : String(e);
+  }
+}
+
+async function startServer() {
+  if (!isTauri) return;
+  busy = true;
+  try {
+    const msg = await tauriInvoke<string>("local_llm_server_start", {
+      port,
+      cors,
+    });
     await refreshStatus();
-  });
-
-  async function refreshStatus() {
-    if (!isTauri) return;
-    statusError = null;
-    try {
-      status = await tauriInvoke('local_llm_server_status');
-    } catch (e) {
-      status = null;
-      statusError = e instanceof Error ? e.message : String(e);
-    }
+    downloadMsg = msg;
+  } catch (e) {
+    downloadMsg = e instanceof Error ? e.message : String(e);
+  } finally {
+    busy = false;
   }
+}
 
-  async function startServer() {
-    if (!isTauri) return;
-    busy = true;
-    try {
-      const msg = await tauriInvoke<string>('local_llm_server_start', { port, cors });
-      await refreshStatus();
-      downloadMsg = msg;
-    } catch (e) {
-      downloadMsg = e instanceof Error ? e.message : String(e);
-    } finally {
-      busy = false;
-    }
+async function stopServer() {
+  if (!isTauri) return;
+  busy = true;
+  try {
+    const msg = await tauriInvoke<string>("local_llm_server_stop");
+    await refreshStatus();
+    downloadMsg = msg;
+  } catch (e) {
+    downloadMsg = e instanceof Error ? e.message : String(e);
+  } finally {
+    busy = false;
   }
+}
 
-  async function stopServer() {
-    if (!isTauri) return;
-    busy = true;
-    try {
-      const msg = await tauriInvoke<string>('local_llm_server_stop');
-      await refreshStatus();
-      downloadMsg = msg;
-    } catch (e) {
-      downloadMsg = e instanceof Error ? e.message : String(e);
-    } finally {
-      busy = false;
-    }
+async function listModels() {
+  if (!isTauri) return;
+  modelListError = null;
+  try {
+    const out = await tauriInvoke<string>("local_llm_ls");
+    modelsJson = out;
+  } catch (e) {
+    modelListError = e instanceof Error ? e.message : String(e);
   }
+}
 
-  async function listModels() {
-    if (!isTauri) return;
-    modelListError = null;
-    try {
-      const out = await tauriInvoke<string>('local_llm_ls');
-      modelsJson = out;
-    } catch (e) {
-      modelListError = e instanceof Error ? e.message : String(e);
-    }
+async function downloadModel() {
+  if (!isTauri) return;
+  busy = true;
+  try {
+    const msg = await tauriInvoke<string>("local_llm_get", {
+      modelSpec,
+      gguf: useGguf,
+      yes: assumeYes,
+    });
+    downloadMsg = msg;
+  } catch (e) {
+    downloadMsg = e instanceof Error ? e.message : String(e);
+  } finally {
+    busy = false;
   }
+}
 
-  async function downloadModel() {
-    if (!isTauri) return;
-    busy = true;
-    try {
-      const msg = await tauriInvoke<string>('local_llm_get', {
-        modelSpec,
-        gguf: useGguf,
-        yes: assumeYes,
-      });
-      downloadMsg = msg;
-    } catch (e) {
-      downloadMsg = e instanceof Error ? e.message : String(e);
-    } finally {
-      busy = false;
-    }
+async function loadModel() {
+  if (!isTauri) return;
+  busy = true;
+  try {
+    const msg = await tauriInvoke<string>("local_llm_load", {
+      modelKey,
+      identifier,
+      contextLen,
+      gpu,
+      ttlSecs,
+    });
+    loadMsg = msg;
+  } catch (e) {
+    loadMsg = e instanceof Error ? e.message : String(e);
+  } finally {
+    busy = false;
   }
+}
 
-  async function loadModel() {
-    if (!isTauri) return;
-    busy = true;
-    try {
-      const msg = await tauriInvoke<string>('local_llm_load', {
-        modelKey,
-        identifier,
-        contextLen,
-        gpu,
-        ttlSecs,
-      });
-      loadMsg = msg;
-    } catch (e) {
-      loadMsg = e instanceof Error ? e.message : String(e);
-    } finally {
-      busy = false;
-    }
+async function sendChat() {
+  if (!isTauri) return;
+  chatError = null;
+  chatResp = "";
+  busy = true;
+  try {
+    const resp = await tauriInvoke<string>("local_llm_chat", {
+      baseUrl: baseUrl || undefined,
+      apiKey: apiKey || undefined,
+      model: chatModel || undefined,
+      systemPrompt: systemPrompt || undefined,
+      userPrompt,
+    });
+    chatResp = resp;
+  } catch (e) {
+    chatError = e instanceof Error ? e.message : String(e);
+  } finally {
+    busy = false;
   }
-
-  async function sendChat() {
-    if (!isTauri) return;
-    chatError = null;
-    chatResp = '';
-    busy = true;
-    try {
-      const resp = await tauriInvoke<string>('local_llm_chat', {
-        baseUrl: baseUrl || undefined,
-        apiKey: apiKey || undefined,
-        model: chatModel || undefined,
-        systemPrompt: systemPrompt || undefined,
-        userPrompt,
-      });
-      chatResp = resp;
-    } catch (e) {
-      chatError = e instanceof Error ? e.message : String(e);
-    } finally {
-      busy = false;
-    }
-  }
+}
 </script>
 
 {#if !isTauri}

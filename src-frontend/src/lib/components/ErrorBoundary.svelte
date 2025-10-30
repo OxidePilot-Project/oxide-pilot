@@ -1,30 +1,30 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+import { onMount } from "svelte";
 
-  export let fallback: string = 'Something went wrong. Please try again.';
+export const fallback: string = "Something went wrong. Please try again.";
 
-  let error: Error | null = null;
-  let errorInfo: string = '';
+let error: Error | null = null;
+let errorInfo: string = "";
 
-  onMount(() => {
-    const handleError = (event: ErrorEvent) => {
-      error = event.error;
-      errorInfo = event.message;
-      console.error('Error caught by boundary:', event.error);
-    };
+onMount(() => {
+  const handleError = (event: ErrorEvent) => {
+    error = event.error;
+    errorInfo = event.message;
+    console.error("Error caught by boundary:", event.error);
+  };
 
-    window.addEventListener('error', handleError);
+  window.addEventListener("error", handleError);
 
-    return () => {
-      window.removeEventListener('error', handleError);
-    };
-  });
+  return () => {
+    window.removeEventListener("error", handleError);
+  };
+});
 
-  function retry() {
-    error = null;
-    errorInfo = '';
-    window.location.reload();
-  }
+function retry() {
+  error = null;
+  errorInfo = "";
+  window.location.reload();
+}
 </script>
 
 {#if error}

@@ -1,17 +1,20 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
-  import { fadeIn, hoverLift, ripple } from '$lib/actions/anime';
-  export let variant: 'primary'|'outline'|'ghost' = 'primary';
-  export let size: 'sm'|'md'|'lg' = 'md';
-  export let disabled: boolean = false;
-  export let loading: boolean = false;
-  export let type: 'button'|'submit'|'reset' = 'button';
-  export let title: string | undefined;
-  const dispatch = createEventDispatcher<{click: MouseEvent}>();
-  function onClick(e: MouseEvent){
-    if(disabled || loading) { e.preventDefault(); return; }
-    dispatch('click', e);
+import { createEventDispatcher } from "svelte";
+import { fadeIn, hoverLift, ripple } from "$lib/actions/anime";
+export const variant: "primary" | "outline" | "ghost" = "primary";
+export const size: "sm" | "md" | "lg" = "md";
+export const disabled: boolean = false;
+export const loading: boolean = false;
+export const type: "button" | "submit" | "reset" = "button";
+export let title: string | undefined;
+const dispatch = createEventDispatcher<{ click: MouseEvent }>();
+function onClick(e: MouseEvent) {
+  if (disabled || loading) {
+    e.preventDefault();
+    return;
   }
+  dispatch("click", e);
+}
 </script>
 
 <button

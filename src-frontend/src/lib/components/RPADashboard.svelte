@@ -1,88 +1,90 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { invoke } from '@tauri-apps/api/tauri';
-  import RPAAuditPanel from './RPAAuditPanel.svelte';
-  import RPARollbackPanel from './RPARollbackPanel.svelte';
+import { invoke } from "@tauri-apps/api/tauri";
+import { onMount } from "svelte";
+import RPAAuditPanel from "./RPAAuditPanel.svelte";
+import RPARollbackPanel from "./RPARollbackPanel.svelte";
 
-  type RPATab = 'overview' | 'audit' | 'rollback' | 'permissions';
+type RPATab = "overview" | "audit" | "rollback" | "permissions";
 
-  let activeTab: RPATab = 'overview';
-  let rpaInitialized = false;
-  let loading = false;
-  let error = '';
-  let success = '';
+let activeTab: RPATab = "overview";
+let rpaInitialized = false;
+let loading = false;
+let error = "";
+let success = "";
 
-  // Overview stats
-  let auditStats: any = null;
-  let rollbackCount = 0;
-  let pendingConfirmations = 0;
+// Overview stats
+let auditStats: any = null;
+let rollbackCount = 0;
+let pendingConfirmations = 0;
 
-  async function initializeRPA() {
-    loading = true;
-    error = '';
-    success = '';
+async function initializeRPA() {
+  loading = true;
+  error = "";
+  success = "";
 
-    try {
-      await invoke('rpa_initialize');
-      rpaInitialized = true;
-      success = 'RPA system initialized successfully';
-      await loadOverviewStats();
-    } catch (err) {
-      error = `Failed to initialize RPA: ${err}`;
-    } finally {
-      loading = false;
-    }
+  try {
+    await invoke("rpa_initialize");
+    rpaInitialized = true;
+    success = "RPA system initialized successfully";
+    await loadOverviewStats();
+  } catch (err) {
+    error = `Failed to initialize RPA: ${err}`;
+  } finally {
+    loading = false;
   }
+}
 
-  async function shutdownRPA() {
-    loading = true;
-    error = '';
-    success = '';
+async function shutdownRPA() {
+  loading = true;
+  error = "";
+  success = "";
 
-    try {
-      await invoke('rpa_shutdown');
-      rpaInitialized = false;
-      success = 'RPA system shutdown successfully';
-    } catch (err) {
-      error = `Failed to shutdown RPA: ${err}`;
-    } finally {
-      loading = false;
-    }
+  try {
+    await invoke("rpa_shutdown");
+    rpaInitialized = false;
+    success = "RPA system shutdown successfully";
+  } catch (err) {
+    error = `Failed to shutdown RPA: ${err}`;
+  } finally {
+    loading = false;
   }
+}
 
-  async function loadOverviewStats() {
-    try {
-      const [stats, count, confirmations] = await Promise.all([
-        invoke('rpa_get_audit_stats'),
-        invoke('rpa_get_reversible_count'),
-        invoke('rpa_get_pending_confirmations')
-      ]);
+async function loadOverviewStats() {
+  try {
+    const [stats, count, confirmations] = await Promise.all([
+      invoke("rpa_get_audit_stats"),
+      invoke("rpa_get_reversible_count"),
+      invoke("rpa_get_pending_confirmations"),
+    ]);
 
-      auditStats = stats;
-      rollbackCount = count as number;
-      pendingConfirmations = (confirmations as any[]).length;
-    } catch (err) {
-      console.error('Failed to load overview stats:', err);
-    }
+    auditStats = stats;
+    rollbackCount = count as number;
+    pendingConfirmations = (confirmations as any[]).length;
+  } catch (err) {
+    console.error("Failed to load overview stats:", err);
   }
+}
 
-  function setActiveTab(tab: RPATab) {
-    activeTab = tab;
-    if (tab === 'overview' && rpaInitialized) {
-      loadOverviewStats();
-    }
+function setActiveTab(tab: RPATab) {
+  activeTab = tab;
+  if (tab === "overview" && rpaInitialized) {
+    loadOverviewStats();
   }
+}
 
-  onMount(() => {
-    // Check if RPA is already initialized
-    loadOverviewStats().then(() => {
+onMount(() => {
+  // Check if RPA is already initialized
+  loadOverviewStats()
+    .then(() => {
       // If we can load stats, RPA is probably initialized
       rpaInitialized = true;
-    }).catch(() => {
+    })
+    .catch(() => {
       // If we can't load stats, RPA is not initialized
       rpaInitialized = false;
     });
-  });
+});
 </script>
 
 <div class="rpa-dashboard">

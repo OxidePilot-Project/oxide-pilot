@@ -1,13 +1,13 @@
 <script lang="ts">
-  export let size: 'small' | 'medium' | 'large' = 'medium';
-  export let color: string = '#3b82f6';
-  export let label: string = 'Loading...';
+export const size: "small" | "medium" | "large" = "medium";
+export const color: string = "#3b82f6";
+export const label: string = "Loading...";
 
-  const sizeMap = {
-    small: '20px',
-    medium: '40px',
-    large: '60px'
-  };
+const sizeMap = {
+  small: "20px",
+  medium: "40px",
+  large: "60px",
+};
 </script>
 
 <div class="loading-container" role="status" aria-live="polite" aria-label={label}>

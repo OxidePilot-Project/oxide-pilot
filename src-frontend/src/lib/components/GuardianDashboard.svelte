@@ -1,122 +1,226 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
-  import { invoke } from '@tauri-apps/api/tauri';
+import { onDestroy, onMount } from "svelte";
+import {
+  getGuardianStatus,
+  getHourlyMetrics,
+  getMetricsSummary,
+  getRecentMetrics,
+  type HourlyMetricsRow,
+  type MetricsSummary,
+  predictThreatRisk,
+  type SystemMetric,
+  subscribeGuardianMetrics,
+  type ThreatPrediction,
+} from "../utils/guardian";
 
-  interface SystemMetric {
-    timestamp: string;
-    cpu_usage: number;
-    memory_usage: {
-      total_mb: number;
-      used_mb: number;
-      available_mb: number;
-      percent: number;
-    };
-    disk_io: {
-      read_mb_per_sec: number;
-      write_mb_per_sec: number;
-      iops: number;
-    };
-    network_stats: {
-      sent_mb_per_sec: number;
-      recv_mb_per_sec: number;
-      connections_active: number;
-    };
+interface SystemStatus {
+  status: "healthy" | "caution" | "warning" | "no_data";
+  timestamp?: string;
+  cpu_usage?: number;
+  memory_usage?: { percent: number };
+  message?: string;
+}
+
+let currentStatus: SystemStatus | null = null;
+let metricsSummary: MetricsSummary | null = null;
+let hourlyMetrics: HourlyMetricsRow[] = [];
+let recentMetrics: SystemMetric[] = [];
+let liveMetric: SystemMetric | null = null;
+let threatPrediction: ThreatPrediction | null = null;
+let loading = true;
+let error: string | null = null;
+let refreshInterval: number;
+let hourlyInterval: number;
+let metricsUnlisten: (() => void) | null = null;
+let activeTab: "overview" | "cpu" | "memory" | "disk" | "network" =
+  "overview";
+
+async function fetchSystemStatus() {
+  try {
+    currentStatus = (await getGuardianStatus()) as SystemStatus;
+    error = null;
+  } catch (e) {
+    console.error(e);
+    error = `Failed to fetch status: ${e}`;
   }
+}
 
-  interface SystemStatus {
-    status: 'healthy' | 'caution' | 'warning' | 'no_data';
-    timestamp?: string;
-    cpu_usage?: number;
-    memory_usage?: { percent: number };
-    message?: string;
+async function fetchRecentMetrics(hours = 1) {
+  try {
+    const response = await getRecentMetrics(hours);
+    recentMetrics = response.metrics.slice(0, 120);
+    loading = false;
+    error = null;
+  } catch (e) {
+    console.error(e);
+    error = `Failed to fetch metrics: ${e}`;
+    loading = false;
   }
+}
 
-  let currentStatus: SystemStatus | null = null;
-  let recentMetrics: SystemMetric[] = [];
-  let loading = true;
-  let error: string | null = null;
-  let refreshInterval: number;
-  let activeTab: 'overview' | 'cpu' | 'memory' | 'disk' | 'network' = 'overview';
-
-  async function fetchSystemStatus() {
-    try {
-      currentStatus = await invoke<SystemStatus>('get_guardian_status');
-      error = null;
-    } catch (e) {
-      error = `Failed to fetch status: ${e}`;
-      console.error(error);
-    }
+async function fetchSummary(hours = 6) {
+  try {
+    metricsSummary = await getMetricsSummary(hours);
+  } catch (e) {
+    console.warn("Failed to fetch metrics summary", e);
   }
+}
 
-  async function fetchRecentMetrics() {
-    try {
-      const response = await invoke<{ metrics: SystemMetric[]; count: number }>('get_recent_metrics', {
-        hours: 1
-      });
-      recentMetrics = response.metrics.slice(0, 60); // Last 5 minutes (60 samples at 5s interval)
-      loading = false;
-      error = null;
-    } catch (e) {
-      error = `Failed to fetch metrics: ${e}`;
-      loading = false;
-      console.error(error);
-    }
+async function fetchHourly(hours = 12) {
+  try {
+    hourlyMetrics = await getHourlyMetrics(hours);
+  } catch (e) {
+    console.warn("Failed to fetch hourly metrics", e);
   }
+}
 
-  async function refreshData() {
-    await Promise.all([fetchSystemStatus(), fetchRecentMetrics()]);
+function buildFeatureVector(
+  metric: SystemMetric | null,
+): Record<string, number> | null {
+  if (!metric) return null;
+  const avgCpu = metricsSummary?.avg_cpu ?? metric.cpu_usage;
+  const anomaly = Math.abs(metric.cpu_usage - avgCpu);
+  return {
+    cpu_usage: metric.cpu_usage,
+    memory_pressure: metric.memory_usage.percent,
+    network_score: metric.network_stats.connections_active,
+    anomaly_score: anomaly,
+  };
+}
+
+async function refreshThreatPrediction(metric?: SystemMetric) {
+  const latest = metric ?? liveMetric ?? recentMetrics[0] ?? null;
+  const features = buildFeatureVector(latest);
+  if (!features) return;
+
+  try {
+    threatPrediction = await predictThreatRisk(features);
+  } catch (e) {
+    console.warn("Threat prediction failed", e);
   }
+}
 
-  onMount(() => {
-    refreshData();
-    refreshInterval = window.setInterval(refreshData, 5000); // Refresh every 5 seconds
+async function refreshData() {
+  await Promise.all([
+    fetchSystemStatus(),
+    fetchRecentMetrics(),
+    fetchSummary(),
+    fetchHourly(),
+  ]);
+  await refreshThreatPrediction();
+}
+
+onMount(async () => {
+  await refreshData();
+  refreshInterval = window.setInterval(fetchSystemStatus, 15000);
+  hourlyInterval = window.setInterval(async () => {
+    await Promise.all([fetchSummary(), fetchHourly()]);
+    await refreshThreatPrediction();
+  }, 60000);
+
+  metricsUnlisten = await subscribeGuardianMetrics(async (metric) => {
+    liveMetric = metric;
+    recentMetrics = [metric, ...recentMetrics].slice(0, 120);
+    await refreshThreatPrediction(metric);
   });
+});
 
-  onDestroy(() => {
-    if (refreshInterval) {
-      clearInterval(refreshInterval);
-    }
-  });
+onDestroy(() => {
+  if (refreshInterval) clearInterval(refreshInterval);
+  if (hourlyInterval) clearInterval(hourlyInterval);
+  metricsUnlisten?.();
+});
 
-  function getStatusColor(status: string): string {
-    switch (status) {
-      case 'healthy': return 'text-green-500';
-      case 'caution': return 'text-yellow-500';
-      case 'warning': return 'text-red-500';
-      default: return 'text-gray-500';
-    }
+function getStatusColor(status: string): string {
+  switch (status) {
+    case "healthy":
+      return "text-green-500";
+    case "caution":
+      return "text-yellow-500";
+    case "warning":
+      return "text-red-500";
+    default:
+      return "text-gray-500";
   }
+}
 
-  function getStatusBg(status: string): string {
-    switch (status) {
-      case 'healthy': return 'bg-green-500/10';
-      case 'caution': return 'bg-yellow-500/10';
-      case 'warning': return 'bg-red-500/10';
-      default: return 'bg-gray-500/10';
+function getStatusBg(status: string): string {
+  switch (status) {
+    case "healthy":
+      return "bg-green-500/10";
+    case "caution":
+      return "bg-yellow-500/10";
+    case "warning":
+      return "bg-red-500/10";
+    default:
+      return "bg-gray-500/10";
+  }
+}
+
+function formatBytes(mb: number): string {
+  if (mb >= 1024) {
+    return `${(mb / 1024).toFixed(2)} GB`;
+  }
+  return `${mb.toFixed(2)} MB`;
+}
+
+function getLatestMetric(): SystemMetric | null {
+  return liveMetric ?? (recentMetrics.length > 0 ? recentMetrics[0] : null);
+}
+
+function calculateAverage(key: keyof SystemMetric): number {
+  if (key === "cpu_usage") {
+    if (metricsSummary) {
+      return metricsSummary.avg_cpu;
     }
-  }
-
-  function formatBytes(mb: number): string {
-    if (mb >= 1024) {
-      return `${(mb / 1024).toFixed(2)} GB`;
-    }
-    return `${mb.toFixed(2)} MB`;
-  }
-
-  function getLatestMetric(): SystemMetric | null {
-    return recentMetrics.length > 0 ? recentMetrics[0] : null;
-  }
-
-  function calculateAverage(key: keyof SystemMetric): number {
-    if (recentMetrics.length === 0) return 0;
-
-    if (key === 'cpu_usage') {
+    if (recentMetrics.length > 0) {
       const sum = recentMetrics.reduce((acc, m) => acc + m.cpu_usage, 0);
       return sum / recentMetrics.length;
     }
-
-    return 0;
   }
+  return 0;
+}
+
+function formatHourBucket(bucket: string): string {
+  try {
+    return new Date(bucket).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return bucket;
+  }
+}
+
+function getThreatColor(severity: string | undefined): string {
+  switch (severity) {
+    case "critical":
+      return "text-red-500";
+    case "high":
+      return "text-orange-500";
+    case "medium":
+      return "text-yellow-500";
+    case "low":
+      return "text-green-500";
+    default:
+      return "text-gray-500";
+  }
+}
+
+function getThreatBg(severity: string | undefined): string {
+  switch (severity) {
+    case "critical":
+      return "bg-red-500/10 border border-red-200";
+    case "high":
+      return "bg-orange-500/10 border border-orange-200";
+    case "medium":
+      return "bg-yellow-500/10 border border-yellow-200";
+    case "low":
+      return "bg-green-500/10 border border-green-200";
+    default:
+      return "bg-gray-500/10 border border-gray-200";
+  }
+}
 </script>
 
 <div class="guardian-dashboard">
@@ -179,12 +283,12 @@
 
     <div class="tab-content">
       {#if activeTab === 'overview'}
+        {@const latest = getLatestMetric()}
         <div class="overview-grid">
-          {#if getLatestMetric()}
-            {@const latest = getLatestMetric()}
+          {#if latest}
             <div class="metric-card">
               <div class="metric-header">
-                <span class="metric-icon">💻</span>
+                <span class="metric-icon">CPU</span>
                 <h3>CPU Usage</h3>
               </div>
               <div class="metric-value">
@@ -198,7 +302,7 @@
 
             <div class="metric-card">
               <div class="metric-header">
-                <span class="metric-icon">🧠</span>
+                <span class="metric-icon">MEM</span>
                 <h3>Memory Usage</h3>
               </div>
               <div class="metric-value">
@@ -212,7 +316,7 @@
 
             <div class="metric-card">
               <div class="metric-header">
-                <span class="metric-icon">💾</span>
+                <span class="metric-icon">IO</span>
                 <h3>Disk I/O</h3>
               </div>
               <div class="metric-value">
@@ -233,7 +337,7 @@
 
             <div class="metric-card">
               <div class="metric-header">
-                <span class="metric-icon">🌐</span>
+                <span class="metric-icon">NET</span>
                 <h3>Network</h3>
               </div>
               <div class="metric-value">
@@ -252,18 +356,83 @@
               </div>
             </div>
           {/if}
+
+          {#if metricsSummary}
+            <div class="metric-card">
+              <div class="metric-header">
+                <span class="metric-icon">AVG</span>
+                <h3>Last {metricsSummary.sample_count} Samples</h3>
+              </div>
+              <div class="metric-value">
+                <span class="value">{metricsSummary.avg_cpu.toFixed(1)}%</span>
+                <span class="label">Average CPU</span>
+              </div>
+              <div class="metric-stats">
+                <div class="stat">
+                  <span class="stat-label">Peak CPU</span>
+                  <span class="stat-value">{metricsSummary.max_cpu.toFixed(1)}%</span>
+                </div>
+                <div class="stat">
+                  <span class="stat-label">Avg Memory</span>
+                  <span class="stat-value">{metricsSummary.avg_memory_percent.toFixed(1)}%</span>
+                </div>
+              </div>
+              <p class="metric-footnote">
+                Window: {metricsSummary.window_start
+                  ? new Date(metricsSummary.window_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                  : 'unknown'} - {metricsSummary.window_end
+                  ? new Date(metricsSummary.window_end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                  : 'now'}
+              </p>
+            </div>
+          {/if}
+
+          {#if threatPrediction}
+            <div class="metric-card threat-card {getThreatBg(threatPrediction.severity)}">
+              <div class="metric-header">
+                <span class="metric-icon">RISK</span>
+                <h3>Threat Risk</h3>
+              </div>
+              <div class="metric-value">
+                <span class="value {getThreatColor(threatPrediction.severity)}">
+                  {threatPrediction.severity?.toUpperCase() ?? 'UNKNOWN'}
+                </span>
+                <span class="label">
+                  Score {(threatPrediction.score * 100).toFixed(0)}%
+                  {#if threatPrediction.confidence !== undefined}
+                    + Confidence {(threatPrediction.confidence * 100).toFixed(0)}%
+                  {/if}
+                </span>
+              </div>
+              <p class="metric-footnote">
+                Provider: {threatPrediction.provider ?? 'heuristic fallback'}
+              </p>
+            </div>
+          {/if}
         </div>
       {:else if activeTab === 'cpu'}
         <div class="detail-view">
-          <h3>CPU Usage History (Last 5 Minutes)</h3>
+          <h3>CPU Trend (last {hourlyMetrics.length} hours)</h3>
           <div class="chart-container">
-            <div class="simple-chart">
-              {#each recentMetrics.slice().reverse() as metric, i}
-                <div class="chart-bar" style="height: {metric.cpu_usage}%; background: {metric.cpu_usage > 90 ? '#ef4444' : metric.cpu_usage > 70 ? '#f59e0b' : '#10b981'}">
-                  <span class="bar-tooltip">{metric.cpu_usage.toFixed(1)}%</span>
-                </div>
-              {/each}
-            </div>
+            {#if hourlyMetrics.length > 0}
+              <div class="simple-chart">
+                {#each hourlyMetrics.slice().reverse() as metric, i}
+                  <div
+                    class="chart-bar"
+                    style="height: {Math.min(metric.peak_cpu, 100)}%; background: {metric.peak_cpu > 90 ? '#ef4444' : metric.peak_cpu > 70 ? '#f59e0b' : '#10b981'}"
+                  >
+                    <div class="bar-tooltip">
+                      <div>{metric.peak_cpu.toFixed(1)}%</div>
+                      <div>{formatHourBucket(metric.hour_bucket)}</div>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            {:else}
+              <div class="empty-state small">
+                <p>No hourly metrics available.</p>
+              </div>
+            {/if}
           </div>
           <div class="stats-summary">
             <div class="stat-item">
@@ -276,11 +445,11 @@
             </div>
           </div>
         </div>
-      {:else if activeTab === 'memory'}
+{:else if activeTab === 'memory'}
         <div class="detail-view">
           <h3>Memory Usage Details</h3>
           {#if getLatestMetric()}
-            {@const latest = getLatestMetric()}
+            {@const latest = getLatestMetric()!}
             <div class="memory-details">
               <div class="memory-stat">
                 <span class="label">Total Memory</span>
@@ -305,7 +474,7 @@
         <div class="detail-view">
           <h3>Disk I/O Performance</h3>
           {#if getLatestMetric()}
-            {@const latest = getLatestMetric()}
+            {@const latest = getLatestMetric()!}
             <div class="disk-details">
               <div class="disk-stat">
                 <span class="label">Read Speed</span>
@@ -326,7 +495,7 @@
         <div class="detail-view">
           <h3>Network Statistics</h3>
           {#if getLatestMetric()}
-            {@const latest = getLatestMetric()}
+            {@const latest = getLatestMetric()!}
             <div class="network-details">
               <div class="network-stat">
                 <span class="label">Active Connections</span>
@@ -521,6 +690,24 @@
     color: #6b7280;
     text-transform: uppercase;
     font-weight: 600;
+  }
+
+  .metric-footnote {
+    margin-top: 0.75rem;
+    font-size: 0.75rem;
+    color: #6b7280;
+  }
+
+  .threat-card {
+    border: 1px solid #e5e7eb;
+  }
+
+  .empty-state.small {
+    padding: 1.5rem;
+    background: #f9fafb;
+    border-radius: 0.75rem;
+    color: #6b7280;
+    text-align: center;
   }
 
   .stat-value {

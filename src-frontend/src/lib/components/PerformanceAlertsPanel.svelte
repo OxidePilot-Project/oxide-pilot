@@ -1,79 +1,87 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import { writable } from "svelte/store";
-  import { isTauri } from "$lib/utils/env";
-  import { tauriInvoke } from "$lib/utils/tauri";
+import { onMount } from "svelte";
+import { writable } from "svelte/store";
+import { isTauri } from "$lib/utils/env";
+import { tauriInvoke } from "$lib/utils/tauri";
 
-  const loading = writable(false);
-  const error = writable<string | null>(null);
-  const status = writable<string | null>(null);
+const loading = writable(false);
+const error = writable<string | null>(null);
+const status = writable<string | null>(null);
 
-  // Monitoring toggle
-  let monitoringEnabled = true;
+// Monitoring toggle
+let monitoringEnabled = true;
 
-  // Data stores
-  const alerts = writable<any[]>([]);
-  const errorStats = writable<any | null>(null);
-  const recentErrors = writable<any[]>([]);
-  const operationProfiles = writable<any[]>([]);
+// Data stores
+const alerts = writable<any[]>([]);
+const errorStats = writable<any | null>(null);
+const recentErrors = writable<any[]>([]);
+const operationProfiles = writable<any[]>([]);
 
-  let errorsLimit = 25;
+let errorsLimit = 25;
 
-  async function loadData() {
-    if (!isTauri) return;
-    loading.set(true);
-    error.set(null);
-    status.set(null);
-    try {
-      const [alertsList, stats, errors, profiles] = await Promise.all([
-        tauriInvoke<any[]>("get_performance_alerts"),
-        tauriInvoke<any>("get_error_statistics").catch(() => null),
-        tauriInvoke<any[]>("get_recent_errors", { limit: errorsLimit }).catch(() => []),
-        tauriInvoke<any[]>("get_operation_profiles").catch(() => []),
-      ]);
-      alerts.set(alertsList ?? []);
-      errorStats.set(stats);
-      recentErrors.set(errors ?? []);
-      operationProfiles.set(profiles ?? []);
-    } catch (e: any) {
-      error.set(e?.message ?? String(e));
-    } finally {
-      loading.set(false);
-    }
+async function loadData() {
+  if (!isTauri) return;
+  loading.set(true);
+  error.set(null);
+  status.set(null);
+  try {
+    const [alertsList, stats, errors, profiles] = await Promise.all([
+      tauriInvoke<any[]>("get_performance_alerts"),
+      tauriInvoke<any>("get_error_statistics").catch(() => null),
+      tauriInvoke<any[]>("get_recent_errors", { limit: errorsLimit }).catch(
+        () => [],
+      ),
+      tauriInvoke<any[]>("get_operation_profiles").catch(() => []),
+    ]);
+    alerts.set(alertsList ?? []);
+    errorStats.set(stats);
+    recentErrors.set(errors ?? []);
+    operationProfiles.set(profiles ?? []);
+  } catch (e: any) {
+    error.set(e?.message ?? String(e));
+  } finally {
+    loading.set(false);
   }
+}
 
-  async function toggleMonitoring() {
-    if (!isTauri) return;
-    loading.set(true);
-    error.set(null);
-    status.set(null);
-    try {
-      await tauriInvoke("set_performance_monitoring", { enabled: monitoringEnabled });
-      status.set(monitoringEnabled ? "Performance monitoring enabled." : "Performance monitoring disabled.");
-    } catch (e: any) {
-      error.set(e?.message ?? String(e));
-    } finally {
-      loading.set(false);
-    }
+async function toggleMonitoring() {
+  if (!isTauri) return;
+  loading.set(true);
+  error.set(null);
+  status.set(null);
+  try {
+    await tauriInvoke("set_performance_monitoring", {
+      enabled: monitoringEnabled,
+    });
+    status.set(
+      monitoringEnabled
+        ? "Performance monitoring enabled."
+        : "Performance monitoring disabled.",
+    );
+  } catch (e: any) {
+    error.set(e?.message ?? String(e));
+  } finally {
+    loading.set(false);
   }
+}
 
-  async function clearAlerts() {
-    if (!isTauri) return;
-    loading.set(true);
-    error.set(null);
-    status.set(null);
-    try {
-      await tauriInvoke("clear_performance_alerts");
-      await loadData();
-      status.set("Performance alerts cleared.");
-    } catch (e: any) {
-      error.set(e?.message ?? String(e));
-    } finally {
-      loading.set(false);
-    }
+async function clearAlerts() {
+  if (!isTauri) return;
+  loading.set(true);
+  error.set(null);
+  status.set(null);
+  try {
+    await tauriInvoke("clear_performance_alerts");
+    await loadData();
+    status.set("Performance alerts cleared.");
+  } catch (e: any) {
+    error.set(e?.message ?? String(e));
+  } finally {
+    loading.set(false);
   }
+}
 
-  onMount(loadData);
+onMount(loadData);
 </script>
 
 <div class="perf-alerts-panel">

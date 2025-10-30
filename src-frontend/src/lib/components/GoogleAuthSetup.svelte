@@ -1,5 +1,5 @@
 <script lang="ts">
-import { createEventDispatcher, onMount, onDestroy } from "svelte";
+import { createEventDispatcher, onDestroy, onMount } from "svelte";
 import { writable } from "svelte/store";
 import { isTauri } from "$lib/utils/env";
 
@@ -19,7 +19,7 @@ const authStatus = writable<{
 }>({ message: "", type: "info" });
 let isAuthenticating = false;
 let showInstructions = false;
-let availableModels: string[] = [];
+const availableModels: string[] = [];
 
 // Listen for backend auth completion events (Tauri) or browser-dispatched CustomEvent fallback
 let unlisten: null | (() => void | Promise<void>) = null;
@@ -36,15 +36,24 @@ function handleGoogleAuthComplete(payload: GoogleAuthEvent) {
   isAuthenticating = false;
   const status = (payload?.status || "").toLowerCase();
   if (status === "success") {
-    authStatus.set({ message: "Google authentication completed.", type: "success" });
+    authStatus.set({
+      message: "Google authentication completed.",
+      type: "success",
+    });
     // Notify parent layout to proceed
     dispatch("authComplete");
   } else if (status === "error") {
     const msg = payload?.message || "Unknown error";
-    authStatus.set({ message: `Google authentication failed: ${msg}`, type: "error" });
+    authStatus.set({
+      message: `Google authentication failed: ${msg}`,
+      type: "error",
+    });
   } else {
     // Unknown/other payloads
-    authStatus.set({ message: "Received authentication update.", type: "info" });
+    authStatus.set({
+      message: "Received authentication update.",
+      type: "info",
+    });
   }
 }
 
@@ -56,15 +65,24 @@ onMount(async () => {
         handleGoogleAuthComplete(evt?.payload as GoogleAuthEvent);
       });
       unlisten = () => {
-        try { (stop as any)(); } catch {}
+        try {
+          (stop as any)();
+        } catch {}
       };
     } else if (typeof window !== "undefined") {
       const browserHandler = (e: Event) => {
         const detail = (e as CustomEvent).detail as GoogleAuthEvent;
         handleGoogleAuthComplete(detail);
       };
-      window.addEventListener("google_auth_complete", browserHandler as EventListener);
-      unlisten = () => window.removeEventListener("google_auth_complete", browserHandler as EventListener);
+      window.addEventListener(
+        "google_auth_complete",
+        browserHandler as EventListener,
+      );
+      unlisten = () =>
+        window.removeEventListener(
+          "google_auth_complete",
+          browserHandler as EventListener,
+        );
     }
   } catch (e) {
     // Non-fatal; just log to console
@@ -73,12 +91,19 @@ onMount(async () => {
 });
 
 onDestroy(() => {
-  try { if (unlisten) { unlisten(); } } catch {}
+  try {
+    if (unlisten) {
+      unlisten();
+    }
+  } catch {}
 });
 
 async function clearGoogleSession() {
   if (!isTauri) {
-    authStatus.set({ message: "Clear session is a desktop-only operation (browser test mode).", type: "info" });
+    authStatus.set({
+      message: "Clear session is a desktop-only operation (browser test mode).",
+      type: "info",
+    });
     return;
   }
   try {
@@ -103,7 +128,8 @@ async function saveApiKey() {
   // Check if we're in Tauri context
   if (!isTauri) {
     authStatus.set({
-      message: "Error: Not running in Tauri context. Please use the desktop application.",
+      message:
+        "Error: Not running in Tauri context. Please use the desktop application.",
       type: "error",
     });
     return;
@@ -112,7 +138,7 @@ async function saveApiKey() {
   try {
     // For API key method, use the correct function
     await tauriInvoke("set_google_api_key", {
-      api_key: apiKey
+      api_key: apiKey,
     });
     authStatus.set({
       message: "API key saved successfully!",
@@ -147,14 +173,18 @@ async function saveClientCredentials() {
   // Check if we're in Tauri context
   if (!isTauri) {
     authStatus.set({
-      message: "Error: Not running in Tauri context. Please use the desktop application.",
+      message:
+        "Error: Not running in Tauri context. Please use the desktop application.",
       type: "error",
     });
     return;
   }
 
   try {
-    await tauriInvoke("set_google_client_credentials", { client_id: clientId, client_secret: clientSecret });
+    await tauriInvoke("set_google_client_credentials", {
+      client_id: clientId,
+      client_secret: clientSecret,
+    });
     authStatus.set({
       message:
         "Client credentials saved successfully! You can now authenticate.",
@@ -187,7 +217,8 @@ async function startGoogleAuth() {
   // Check if we're in Tauri context
   if (!isTauri) {
     authStatus.set({
-      message: "Error: Not running in Tauri context. Please use the desktop application.",
+      message:
+        "Error: Not running in Tauri context. Please use the desktop application.",
       type: "error",
     });
     isAuthenticating = false;

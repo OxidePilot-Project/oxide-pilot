@@ -396,8 +396,16 @@ impl MetricsCollector {
         content: &str,
         timestamp: chrono::DateTime<Utc>,
     ) -> Result<()> {
-        // TODO: Generate real embeddings
-        let embedding = vec![0.0; 1536];
+        let embedding = match self.backend.embed_text(content).await {
+            Ok(vector) => vector,
+            Err(err) => {
+                warn!(
+                    "Alert memory embedding generation failed: {:#}. Using zero vector fallback.",
+                    err
+                );
+                vec![0.0; self.backend.embedding_dimension()]
+            }
+        };
 
         let memory = AgentMemory {
             agent_type: AgentType::Guardian,

@@ -1,7 +1,7 @@
 let _anime: any | null = null;
 function getAnime(): Promise<any> {
   if (_anime) return Promise.resolve(_anime);
-  return import('animejs/lib/anime.es.js').then((m) => {
+  return import("animejs/lib/anime.es.js").then((m) => {
     _anime = (m as any).default ?? m;
     return _anime;
   });
@@ -22,7 +22,7 @@ export function fadeIn(node: HTMLElement, params: FadeInParams = {}) {
     delay: 0,
     y: 8,
     opacityFrom: 0,
-    easing: 'easeOutQuad',
+    easing: "easeOutQuad",
     ...params,
   };
 
@@ -50,9 +50,11 @@ export function fadeIn(node: HTMLElement, params: FadeInParams = {}) {
       Object.assign(cfg, newParams);
     },
     destroy() {
-      getAnime().then((anime) => anime.remove(node)).catch(() => {});
-      node.style.removeProperty('opacity');
-      node.style.removeProperty('transform');
+      getAnime()
+        .then((anime) => anime.remove(node))
+        .catch(() => {});
+      node.style.removeProperty("opacity");
+      node.style.removeProperty("transform");
     },
   };
 }
@@ -75,7 +77,7 @@ export function hoverLift(node: HTMLElement, params: HoverLiftParams = {}) {
         translateY: -cfg.y!,
         scale: cfg.scale,
         duration: cfg.duration,
-        easing: 'easeOutQuad',
+        easing: "easeOutQuad",
       });
     });
   }
@@ -88,22 +90,24 @@ export function hoverLift(node: HTMLElement, params: HoverLiftParams = {}) {
         translateY: 0,
         scale: 1,
         duration: Math.min(200, cfg.duration || 180),
-        easing: 'easeOutQuad',
+        easing: "easeOutQuad",
       });
     });
   }
 
-  node.addEventListener('mouseenter', onEnter);
-  node.addEventListener('mouseleave', onLeave);
+  node.addEventListener("mouseenter", onEnter);
+  node.addEventListener("mouseleave", onLeave);
 
   return {
     update(newParams: HoverLiftParams = {}) {
       Object.assign(cfg, newParams);
     },
     destroy() {
-      getAnime().then((anime) => anime.remove(node)).catch(() => {});
-      node.removeEventListener('mouseenter', onEnter);
-      node.removeEventListener('mouseleave', onLeave);
+      getAnime()
+        .then((anime) => anime.remove(node))
+        .catch(() => {});
+      node.removeEventListener("mouseenter", onEnter);
+      node.removeEventListener("mouseleave", onLeave);
     },
   };
 }
@@ -121,25 +125,29 @@ export function ripple(node: HTMLElement, params: RippleParams = {}) {
 
   function onPointerDown(e: PointerEvent | MouseEvent) {
     // Respect disabled/loading states on buttons
-    if ((node as HTMLButtonElement).disabled || node.getAttribute('aria-busy') === 'true') return;
+    if (
+      (node as HTMLButtonElement).disabled ||
+      node.getAttribute("aria-busy") === "true"
+    )
+      return;
 
     const rect = node.getBoundingClientRect();
     const x = cfg.centered
       ? rect.width / 2
-      : 'clientX' in e
-        ? (e.clientX - rect.left)
+      : "clientX" in e
+        ? e.clientX - rect.left
         : rect.width / 2;
     const y = cfg.centered
       ? rect.height / 2
-      : 'clientY' in e
-        ? (e.clientY - rect.top)
+      : "clientY" in e
+        ? e.clientY - rect.top
         : rect.height / 2;
 
     const maxDim = Math.max(rect.width, rect.height);
     const radius = maxDim * 0.75;
 
-    const el = document.createElement('span');
-    el.className = 'ripple';
+    const el = document.createElement("span");
+    el.className = "ripple";
     if (cfg.color) el.style.background = cfg.color;
 
     el.style.left = `${x}px`;
@@ -155,20 +163,20 @@ export function ripple(node: HTMLElement, params: RippleParams = {}) {
         scale: [0, 1],
         opacity: [cfg.opacity, 0],
         duration: cfg.duration,
-        easing: 'easeOutQuad',
+        easing: "easeOutQuad",
         complete: () => el.remove(),
       });
     });
   }
 
-  node.addEventListener('pointerdown', onPointerDown);
+  node.addEventListener("pointerdown", onPointerDown);
 
   return {
     update(newParams: RippleParams = {}) {
       Object.assign(cfg, newParams);
     },
     destroy() {
-      node.removeEventListener('pointerdown', onPointerDown);
+      node.removeEventListener("pointerdown", onPointerDown);
     },
   };
 }

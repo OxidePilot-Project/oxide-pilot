@@ -1,115 +1,143 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
-  import { invoke } from '@tauri-apps/api/tauri';
+import { invoke } from "@tauri-apps/api/tauri";
+import { onDestroy, onMount } from "svelte";
 
-  interface Alert {
-    text: string;
-    score: number;
-    timestamp: string;
-    metadata?: {
-      alert_type?: string;
-      auto_generated?: boolean;
-    };
+interface Alert {
+  text: string;
+  score: number;
+  timestamp: string;
+  metadata?: {
+    alert_type?: string;
+    auto_generated?: boolean;
+  };
+}
+
+let alerts: Alert[] = [];
+let loading = true;
+let error: string | null = null;
+let refreshInterval: number;
+let filterType: "all" | "performance" | "security" = "all";
+
+async function fetchAlerts() {
+  try {
+    const response = await invoke<{ results: Alert[]; count: number }>(
+      "search_agent_memory",
+      {
+        query: "alert high usage warning",
+        limit: 50,
+      },
+    );
+
+    alerts = response.results.sort(
+      (a, b) =>
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+    );
+
+    loading = false;
+    error = null;
+  } catch (e) {
+    error = `Failed to fetch alerts: ${e}`;
+    loading = false;
+    console.error(error);
   }
+}
 
-  let alerts: Alert[] = [];
-  let loading = true;
-  let error: string | null = null;
-  let refreshInterval: number;
-  let filterType: 'all' | 'performance' | 'security' = 'all';
+onMount(() => {
+  fetchAlerts();
+  refreshInterval = window.setInterval(fetchAlerts, 10000); // Refresh every 10 seconds
+});
 
-  async function fetchAlerts() {
-    try {
-      const response = await invoke<{ results: Alert[]; count: number }>('search_agent_memory', {
-        query: 'alert high usage warning',
-        limit: 50
-      });
-
-      alerts = response.results.sort((a, b) =>
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-      );
-
-      loading = false;
-      error = null;
-    } catch (e) {
-      error = `Failed to fetch alerts: ${e}`;
-      loading = false;
-      console.error(error);
-    }
+onDestroy(() => {
+  if (refreshInterval) {
+    clearInterval(refreshInterval);
   }
+});
 
-  onMount(() => {
-    fetchAlerts();
-    refreshInterval = window.setInterval(fetchAlerts, 10000); // Refresh every 10 seconds
-  });
-
-  onDestroy(() => {
-    if (refreshInterval) {
-      clearInterval(refreshInterval);
-    }
-  });
-
-  function getAlertSeverity(text: string): 'critical' | 'warning' | 'info' {
-    const lowerText = text.toLowerCase();
-    if (lowerText.includes('critical') || lowerText.includes('95') || lowerText.includes('100')) {
-      return 'critical';
-    }
-    if (lowerText.includes('warning') || lowerText.includes('high') || lowerText.includes('90')) {
-      return 'warning';
-    }
-    return 'info';
+function getAlertSeverity(text: string): "critical" | "warning" | "info" {
+  const lowerText = text.toLowerCase();
+  if (
+    lowerText.includes("critical") ||
+    lowerText.includes("95") ||
+    lowerText.includes("100")
+  ) {
+    return "critical";
   }
-
-  function getSeverityColor(severity: string): string {
-    switch (severity) {
-      case 'critical': return 'text-red-600';
-      case 'warning': return 'text-yellow-600';
-      case 'info': return 'text-blue-600';
-      default: return 'text-gray-600';
-    }
+  if (
+    lowerText.includes("warning") ||
+    lowerText.includes("high") ||
+    lowerText.includes("90")
+  ) {
+    return "warning";
   }
+  return "info";
+}
 
-  function getSeverityBg(severity: string): string {
-    switch (severity) {
-      case 'critical': return 'bg-red-50 border-red-200';
-      case 'warning': return 'bg-yellow-50 border-yellow-200';
-      case 'info': return 'bg-blue-50 border-blue-200';
-      default: return 'bg-gray-50 border-gray-200';
-    }
+function getSeverityColor(severity: string): string {
+  switch (severity) {
+    case "critical":
+      return "text-red-600";
+    case "warning":
+      return "text-yellow-600";
+    case "info":
+      return "text-blue-600";
+    default:
+      return "text-gray-600";
   }
+}
 
-  function getSeverityIcon(severity: string): string {
-    switch (severity) {
-      case 'critical': return '🔴';
-      case 'warning': return '⚠️';
-      case 'info': return 'ℹ️';
-      default: return '📋';
-    }
+function getSeverityBg(severity: string): string {
+  switch (severity) {
+    case "critical":
+      return "bg-red-50 border-red-200";
+    case "warning":
+      return "bg-yellow-50 border-yellow-200";
+    case "info":
+      return "bg-blue-50 border-blue-200";
+    default:
+      return "bg-gray-50 border-gray-200";
   }
+}
 
-  function formatTimestamp(timestamp: string): string {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours}h ago`;
-
-    const diffDays = Math.floor(diffHours / 24);
-    return `${diffDays}d ago`;
+function getSeverityIcon(severity: string): string {
+  switch (severity) {
+    case "critical":
+      return "🔴";
+    case "warning":
+      return "⚠️";
+    case "info":
+      return "ℹ️";
+    default:
+      return "📋";
   }
+}
 
-  $: filteredAlerts = alerts.filter(alert => {
-    if (filterType === 'all') return true;
-    return alert.metadata?.alert_type === filterType;
-  });
+function formatTimestamp(timestamp: string): string {
+  const date = new Date(timestamp);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
 
-  $: criticalCount = alerts.filter(a => getAlertSeverity(a.text) === 'critical').length;
-  $: warningCount = alerts.filter(a => getAlertSeverity(a.text) === 'warning').length;
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays}d ago`;
+}
+
+$: filteredAlerts = alerts.filter((alert) => {
+  if (filterType === "all") return true;
+  return alert.metadata?.alert_type === filterType;
+});
+
+$: criticalCount = alerts.filter(
+  (a) => getAlertSeverity(a.text) === "critical",
+).length;
+$: warningCount = alerts.filter(
+  (a) => getAlertSeverity(a.text) === "warning",
+).length;
 </script>
 
 <div class="alerts-panel">

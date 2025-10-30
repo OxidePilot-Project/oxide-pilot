@@ -1,81 +1,85 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import { isTauri } from "$lib/utils/env";
-  import { tauriInvoke } from "$lib/utils/tauri";
+import { onMount } from "svelte";
+import { isTauri } from "$lib/utils/env";
+import { tauriInvoke } from "$lib/utils/tauri";
 
-  export let userInput: string = "";
-  export let taskType: string = "system_analysis";
+export let userInput: string = "";
+export let taskType: string = "system_analysis";
 
-  let isAnalyzing = false;
-  let analysisResult: any = null;
-  let error: string = "";
+let isAnalyzing = false;
+let analysisResult: any = null;
+let error: string = "";
 
-  interface CollaborativeResult {
-    success: boolean;
-    primary_response: string;
-    secondary_responses: Record<string, string>;
-    consensus_score: number;
-    confidence: number;
-    execution_plan: any;
-    timestamp: string;
+interface CollaborativeResult {
+  success: boolean;
+  primary_response: string;
+  secondary_responses: Record<string, string>;
+  consensus_score: number;
+  confidence: number;
+  execution_plan: any;
+  timestamp: string;
+}
+
+async function runCollaborativeAnalysis() {
+  if (!userInput.trim()) {
+    error = "Please enter a task or question";
+    return;
   }
 
-  async function runCollaborativeAnalysis() {
-    if (!userInput.trim()) {
-      error = "Please enter a task or question";
-      return;
+  isAnalyzing = true;
+  error = "";
+  analysisResult = null;
+
+  try {
+    if (isTauri) {
+      const result = await tauriInvoke<string>("run_collaborative_analysis", {
+        userInput: userInput.trim(),
+        taskType: taskType,
+      });
+
+      analysisResult = JSON.parse(result) as CollaborativeResult;
+    } else {
+      // Browser fallback
+      analysisResult = {
+        success: true,
+        primary_response: `Web preview: Collaborative analysis for "${userInput}" would be performed by Gemini (Coordinator) and Qwen (Analyst) working together.`,
+        secondary_responses: {
+          gemini_executor: "Execution plan would be created by Gemini Executor",
+          qwen_validator: "Results would be validated by Qwen Validator",
+        },
+        consensus_score: 0.85,
+        confidence: 0.9,
+        execution_plan: {
+          plan: "Web preview execution plan",
+          steps: [
+            "Step 1: Analysis",
+            "Step 2: Validation",
+            "Step 3: Execution",
+          ],
+          timestamp: new Date().toISOString(),
+        },
+        timestamp: new Date().toISOString(),
+      };
     }
-
-    isAnalyzing = true;
-    error = "";
-    analysisResult = null;
-
-    try {
-      if (isTauri) {
-        const result = await tauriInvoke<string>("run_collaborative_analysis", {
-          userInput: userInput.trim(),
-          taskType: taskType
-        });
-
-        analysisResult = JSON.parse(result) as CollaborativeResult;
-      } else {
-        // Browser fallback
-        analysisResult = {
-          success: true,
-          primary_response: `Web preview: Collaborative analysis for "${userInput}" would be performed by Gemini (Coordinator) and Qwen (Analyst) working together.`,
-          secondary_responses: {
-            "gemini_executor": "Execution plan would be created by Gemini Executor",
-            "qwen_validator": "Results would be validated by Qwen Validator"
-          },
-          consensus_score: 0.85,
-          confidence: 0.9,
-          execution_plan: {
-            plan: "Web preview execution plan",
-            steps: ["Step 1: Analysis", "Step 2: Validation", "Step 3: Execution"],
-            timestamp: new Date().toISOString()
-          },
-          timestamp: new Date().toISOString()
-        };
-      }
-    } catch (err) {
-      error = `Analysis failed: ${err}`;
-      console.error("Collaborative analysis error:", err);
-    } finally {
-      isAnalyzing = false;
-    }
+  } catch (err) {
+    error = `Analysis failed: ${err}`;
+    console.error("Collaborative analysis error:", err);
+  } finally {
+    isAnalyzing = false;
   }
+}
 
-  function getConfidenceColor(confidence: number): string {
-    if (confidence >= 0.8) return "#22c55e"; // green
-    if (confidence >= 0.6) return "#f59e0b"; // yellow
-    return "#ef4444"; // red
-  }
+function getConfidenceColor(confidence: number): string {
+  if (confidence >= 0.8) return "#22c55e"; // green
+  if (confidence >= 0.6) return "#f59e0b"; // yellow
+  return "#ef4444"; // red
+}
 
-  function getConsensusColor(score: number): string {
-    if (score >= 0.8) return "#22c55e"; // green
-    if (score >= 0.6) return "#f59e0b"; // yellow
-    return "#ef4444"; // red
-  }
+function getConsensusColor(score: number): string {
+  if (score >= 0.8) return "#22c55e"; // green
+  if (score >= 0.6) return "#f59e0b"; // yellow
+  return "#ef4444"; // red
+}
 </script>
 
 <div class="collaborative-analysis">

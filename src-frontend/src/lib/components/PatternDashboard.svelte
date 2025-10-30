@@ -1,144 +1,148 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import { writable } from "svelte/store";
-  import SecurityCenter from "./SecurityCenter.svelte";
-  import PerformanceAlertsPanel from "./PerformanceAlertsPanel.svelte";
+import { onMount } from "svelte";
+import { writable } from "svelte/store";
+import PerformanceAlertsPanel from "./PerformanceAlertsPanel.svelte";
+import SecurityCenter from "./SecurityCenter.svelte";
 
-  interface SystemMetric {
-    id: string;
-    name: string;
-    value: number;
-    unit: string;
-    status: "good" | "warning" | "critical";
-    icon: string;
-    change?: number;
-  }
+interface SystemMetric {
+  id: string;
+  name: string;
+  value: number;
+  unit: string;
+  status: "good" | "warning" | "critical";
+  icon: string;
+  change?: number;
+}
 
-  interface SystemStatus {
-    cpu: number;
-    memory: number;
-    disk: number;
-    network: number;
-    temperature: number;
-    uptime: string;
-  }
+interface SystemStatus {
+  cpu: number;
+  memory: number;
+  disk: number;
+  network: number;
+  temperature: number;
+  uptime: string;
+}
 
-  const metrics = writable<SystemMetric[]>([]);
-  const systemStatus = writable<SystemStatus | null>(null);
-  let isLoading = true;
-  let error: string | null = null;
-  let activeTab = "overview";
+const metrics = writable<SystemMetric[]>([]);
+const systemStatus = writable<SystemStatus | null>(null);
+let isLoading = true;
+let error: string | null = null;
+let activeTab = "overview";
 
-  // Pattern Craft inspired background patterns
-  let backgroundPattern = "linear-gradient(135deg, #667eea 0%, #764ba2 100%)";
+// Pattern Craft inspired background patterns
+let backgroundPattern = "linear-gradient(135deg, #667eea 0%, #764ba2 100%)";
 
-  onMount(async () => {
-    await loadSystemMetrics();
-  });
+onMount(async () => {
+  await loadSystemMetrics();
+});
 
-  async function loadSystemMetrics() {
-    try {
-      isLoading = true;
-      error = null;
-      
-      // Simulate API call to get system metrics
-      const status: SystemStatus = {
-        cpu: Math.floor(Math.random() * 100),
-        memory: Math.floor(Math.random() * 100),
-        disk: Math.floor(Math.random() * 100),
-        network: Math.floor(Math.random() * 100),
-        temperature: Math.floor(Math.random() * 100),
-        uptime: "2 days, 4 hours"
-      };
-      
-      systemStatus.set(status);
-      
-      // Convert to display metrics with Pattern Craft inspired styling
-      const metricList: SystemMetric[] = [
-        { 
-          id: "cpu", 
-          name: "CPU Usage", 
-          value: status.cpu, 
-          unit: "%", 
-          status: getStatus(status.cpu, 80, 90),
-          icon: "⚙️",
-          change: Math.floor(Math.random() * 20) - 10
-        },
-        { 
-          id: "memory", 
-          name: "Memory", 
-          value: status.memory, 
-          unit: "%", 
-          status: getStatus(status.memory, 80, 90),
-          icon: "💾",
-          change: Math.floor(Math.random() * 20) - 10
-        },
-        { 
-          id: "disk", 
-          name: "Disk Usage", 
-          value: status.disk, 
-          unit: "%", 
-          status: getStatus(status.disk, 85, 95),
-          icon: "💿",
-          change: Math.floor(Math.random() * 20) - 10
-        },
-        { 
-          id: "network", 
-          name: "Network", 
-          value: status.network, 
-          unit: "Mbps", 
-          status: getStatus(status.network, 70, 90),
-          icon: "🌐",
-          change: Math.floor(Math.random() * 20) - 10
-        },
-        { 
-          id: "temperature", 
-          name: "Temperature", 
-          value: status.temperature, 
-          unit: "°C", 
-          status: getStatus(status.temperature, 70, 85),
-          icon: "🌡️",
-          change: Math.floor(Math.random() * 20) - 10
-        }
-      ];
-      
-      metrics.set(metricList);
-    } catch (err) {
-      error = "Failed to load system metrics";
-      console.error(err);
-    } finally {
-      isLoading = false;
-    }
-  }
+async function loadSystemMetrics() {
+  try {
+    isLoading = true;
+    error = null;
 
-  function getStatus(value: number, warningThreshold: number, criticalThreshold: number): "good" | "warning" | "critical" {
-    if (value >= criticalThreshold) return "critical";
-    if (value >= warningThreshold) return "warning";
-    return "good";
-  }
+    // Simulate API call to get system metrics
+    const status: SystemStatus = {
+      cpu: Math.floor(Math.random() * 100),
+      memory: Math.floor(Math.random() * 100),
+      disk: Math.floor(Math.random() * 100),
+      network: Math.floor(Math.random() * 100),
+      temperature: Math.floor(Math.random() * 100),
+      uptime: "2 days, 4 hours",
+    };
 
-  function refreshData() {
-    loadSystemMetrics();
-  }
+    systemStatus.set(status);
 
-  function switchTab(tab: string) {
-    activeTab = tab;
-  }
-
-  // Function to generate Pattern Craft inspired background
-  function generateBackgroundPattern() {
-    const patterns = [
-      "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-      "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
-      "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
-      "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
-      "linear-gradient(135deg, #fa709a 0%, #fee140 100%)"
+    // Convert to display metrics with Pattern Craft inspired styling
+    const metricList: SystemMetric[] = [
+      {
+        id: "cpu",
+        name: "CPU Usage",
+        value: status.cpu,
+        unit: "%",
+        status: getStatus(status.cpu, 80, 90),
+        icon: "⚙️",
+        change: Math.floor(Math.random() * 20) - 10,
+      },
+      {
+        id: "memory",
+        name: "Memory",
+        value: status.memory,
+        unit: "%",
+        status: getStatus(status.memory, 80, 90),
+        icon: "💾",
+        change: Math.floor(Math.random() * 20) - 10,
+      },
+      {
+        id: "disk",
+        name: "Disk Usage",
+        value: status.disk,
+        unit: "%",
+        status: getStatus(status.disk, 85, 95),
+        icon: "💿",
+        change: Math.floor(Math.random() * 20) - 10,
+      },
+      {
+        id: "network",
+        name: "Network",
+        value: status.network,
+        unit: "Mbps",
+        status: getStatus(status.network, 70, 90),
+        icon: "🌐",
+        change: Math.floor(Math.random() * 20) - 10,
+      },
+      {
+        id: "temperature",
+        name: "Temperature",
+        value: status.temperature,
+        unit: "°C",
+        status: getStatus(status.temperature, 70, 85),
+        icon: "🌡️",
+        change: Math.floor(Math.random() * 20) - 10,
+      },
     ];
-    return patterns[Math.floor(Math.random() * patterns.length)];
-  }
 
-  // Initialize with a random pattern
-  backgroundPattern = generateBackgroundPattern();
+    metrics.set(metricList);
+  } catch (err) {
+    error = "Failed to load system metrics";
+    console.error(err);
+  } finally {
+    isLoading = false;
+  }
+}
+
+function getStatus(
+  value: number,
+  warningThreshold: number,
+  criticalThreshold: number,
+): "good" | "warning" | "critical" {
+  if (value >= criticalThreshold) return "critical";
+  if (value >= warningThreshold) return "warning";
+  return "good";
+}
+
+function refreshData() {
+  loadSystemMetrics();
+}
+
+function switchTab(tab: string) {
+  activeTab = tab;
+}
+
+// Function to generate Pattern Craft inspired background
+function generateBackgroundPattern() {
+  const patterns = [
+    "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+    "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
+    "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
+    "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
+    "linear-gradient(135deg, #fa709a 0%, #fee140 100%)",
+  ];
+  return patterns[Math.floor(Math.random() * patterns.length)];
+}
+
+// Initialize with a random pattern
+backgroundPattern = generateBackgroundPattern();
 </script>
 
 <div class="pattern-dashboard" style="background: {backgroundPattern};">
@@ -745,19 +749,6 @@
   .security-icon {
     font-size: 40px;
     margin-bottom: 20px;
-  }
-
-  .security-card h3 {
-    color: #2c3e50;
-    margin: 0 0 15px 0;
-    font-size: 20px;
-  }
-
-  .security-card p {
-    color: #7f8c8d;
-    margin: 0 0 10px 0;
-    font-size: 16px;
-    line-height: 1.5;
   }
 
   .insights-container {

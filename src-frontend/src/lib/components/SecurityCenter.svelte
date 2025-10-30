@@ -1,346 +1,388 @@
 <script lang="ts">
-  import { onDestroy, onMount } from "svelte";
-  import { writable } from "svelte/store";
-  import { isTauri } from "$lib/utils/env";
-  import { tauriInvoke } from "$lib/utils/tauri";
+import { onDestroy, onMount } from "svelte";
+import { writable } from "svelte/store";
+import { isTauri } from "$lib/utils/env";
+import { tauriInvoke } from "$lib/utils/tauri";
 
-  const loading = writable(false);
-  const status = writable<string | null>(null);
-  const error = writable<string | null>(null);
+const loading = writable(false);
+const status = writable<string | null>(null);
+const error = writable<string | null>(null);
 
-  // Create session form state
-  let userId = "";
-  let permissionsCsv = "read,write";
-  let ipAddress = "";
-  let userAgent = "";
-  const createdSessionId = writable<string | null>(null);
+// Create session form state
+let userId = "";
+let permissionsCsv = "read,write";
+let ipAddress = "";
+let userAgent = "";
+const createdSessionId = writable<string | null>(null);
 
-  // Validation / permission check
-  let checkSessionId = "";
-  let permissionToCheck = "admin";
-  const validateResult = writable<null | boolean>(null);
-  const permissionResult = writable<null | boolean>(null);
+// Validation / permission check
+let checkSessionId = "";
+let permissionToCheck = "admin";
+const validateResult = writable<null | boolean>(null);
+const permissionResult = writable<null | boolean>(null);
 
-  // Security events
-  const events = writable<any[]>([]);
-  let eventsLimit = 25;
-  let refreshTimer: number | null = null;
+// Security events
+const events = writable<any[]>([]);
+let eventsLimit = 25;
+let refreshTimer: number | null = null;
 
-  // File scan state
-  let filePath: string = "";
-  let useCloud = true;
-  let quarantine = true;
-  let scanResult: any = null;
-  let vtConfigured: boolean | null = null;
-  onMount(async () => {
-    if (isTauri) {
-      try {
-        vtConfigured = await tauriInvoke("is_virustotal_configured");
-      } catch (e) {
-        vtConfigured = null;
-      }
-    }
-  });
-  async function pickFile() {
-    if (!isTauri) {
-      error.set("Desktop runtime required for file picker.");
-      return;
-    }
+// File scan state
+let filePath: string = "";
+let useCloud = true;
+let quarantine = true;
+let scanResult: any = null;
+let vtConfigured: boolean | null = null;
+onMount(async () => {
+  if (isTauri) {
     try {
-      const { open } = await import("@tauri-apps/api/dialog");
-      const selected = await open({ multiple: false });
-      if (typeof selected === "string") {
-        filePath = selected;
-      }
-    } catch (e: any) {
-      error.set(e?.message ?? String(e));
+      vtConfigured = await tauriInvoke("is_virustotal_configured");
+    } catch (e) {
+      vtConfigured = null;
     }
   }
-
-  // Folder scan state and controls
-  let folderPath: string = "";
-  let folderScanId: string | null = null;
-  let folderProgress: any = null; // { discovered, scanned, total, malicious, errors, current_file, local_match, external_verdict, cancelled, completed, duration_ms }
-  const folderUnsubs: Array<() => void> = [];
-
-  // Autonomous Threat Consensus state
-  let threatReport: any = null;
-  let threatRecs: string[] = [];
-  let consensusLoading = false;
-  let consensusError: string | null = null;
-
-  async function runThreatConsensus() {
-    if (!isTauri) {
-      error.set("Desktop runtime required.");
-      return;
+});
+async function pickFile() {
+  if (!isTauri) {
+    error.set("Desktop runtime required for file picker.");
+    return;
+  }
+  try {
+    const { open } = await import("@tauri-apps/api/dialog");
+    const selected = await open({ multiple: false });
+    if (typeof selected === "string") {
+      filePath = selected;
     }
-    consensusLoading = true;
-    consensusError = null;
-    threatReport = null;
-    threatRecs = [];
+  } catch (e: any) {
+    error.set(e?.message ?? String(e));
+  }
+}
+
+// Folder scan state and controls
+let folderPath: string = "";
+let folderScanId: string | null = null;
+let folderProgress: any = null; // { discovered, scanned, total, malicious, errors, current_file, local_match, external_verdict, cancelled, completed, duration_ms }
+const folderUnsubs: Array<() => void> = [];
+
+// Autonomous Threat Consensus state
+let threatReport: any = null;
+let threatRecs: string[] = [];
+let consensusLoading = false;
+let consensusError: string | null = null;
+
+async function runThreatConsensus() {
+  if (!isTauri) {
+    error.set("Desktop runtime required.");
+    return;
+  }
+  consensusLoading = true;
+  consensusError = null;
+  threatReport = null;
+  threatRecs = [];
+  try {
+    const jsonStr = await tauriInvoke<string>("run_threat_consensus");
     try {
-      const jsonStr = await tauriInvoke<string>("run_threat_consensus");
-      try {
-        threatReport = JSON.parse(jsonStr || "null");
-      } catch (e) {
-        consensusError = "Failed to parse threat report JSON.";
-      }
-      // fetch recommendations
-      try {
-        threatRecs = await tauriInvoke<string[]>("get_threat_recommendations");
-      } catch (e) {
-        // non-fatal
-      }
-      status.set("Threat consensus completed.");
-    } catch (e: any) {
-      consensusError = e?.message ?? String(e);
-    } finally {
-      consensusLoading = false;
+      threatReport = JSON.parse(jsonStr || "null");
+    } catch (e) {
+      consensusError = "Failed to parse threat report JSON.";
     }
-  }
-
-  async function pickFolder() {
-    if (!isTauri) {
-      error.set("Desktop runtime required for folder picker.");
-      return;
-    }
+    // fetch recommendations
     try {
-      const { open } = await import("@tauri-apps/api/dialog");
-      const selected = await open({ directory: true, multiple: false });
-      if (typeof selected === "string") {
-        folderPath = selected;
-      }
-    } catch (e: any) {
-      error.set(e?.message ?? String(e));
-    }
-  }
-
-  function detachFolderScanListeners() {
-    while (folderUnsubs.length) {
-      const u = folderUnsubs.pop();
-      try { u && u(); } catch {}
-    }
-  }
-
-  async function attachFolderScanListeners() {
-    if (!isTauri) return;
-    const { listen } = await import("@tauri-apps/api/event");
-    const u1 = await listen("folder_scan_started", (ev: any) => {
-      const p = ev?.payload;
-      if (!folderScanId || p?.scan_id !== folderScanId) return;
-      folderProgress = { discovered: 0, scanned: 0, total: 0, malicious: 0, errors: 0 };
-    });
-    const u2 = await listen("folder_scan_progress", (ev: any) => {
-      const p = ev?.payload;
-      if (!folderScanId || p?.scan_id !== folderScanId) return;
-      folderProgress = { ...(folderProgress || {}), ...(p || {}) };
-    });
-    const u3 = await listen("folder_scan_cancelled", (ev: any) => {
-      const p = ev?.payload;
-      if (!folderScanId || p?.scan_id !== folderScanId) return;
-      folderProgress = { ...(folderProgress || {}), ...(p || {}), cancelled: true };
-      detachFolderScanListeners();
-    });
-    const u4 = await listen("folder_scan_completed", (ev: any) => {
-      const p = ev?.payload;
-      if (!folderScanId || p?.scan_id !== folderScanId) return;
-      folderProgress = { ...(folderProgress || {}), ...(p || {}), completed: true };
-      detachFolderScanListeners();
-      // Refresh security events after completion
-      loadEvents();
-    });
-    folderUnsubs.push(u1 as any, u2 as any, u3 as any, u4 as any);
-  }
-
-  async function startFolderScan() {
-    if (!isTauri) {
-      error.set("Desktop runtime required.");
-      return;
-    }
-    if (!folderPath) {
-      error.set("Please select a folder to scan.");
-      return;
-    }
-    loading.set(true);
-    status.set(null);
-    error.set(null);
-    folderProgress = null;
-    try {
-      const id = await tauriInvoke<string>("start_folder_scan", {
-        root: folderPath,
-        use_cloud: useCloud,
-        quarantine,
-      });
-      folderScanId = id;
-      await attachFolderScanListeners();
-      status.set("Folder scan started.");
-    } catch (e: any) {
-      error.set(e?.message ?? String(e));
-    } finally {
-      loading.set(false);
-    }
-  }
-
-  async function cancelFolderScan() {
-    if (!isTauri || !folderScanId) return;
-    try {
-      await tauriInvoke("cancel_folder_scan", { scan_id: folderScanId });
-      status.set("Folder scan cancellation requested.");
-    } catch (e: any) {
-      error.set(e?.message ?? String(e));
-    }
-  }
-  async function runScan() {
-    if (!isTauri) {
-      error.set("Desktop runtime required.");
-      return;
-    }
-    if (!filePath) {
-      error.set("Please select a file to scan.");
-      return;
-    }
-    loading.set(true);
-    status.set(null);
-    error.set(null);
-    scanResult = null;
-    try {
-      scanResult = await tauriInvoke("scan_file_command", {
-        path: filePath,
-        use_cloud: useCloud,
-        quarantine,
-      });
-      status.set(scanResult?.malicious ? "Malicious file detected." : "No threats detected.");
-      // refresh events after scan
-      await loadEvents();
-    } catch (e: any) {
-      error.set(e?.message ?? String(e));
-    } finally {
-      loading.set(false);
-    }
-  }
-
-  async function createSession() {
-    if (!isTauri) {
-      error.set("Desktop runtime required.");
-      return;
-    }
-    loading.set(true);
-    status.set(null);
-    error.set(null);
-    try {
-      const permissions = permissionsCsv
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      const sessionId = await tauriInvoke<string>("create_security_session", {
-        user_id: userId || "user-1",
-        permissions,
-        ip_address: ipAddress || null,
-        user_agent: userAgent || null,
-      });
-      createdSessionId.set(sessionId);
-      checkSessionId = sessionId;
-      status.set("Session created.");
-      await loadEvents();
-    } catch (e: any) {
-      error.set(e?.message ?? String(e));
-    } finally {
-      loading.set(false);
-    }
-  }
-
-  async function validateSession() {
-    if (!isTauri) return;
-    loading.set(true);
-    status.set(null);
-    error.set(null);
-    try {
-      const ok = await tauriInvoke<boolean>("validate_security_session", {
-        session_id: checkSessionId,
-      });
-      validateResult.set(ok);
-      status.set(ok ? "Session is valid." : "Session is NOT valid.");
-    } catch (e: any) {
-      error.set(e?.message ?? String(e));
-    } finally {
-      loading.set(false);
-    }
-  }
-
-  async function checkPermission() {
-    if (!isTauri) return;
-    loading.set(true);
-    status.set(null);
-    error.set(null);
-    try {
-      const ok = await tauriInvoke<boolean>("check_security_permission", {
-        session_id: checkSessionId,
-        permission: permissionToCheck,
-      });
-      permissionResult.set(ok);
-      status.set(ok ? `Permission \"${permissionToCheck}\" granted.` : `Permission \"${permissionToCheck}\" denied.`);
-    } catch (e: any) {
-      error.set(e?.message ?? String(e));
-    } finally {
-      loading.set(false);
-    }
-  }
-
-  async function loadEvents() {
-    if (!isTauri) return;
-    try {
-      const list = await tauriInvoke<any[]>("get_security_events", { limit: eventsLimit });
-      events.set(list ?? []);
+      threatRecs = await tauriInvoke<string[]>("get_threat_recommendations");
     } catch (e) {
       // non-fatal
-      console.warn("get_security_events failed", e);
     }
+    status.set("Threat consensus completed.");
+  } catch (e: any) {
+    consensusError = e?.message ?? String(e);
+  } finally {
+    consensusLoading = false;
   }
+}
 
-  onMount(async () => {
-    await loadEvents();
-    // Auto-refresh
-    refreshTimer = setInterval(loadEvents, 5000);
-    // In browser mode (non-Tauri), support E2E simulation via CustomEvent('folder_scan')
-    if (!isTauri && typeof window !== 'undefined') {
-      const handler = (ev: Event) => {
-        try {
-          const detail: any = (ev as CustomEvent).detail || {};
-          const action = (detail.action || '').toLowerCase();
-          if (action === 'set') {
-            // Initialize or switch the active scan id/path for simulation
-            folderScanId = detail.scan_id || detail.id || folderScanId;
-            if (detail.folder) folderPath = detail.folder;
-            folderProgress = null;
-          } else if (action === 'event') {
-            const type = (detail.type || '').toLowerCase();
-            const p = detail.payload || {};
-            const id = p.scan_id || detail.scan_id || folderScanId;
-            if (!folderScanId || id !== folderScanId) return;
-            if (type === 'started') {
-              folderProgress = { discovered: 0, scanned: 0, total: 0, malicious: 0, errors: 0 };
-            } else if (type === 'progress') {
-              folderProgress = { ...(folderProgress || {}), ...(p || {}) };
-            } else if (type === 'cancelled') {
-              folderProgress = { ...(folderProgress || {}), ...(p || {}), cancelled: true };
-            } else if (type === 'completed') {
-              folderProgress = { ...(folderProgress || {}), ...(p || {}), completed: true };
-            }
-          }
-        } catch {
-          // ignore
-        }
-      };
-      window.addEventListener('folder_scan', handler as EventListener);
-      // ensure cleanup on destroy
-      folderUnsubs.push(() => window.removeEventListener('folder_scan', handler as EventListener));
+async function pickFolder() {
+  if (!isTauri) {
+    error.set("Desktop runtime required for folder picker.");
+    return;
+  }
+  try {
+    const { open } = await import("@tauri-apps/api/dialog");
+    const selected = await open({ directory: true, multiple: false });
+    if (typeof selected === "string") {
+      folderPath = selected;
     }
-  });
+  } catch (e: any) {
+    error.set(e?.message ?? String(e));
+  }
+}
 
-  onDestroy(() => {
-    if (refreshTimer) clearInterval(refreshTimer);
+function detachFolderScanListeners() {
+  while (folderUnsubs.length) {
+    const u = folderUnsubs.pop();
+    try {
+      u && u();
+    } catch {}
+  }
+}
+
+async function attachFolderScanListeners() {
+  if (!isTauri) return;
+  const { listen } = await import("@tauri-apps/api/event");
+  const u1 = await listen("folder_scan_started", (ev: any) => {
+    const p = ev?.payload;
+    if (!folderScanId || p?.scan_id !== folderScanId) return;
+    folderProgress = {
+      discovered: 0,
+      scanned: 0,
+      total: 0,
+      malicious: 0,
+      errors: 0,
+    };
+  });
+  const u2 = await listen("folder_scan_progress", (ev: any) => {
+    const p = ev?.payload;
+    if (!folderScanId || p?.scan_id !== folderScanId) return;
+    folderProgress = { ...(folderProgress || {}), ...(p || {}) };
+  });
+  const u3 = await listen("folder_scan_cancelled", (ev: any) => {
+    const p = ev?.payload;
+    if (!folderScanId || p?.scan_id !== folderScanId) return;
+    folderProgress = {
+      ...(folderProgress || {}),
+      ...(p || {}),
+      cancelled: true,
+    };
     detachFolderScanListeners();
   });
+  const u4 = await listen("folder_scan_completed", (ev: any) => {
+    const p = ev?.payload;
+    if (!folderScanId || p?.scan_id !== folderScanId) return;
+    folderProgress = {
+      ...(folderProgress || {}),
+      ...(p || {}),
+      completed: true,
+    };
+    detachFolderScanListeners();
+    // Refresh security events after completion
+    loadEvents();
+  });
+  folderUnsubs.push(u1 as any, u2 as any, u3 as any, u4 as any);
+}
+
+async function startFolderScan() {
+  if (!isTauri) {
+    error.set("Desktop runtime required.");
+    return;
+  }
+  if (!folderPath) {
+    error.set("Please select a folder to scan.");
+    return;
+  }
+  loading.set(true);
+  status.set(null);
+  error.set(null);
+  folderProgress = null;
+  try {
+    const id = await tauriInvoke<string>("start_folder_scan", {
+      root: folderPath,
+      use_cloud: useCloud,
+      quarantine,
+    });
+    folderScanId = id;
+    await attachFolderScanListeners();
+    status.set("Folder scan started.");
+  } catch (e: any) {
+    error.set(e?.message ?? String(e));
+  } finally {
+    loading.set(false);
+  }
+}
+
+async function cancelFolderScan() {
+  if (!isTauri || !folderScanId) return;
+  try {
+    await tauriInvoke("cancel_folder_scan", { scan_id: folderScanId });
+    status.set("Folder scan cancellation requested.");
+  } catch (e: any) {
+    error.set(e?.message ?? String(e));
+  }
+}
+async function runScan() {
+  if (!isTauri) {
+    error.set("Desktop runtime required.");
+    return;
+  }
+  if (!filePath) {
+    error.set("Please select a file to scan.");
+    return;
+  }
+  loading.set(true);
+  status.set(null);
+  error.set(null);
+  scanResult = null;
+  try {
+    scanResult = await tauriInvoke("scan_file_command", {
+      path: filePath,
+      use_cloud: useCloud,
+      quarantine,
+    });
+    status.set(
+      scanResult?.malicious
+        ? "Malicious file detected."
+        : "No threats detected.",
+    );
+    // refresh events after scan
+    await loadEvents();
+  } catch (e: any) {
+    error.set(e?.message ?? String(e));
+  } finally {
+    loading.set(false);
+  }
+}
+
+async function createSession() {
+  if (!isTauri) {
+    error.set("Desktop runtime required.");
+    return;
+  }
+  loading.set(true);
+  status.set(null);
+  error.set(null);
+  try {
+    const permissions = permissionsCsv
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const sessionId = await tauriInvoke<string>("create_security_session", {
+      user_id: userId || "user-1",
+      permissions,
+      ip_address: ipAddress || null,
+      user_agent: userAgent || null,
+    });
+    createdSessionId.set(sessionId);
+    checkSessionId = sessionId;
+    status.set("Session created.");
+    await loadEvents();
+  } catch (e: any) {
+    error.set(e?.message ?? String(e));
+  } finally {
+    loading.set(false);
+  }
+}
+
+async function validateSession() {
+  if (!isTauri) return;
+  loading.set(true);
+  status.set(null);
+  error.set(null);
+  try {
+    const ok = await tauriInvoke<boolean>("validate_security_session", {
+      session_id: checkSessionId,
+    });
+    validateResult.set(ok);
+    status.set(ok ? "Session is valid." : "Session is NOT valid.");
+  } catch (e: any) {
+    error.set(e?.message ?? String(e));
+  } finally {
+    loading.set(false);
+  }
+}
+
+async function checkPermission() {
+  if (!isTauri) return;
+  loading.set(true);
+  status.set(null);
+  error.set(null);
+  try {
+    const ok = await tauriInvoke<boolean>("check_security_permission", {
+      session_id: checkSessionId,
+      permission: permissionToCheck,
+    });
+    permissionResult.set(ok);
+    status.set(
+      ok
+        ? `Permission \"${permissionToCheck}\" granted.`
+        : `Permission \"${permissionToCheck}\" denied.`,
+    );
+  } catch (e: any) {
+    error.set(e?.message ?? String(e));
+  } finally {
+    loading.set(false);
+  }
+}
+
+async function loadEvents() {
+  if (!isTauri) return;
+  try {
+    const list = await tauriInvoke<any[]>("get_security_events", {
+      limit: eventsLimit,
+    });
+    events.set(list ?? []);
+  } catch (e) {
+    // non-fatal
+    console.warn("get_security_events failed", e);
+  }
+}
+
+onMount(async () => {
+  await loadEvents();
+  // Auto-refresh
+  refreshTimer = setInterval(loadEvents, 5000) as unknown as number;
+  // In browser mode (non-Tauri), support E2E simulation via CustomEvent('folder_scan')
+  if (!isTauri && typeof window !== "undefined") {
+    const handler = (ev: Event) => {
+      try {
+        const detail: any = (ev as CustomEvent).detail || {};
+        const action = (detail.action || "").toLowerCase();
+        if (action === "set") {
+          // Initialize or switch the active scan id/path for simulation
+          folderScanId = detail.scan_id || detail.id || folderScanId;
+          if (detail.folder) folderPath = detail.folder;
+          folderProgress = null;
+        } else if (action === "event") {
+          const type = (detail.type || "").toLowerCase();
+          const p = detail.payload || {};
+          const id = p.scan_id || detail.scan_id || folderScanId;
+          if (!folderScanId || id !== folderScanId) return;
+          if (type === "started") {
+            folderProgress = {
+              discovered: 0,
+              scanned: 0,
+              total: 0,
+              malicious: 0,
+              errors: 0,
+            };
+          } else if (type === "progress") {
+            folderProgress = { ...(folderProgress || {}), ...(p || {}) };
+          } else if (type === "cancelled") {
+            folderProgress = {
+              ...(folderProgress || {}),
+              ...(p || {}),
+              cancelled: true,
+            };
+          } else if (type === "completed") {
+            folderProgress = {
+              ...(folderProgress || {}),
+              ...(p || {}),
+              completed: true,
+            };
+          }
+        }
+      } catch {
+        // ignore
+      }
+    };
+    window.addEventListener("folder_scan", handler as EventListener);
+    // ensure cleanup on destroy
+    folderUnsubs.push(() =>
+      window.removeEventListener("folder_scan", handler as EventListener),
+    );
+  }
+});
+
+onDestroy(() => {
+  if (refreshTimer) clearInterval(refreshTimer);
+  detachFolderScanListeners();
+});
 </script>
 
 <div class="security-center">
