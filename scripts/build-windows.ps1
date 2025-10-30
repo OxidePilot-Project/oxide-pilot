@@ -69,7 +69,10 @@ if (Test-Path (Join-Path $frontendDir "package.json")) {
 Push-Location "src-tauri"
 try {
   $env:TAURI_PRIVATE_TESTING_VERSION = $Version
-  cargo tauri build
+  if (-not $env:OXIDE_SURREAL_ENABLE -and -not $env:OXIDE_SURREAL_DISABLE) {
+    $env:OXIDE_SURREAL_ENABLE = "true"
+  }
+  cargo tauri build --features surrealdb-metrics
 } finally {
   Pop-Location
 }

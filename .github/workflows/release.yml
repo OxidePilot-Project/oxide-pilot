@@ -1,48 +1,32 @@
 name: Automated Release
 
 on:
-  workflow_run:
-    workflows: ["Validation Pipeline"]
-    types:
-      - completed
-    branches:
-      - main
   push:
+    branches: [main]
     tags:
       - 'v*'
       - 'bootstrap-*'
+  workflow_dispatch:
+    inputs:
+      skip_validation:
+        description: 'Skip validation workflow (not recommended)'
+        required: false
+        default: 'false'
 
 permissions:
   contents: write
   issues: write
 
 jobs:
-  # Job de verificación previa
-  check-validation:
-    name: Check Validation Status
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_run'
-    outputs:
-      should_release: ${{ steps.check.outputs.should_release }}
-    steps:
-      - name: Check validation workflow result
-        id: check
-        run: |
-          if [[ "${{ github.event.workflow_run.conclusion }}" == "success" ]]; then
-            echo "should_release=true" >> $GITHUB_OUTPUT
-            echo "::notice::Validation passed - proceeding with release"
-          else
-            echo "should_release=false" >> $GITHUB_OUTPUT
-            echo "::error::Validation failed - skipping release"
-            exit 1
-          fi
+  validation:
+    if: github.event_name != 'workflow_dispatch' || inputs.skip_validation != 'true'
+    uses: ./.github/workflows/validate-core.yml
+    secrets: inherit
 
   build-and-release-windows:
     runs-on: windows-latest
-    needs: [check-validation]
-    if: |
-      (github.event_name == 'workflow_run' && needs.check-validation.outputs.should_release == 'true') ||
-      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
+    needs: validation
+    if: needs.validation.result == 'success' || needs.validation.result == 'skipped'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -87,11 +71,11 @@ jobs:
         shell: pwsh
         run: |
           if (Test-Path src-tauri/icon.png) {
-            cd src-tauri
+            Push-Location src-tauri
             python create_icon.py
-            cd ..
+            Pop-Location
           } else {
-            echo "icon.png not present; skipping icon generation"
+            Write-Host "icon.png not present; skipping icon generation"
           }
 
       - name: Build frontend
@@ -101,17 +85,18 @@ jobs:
 
       - name: Tauri bundle (NSIS/MSI)
         run: |
-          cd src-tauri
+          Push-Location src-tauri
           cargo tauri build --verbose
+          Pop-Location
 
       - name: Collect artifacts
         id: collect
         shell: pwsh
         run: |
-          echo "bundle_dir=src-tauri/target/release/bundle" >> $env:GITHUB_OUTPUT
-          Get-ChildItem -Path src-tauri/target/release/bundle -Recurse
+          $bundleDir = "src-tauri/target/release/bundle"
+          "bundle_dir=$bundleDir" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Get-ChildItem -Path $bundleDir -Recurse
 
-      # Code signing if secrets are provided
       - name: Code sign installers
         if: ${{ secrets.SIGN_PFX_BASE64 != '' }}
         shell: pwsh
@@ -123,18 +108,16 @@ jobs:
         run: |
           $pfx = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
           [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGN_PFX_BASE64))
-          $ts = if ($env:SIGN_TS_URL) { $env:SIGN_TS_URL } else { 'http://timestamp.digicert.com' }
+          $timestamp = if ($env:SIGN_TS_URL) { $env:SIGN_TS_URL } else { 'http://timestamp.digicert.com' }
           Write-Host "Signing binaries under $env:BUNDLE_DIR"
           Get-ChildItem -Path $env:BUNDLE_DIR -Include *.exe,*.msi -Recurse | ForEach-Object {
             Write-Host "Signing $($_.FullName)"
-            signtool sign /f $pfx /p $env:SIGN_PFX_PASSWORD /tr $ts /td sha256 /fd sha256 $_.FullName
+            signtool sign /f $pfx /p $env:SIGN_PFX_PASSWORD /tr $timestamp /td sha256 /fd sha256 $_.FullName
             if ($LASTEXITCODE -ne 0) {
-              Write-Error "Failed to sign $($_.FullName)"
-              exit 1
+              throw "Failed to sign $($_.FullName)"
             }
-            Write-Host "✅ Successfully signed $($_.Name)"
           }
-          Write-Host "All files signed successfully"
+          Write-Host "Code signing completed"
 
       - name: Generate release tag
         id: tag
@@ -144,7 +127,6 @@ jobs:
           $version = (Get-Content src-tauri/Cargo.toml | Select-String 'version = "(.+)"').Matches.Groups[1].Value
           $commitShort = git rev-parse --short HEAD
 
-          # If triggered by tag, use it; otherwise generate bootstrap tag
           if ($env:GITHUB_REF -like "refs/tags/*") {
             $tag = $env:GITHUB_REF -replace "refs/tags/", ""
           } else {
@@ -159,33 +141,20 @@ jobs:
         shell: pwsh
         run: |
           $bundleDir = "src-tauri/target/release/bundle"
-          $checksumFile = Join-Path $bundleDir "CHECKSUMS.txt"
 
-          # MD5 checksums
-          $md5File = Join-Path $bundleDir "CHECKSUMS-md5.txt"
-          Get-ChildItem -Path $bundleDir -Include *.exe,*.msi -Recurse | ForEach-Object {
-            $hash = (Get-FileHash -Algorithm MD5 $_.FullName).Hash.ToLower()
-            $relativePath = $_.FullName.Replace("$bundleDir\", "")
-            "$hash  $relativePath" | Out-File -Append -Encoding utf8 $md5File
+          Get-ChildItem -Path $bundleDir -Include CHECKSUMS-*.txt -Recurse | Remove-Item -Force -ErrorAction SilentlyContinue
+
+          $hashAlgorithms = @("MD5","SHA256","SHA512")
+          foreach ($algo in $hashAlgorithms) {
+            $fileName = "CHECKSUMS-$($algo.ToLower()).txt"
+            $output = Join-Path $bundleDir $fileName
+            Get-ChildItem -Path $bundleDir -Include *.exe,*.msi -Recurse | ForEach-Object {
+              $hash = (Get-FileHash -Algorithm $algo $_.FullName).Hash.ToLower()
+              $relativePath = $_.FullName.Replace("$bundleDir\", "")
+              "$hash  $relativePath" | Out-File -Append -Encoding utf8 $output
+            }
+            Write-Host "$algo checksums written to $fileName"
           }
-
-          # SHA256 checksums
-          $sha256File = Join-Path $bundleDir "CHECKSUMS-sha256.txt"
-          Get-ChildItem -Path $bundleDir -Include *.exe,*.msi -Recurse | ForEach-Object {
-            $hash = (Get-FileHash -Algorithm SHA256 $_.FullName).Hash.ToLower()
-            $relativePath = $_.FullName.Replace("$bundleDir\", "")
-            "$hash  $relativePath" | Out-File -Append -Encoding utf8 $sha256File
-          }
-
-          # SHA512 checksums
-          $sha512File = Join-Path $bundleDir "CHECKSUMS-sha512.txt"
-          Get-ChildItem -Path $bundleDir -Include *.exe,*.msi -Recurse | ForEach-Object {
-            $hash = (Get-FileHash -Algorithm SHA512 $_.FullName).Hash.ToLower()
-            $relativePath = $_.FullName.Replace("$bundleDir\", "")
-            "$hash  $relativePath" | Out-File -Append -Encoding utf8 $sha512File
-          }
-
-          Write-Host "Checksums generated successfully"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -193,7 +162,7 @@ jobs:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: "Oxide Pilot ${{ steps.tag.outputs.version }} (${{ steps.tag.outputs.tag }})"
           draft: false
-          prerelease: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+          prerelease: ${{ !startsWith(steps.tag.outputs.tag, 'v') }}
           generate_release_notes: true
           body: |
             # Oxide Pilot - Automated Release
@@ -203,20 +172,17 @@ jobs:
             **Commit:** ${{ github.sha }}
 
             ## Installation
-
             Download the appropriate installer for your platform:
-            - **Windows x64**: Download the `.msi` or `.exe` installer
+            - Windows x64: use the `.msi` or `.exe` packages
 
             ## Verification
+            Checksums are provided alongside the installers:
+            - `CHECKSUMS-md5.txt`
+            - `CHECKSUMS-sha256.txt`
+            - `CHECKSUMS-sha512.txt`
 
-            Verify the integrity of downloaded files using the provided checksums:
-            - `CHECKSUMS-md5.txt` - MD5 hashes
-            - `CHECKSUMS-sha256.txt` - SHA256 hashes
-            - `CHECKSUMS-sha512.txt` - SHA512 hashes
-
-            ## What's Changed
-
-            This release was automatically generated from the latest commit to the main branch.
+            ## Notes
+            This release was generated automatically after all validation jobs succeeded on the main branch.
 
             ---
 
@@ -227,4 +193,3 @@ jobs:
             src-tauri/target/release/bundle/CHECKSUMS-*.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-

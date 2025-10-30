@@ -80,6 +80,21 @@ impl MemoryManager {
         }
     }
 
+    /// Construct a memory manager backed by an external [`MemoryBackend`].
+    ///
+    /// This keeps the same in-memory caching logic but mirrors all writes to the
+    /// provided backend (SurrealDB, etc.) for persistence and semantic search.
+    pub fn with_backend(storage_path: Option<String>, backend: Arc<dyn MemoryBackend>) -> Self {
+        let mut manager = Self::new(storage_path);
+        manager.backend = Some(backend);
+        manager
+    }
+
+    /// Attach or replace the external backend after construction.
+    pub fn set_backend(&mut self, backend: Arc<dyn MemoryBackend>) {
+        self.backend = Some(backend);
+    }
+
     pub async fn initialize(&self) -> Result<(), String> {
         // Create storage directory if it doesn't exist
         if let Err(e) = fs::create_dir_all(&self.storage_path).await {

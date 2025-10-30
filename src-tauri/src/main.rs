@@ -28,6 +28,8 @@ use oxide_core::qwen_auth::{DeviceAuthStart, PollResult, QwenAuth};
 use oxide_guardian::guardian::{SystemStatus, ThreatEvent};
 use oxide_guardian::scanner::FileScanReport;
 use oxide_memory::memory::MemoryStats;
+#[cfg(feature = "surrealdb-metrics")]
+use oxide_memory::SurrealBackend;
 use oxide_system::OxideSystem;
 use serde_json::json;
 use std::collections::HashMap;
@@ -53,6 +55,8 @@ pub struct AppState {
     // Guardian state
     #[cfg(feature = "surrealdb-metrics")]
     guardian_state: Arc<guardian_commands::GuardianState>,
+    #[cfg(feature = "surrealdb-metrics")]
+    surreal_backend: Arc<SurrealBackend>,
 }
 
 // ==============================
@@ -384,6 +388,9 @@ async fn initialize_system(
 ) -> Result<(), String> {
     info!("Initializing Oxide System...");
 
+    #[cfg(feature = "surrealdb-metrics")]
+    let surreal_backend = state.surreal_backend.clone();
+
     // Use retry mechanism for system initialization
     let retry_config = RetryConfig {
         max_attempts: 2,
@@ -395,8 +402,14 @@ async fn initialize_system(
     let result = retry_with_backoff(
         || {
             let config_clone = config.clone();
+            #[cfg(feature = "surrealdb-metrics")]
+            let surreal_backend_clone = surreal_backend.clone();
             Box::pin(async move {
-                let system = OxideSystem::new(config_clone)
+                let system = OxideSystem::new(
+                    config_clone,
+                    #[cfg(feature = "surrealdb-metrics")]
+                    Some(surreal_backend_clone),
+                )
                     .await
                     .map_err(OxideError::SystemInit)?;
                 system.start().await.map_err(OxideError::SystemInit)?;
@@ -552,6 +565,8 @@ async fn start_folder_scan(
         rpa_state: state.rpa_state.clone(),
         #[cfg(feature = "surrealdb-metrics")]
         guardian_state: state.guardian_state.clone(),
+        #[cfg(feature = "surrealdb-metrics")]
+        surreal_backend: state.surreal_backend.clone(),
     };
 
     // Clone scan_id for the async task
@@ -1463,8 +1478,7 @@ fn main() {
 
     // Initialize Guardian backend if feature is enabled
     #[cfg(feature = "surrealdb-metrics")]
-    let guardian_state = {
-        use oxide_memory::SurrealBackend;
+    let surreal_backend: Arc<SurrealBackend> = {
         let db_path =
             std::env::var("OXIDE_DB_PATH").unwrap_or_else(|_| "./data/oxide.db".to_string());
 
@@ -1476,10 +1490,12 @@ fn main() {
                     .expect("Failed to initialize SurrealDB backend")
             });
 
-        Arc::new(guardian_commands::GuardianState {
-            backend: Arc::new(backend),
-        })
+        Arc::new(backend)
     };
+
+    #[cfg(feature = "surrealdb-metrics")]
+    let guardian_state =
+        Arc::new(guardian_commands::GuardianState { backend: surreal_backend.clone() });
 
     tauri::Builder::default()
         .manage(AppState {
@@ -1490,6 +1506,8 @@ fn main() {
             rpa_state: Arc::new(RwLock::new(None)),
             #[cfg(feature = "surrealdb-metrics")]
             guardian_state,
+            #[cfg(feature = "surrealdb-metrics")]
+            surreal_backend,
         })
         .invoke_handler(tauri::generate_handler![
             send_notification,

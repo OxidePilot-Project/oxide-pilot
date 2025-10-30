@@ -7,6 +7,8 @@ pub struct OxidePilotConfig {
     pub ai_providers: AIProvidersConfig,
     // Optional memory backend configuration; if present and enabled, Cognee may be used
     pub cognee: Option<CogneeConfig>,
+    // Optional SurrealDB embedded database configuration
+    pub surreal: Option<SurrealDbConfig>,
     // Optional embedded MCP server configuration
     pub mcp: Option<McpConfig>,
 }
@@ -18,6 +20,9 @@ impl OxidePilotConfig {
         self.ai_providers.validate(self.copilot.enabled)?;
         if let Some(cognee) = &self.cognee {
             cognee.validate()?;
+        }
+        if let Some(surreal) = &self.surreal {
+            surreal.validate()?;
         }
         if let Some(mcp) = &self.mcp {
             mcp.validate()?;
@@ -115,6 +120,37 @@ impl CogneeConfig {
     fn validate(&self) -> Result<(), String> {
         if self.enabled && self.url.is_empty() {
             return Err("Cognee URL must not be empty when enabled".to_string());
+        }
+        Ok(())
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SurrealDbConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    pub db_path: Option<String>,
+    #[serde(default)]
+    pub collect_metrics: bool,
+    #[serde(default)]
+    pub metrics_interval_secs: Option<u64>,
+}
+
+impl SurrealDbConfig {
+    fn validate(&self) -> Result<(), String> {
+        if self.enabled {
+            if let Some(path) = &self.db_path {
+                if path.trim().is_empty() {
+                    return Err("SurrealDB path must not be empty when enabled".to_string());
+                }
+            }
+            if let Some(interval) = self.metrics_interval_secs {
+                if interval == 0 {
+                    return Err(
+                        "SurrealDB metrics interval must be greater than 0 seconds".to_string()
+                    );
+                }
+            }
         }
         Ok(())
     }

@@ -8,7 +8,7 @@
 
 <!-- Project logo (use repository-root `logo.svg` if present) -->
 <p align="center">
-  <img src="/logo.svg" alt="Oxide Pilot logo" width="240" />
+  <img src="/logo.png" alt="Oxide Pilot logo" width="240" />
 </p>
 
 <!-- Technology badges -->

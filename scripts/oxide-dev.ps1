@@ -96,7 +96,10 @@ try {
   # 6) Launch Tauri dev
   Push-Location "src-tauri"
   try {
-    cargo tauri dev
+    if (-not $env:OXIDE_SURREAL_ENABLE -and -not $env:OXIDE_SURREAL_DISABLE) {
+      $env:OXIDE_SURREAL_ENABLE = "true"
+    }
+    cargo tauri dev --features surrealdb-metrics
   } finally {
     Pop-Location
   }

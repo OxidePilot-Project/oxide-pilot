@@ -1,5 +1,5 @@
 use chrono::Utc;
-use log::{error, info};
+use log::{debug, error, info, warn};
 use oxide_copilot::ai::AIOrchestrator;
 use oxide_copilot::copilot::CopilotAgent;
 use oxide_copilot::functions::FunctionRegistry;
@@ -13,6 +13,9 @@ use oxide_core::types::{Context, Interaction};
 use oxide_guardian::guardian::{Guardian, SystemStatus, ThreatEvent};
 use oxide_guardian::scanner::FileScanReport;
 use oxide_memory::memory::{ContextQuery, MemoryManager, MemoryStats};
+use oxide_memory::MemoryBackend;
+#[cfg(feature = "surrealdb-metrics")]
+use oxide_memory::SurrealBackend;
 use oxide_voice::voice::{GoogleSTTProvider, GoogleTTSProvider, VoiceProcessor};
 use std::sync::Arc;
 use std::time::Duration;
@@ -33,11 +36,16 @@ pub struct OxideSystem {
     security_manager: Arc<SecurityManager>,
     input_validator: Arc<InputValidator>,
     is_running: Arc<Mutex<bool>>,
+    #[cfg(feature = "surrealdb-metrics")]
+    surreal_backend: Option<Arc<SurrealBackend>>,
 }
 
 #[allow(dead_code)] // Some methods reserved for future use
 impl OxideSystem {
-    pub async fn new(config: OxidePilotConfig) -> Result<Self, String> {
+    pub async fn new(
+        config: OxidePilotConfig,
+        #[cfg(feature = "surrealdb-metrics")] surreal_backend: Option<Arc<SurrealBackend>>,
+    ) -> Result<Self, String> {
         info!("Initializing Oxide Pilot System...");
 
         // Validate configuration
@@ -47,6 +55,110 @@ impl OxideSystem {
 
         // Load environment (.env support)
         let _ = dotenv::dotenv();
+
+        #[cfg(feature = "surrealdb-metrics")]
+        let (
+            surreal_backend_arc,
+            surreal_memory_backend,
+            surreal_metrics_enabled,
+            surreal_metrics_interval,
+            surreal_db_path,
+        ) = {
+            let parse_bool = |value: &str| {
+                matches!(
+                    value.trim().to_ascii_lowercase().as_str(),
+                    "1" | "true" | "yes" | "on"
+                )
+            };
+
+            let surreal_cfg = config.surreal.clone();
+            let env_disable = std::env::var("OXIDE_SURREAL_DISABLE")
+                .ok()
+                .filter(|v| parse_bool(v));
+            let env_enable = std::env::var("OXIDE_SURREAL_ENABLE")
+                .ok()
+                .filter(|v| parse_bool(v));
+
+            let should_enable = if env_disable.is_some() {
+                false
+            } else if let Some(_) = env_enable {
+                true
+            } else {
+                surreal_cfg
+                    .as_ref()
+                    .map(|c| c.enabled)
+                    .unwrap_or(true)
+            };
+
+            let db_path = surreal_cfg
+                .as_ref()
+                .and_then(|c| c.db_path.clone())
+                .or_else(|| std::env::var("OXIDE_DB_PATH").ok())
+                .unwrap_or_else(|| "./data/oxide.db".to_string());
+
+            let mut backend = surreal_backend;
+
+            if should_enable {
+                if backend.is_none() {
+                    match SurrealBackend::new(&db_path).await {
+                        Ok(instance) => {
+                            info!("Initialized SurrealDB backend at {}", db_path);
+                            backend = Some(Arc::new(instance));
+                        }
+                        Err(e) => {
+                            warn!(
+                                "Failed to initialize SurrealDB backend at {}: {}",
+                                db_path, e
+                            );
+                        }
+                    }
+                } else {
+                    info!("Using shared SurrealDB backend at {}", db_path);
+                }
+            } else {
+                info!("SurrealDB backend disabled by configuration/environment");
+                backend = None;
+            }
+
+            let memory_backend = backend
+                .as_ref()
+                .map(|arc| arc.clone() as Arc<dyn MemoryBackend>);
+
+            let metrics_enabled = surreal_cfg
+                .as_ref()
+                .map(|c| c.collect_metrics)
+                .unwrap_or(false)
+                && backend.is_some();
+
+            let metrics_interval = surreal_cfg
+                .as_ref()
+                .and_then(|c| c.metrics_interval_secs)
+                .or(Some(30));
+
+            (
+                backend,
+                memory_backend,
+                metrics_enabled,
+                metrics_interval,
+                db_path,
+            )
+        };
+
+        #[cfg(feature = "surrealdb-metrics")]
+        if surreal_metrics_enabled {
+            if let Some(interval) = surreal_metrics_interval {
+                info!(
+                    "SurrealDB metrics collection enabled ({} second interval)",
+                    interval
+                );
+            }
+        }
+
+        #[cfg(all(feature = "cognee", feature = "surrealdb-metrics"))]
+        {
+            let _ = &surreal_memory_backend;
+            let _ = &surreal_db_path;
+        }
 
         // Initialize memory manager (feature-gated Cognee)
         let memory_manager: Arc<MemoryManager> = {
@@ -229,8 +341,24 @@ impl OxideSystem {
             }
             #[cfg(not(feature = "cognee"))]
             {
-                info!("Memory backend: JSON (binary built without Cognee feature)");
-                Arc::new(MemoryManager::new(Some("oxide_data".to_string())))
+                #[cfg(feature = "surrealdb-metrics")]
+                {
+                    if let Some(backend) = surreal_memory_backend.clone() {
+                        info!("Memory backend: SurrealDB (embedded) [{}]", surreal_db_path);
+                        Arc::new(MemoryManager::with_backend(
+                            Some("oxide_data".to_string()),
+                            backend,
+                        ))
+                    } else {
+                        info!("Memory backend: JSON (SurrealDB disabled or unavailable)");
+                        Arc::new(MemoryManager::new(Some("oxide_data".to_string())))
+                    }
+                }
+                #[cfg(not(feature = "surrealdb-metrics"))]
+                {
+                    info!("Memory backend: JSON (binary built without Cognee feature)");
+                    Arc::new(MemoryManager::new(Some("oxide_data".to_string())))
+                }
             }
         };
         memory_manager.initialize().await?;
@@ -288,6 +416,8 @@ impl OxideSystem {
             security_manager,
             input_validator,
             is_running: Arc::new(Mutex::new(false)),
+            #[cfg(feature = "surrealdb-metrics")]
+            surreal_backend: surreal_backend_arc,
         };
 
         info!("Oxide Pilot System initialized successfully");
@@ -308,6 +438,11 @@ impl OxideSystem {
         // Start Guardian monitoring
         self.guardian.start_monitoring();
         info!("Guardian Agent started");
+
+        #[cfg(feature = "surrealdb-metrics")]
+        if self.surreal_backend.is_some() {
+            debug!("SurrealDB backend is active for background metrics storage");
+        }
 
         // Start voice processing
         let voice_receiver = self.voice_processor.start_listening().await?;

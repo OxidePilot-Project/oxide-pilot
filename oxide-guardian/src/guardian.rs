@@ -10,6 +10,10 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
+#[cfg(target_os = "windows")]
+use winapi::um::processthreadsapi::{GetCurrentThread, SetThreadPriority};
+#[cfg(target_os = "windows")]
+use winapi::um::winbase::{THREAD_MODE_BACKGROUND_BEGIN, THREAD_PRIORITY_LOWEST};
 #[cfg(feature = "yara-detection")]
 use yara::{Compiler, Rules};
 
@@ -419,6 +423,14 @@ impl Guardian {
         let threat_detector_arc = Arc::clone(&self.threat_detector);
 
         thread::spawn(move || {
+            #[cfg(target_os = "windows")]
+            unsafe {
+                let thread = GetCurrentThread();
+                // Enter background mode; if not supported, fall back to lowest priority.
+                let _ = SetThreadPriority(thread, THREAD_MODE_BACKGROUND_BEGIN as i32);
+                let _ = SetThreadPriority(thread, THREAD_PRIORITY_LOWEST as i32);
+            }
+
             loop {
                 let config = config_arc.lock().unwrap();
                 if !config.enabled {
