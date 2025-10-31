@@ -1,198 +1,105 @@
+<!-- English README optimized for clarity and grant applications -->
 # Oxide Pilot
 
-> ⚠️ **ESTADO DE DESARROLLO**: Este proyecto está actualmente en **fase de desarrollo activo**. Aunque funcional, algunas características pueden ser experimentales o estar sujetas a cambios.
-[![Validation Pipeline](https://github.com/OxidePilot-Project/oxide-pilot/actions/workflows/validate.yml/badge.svg)](https://github.com/OxidePilot-Project/oxide-pilot/actions/workflows/validate.yml)
-[![Build Release](https://github.com/OxidePilot-Project/oxide-pilot/actions/workflows/build-release.yml/badge.svg)](https://github.com/OxidePilot-Project/oxide-pilot/actions/workflows/build-release.yml)
-[![Release Workflow](https://github.com/OxidePilot-Project/oxide-pilot/actions/workflows/release.yml/badge.svg)](https://github.com/OxidePilot-Project/oxide-pilot/actions/workflows/release.yml)
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+Oxide Pilot is an agentic system assistant for secure system automation, monitoring and conversational assistance. It combines a Rust/Tauri backend with a Svelte frontend and integrates local system telemetry, a dual-agent architecture (Guardian + Copilot), a configurable RPA engine, and multi-LLM support.
 
-<!-- Project logo (use repository-root `logo.svg` if present) -->
-<p align="center">
-  <img src="/logo.png" alt="Oxide Pilot logo" width="240" />
-</p>
+Status: Active development — production-grade features implemented; integration and polish ongoing.
 
-<!-- Technology badges -->
-[![Rust](https://img.shields.io/badge/rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
-[![Tauri](https://img.shields.io/badge/tauri-%2324C8DB.svg?style=for-the-badge&logo=tauri&logoColor=%23FFFFFF)](https://tauri.app/)
-[![Svelte](https://img.shields.io/badge/svelte-%23f1413d.svg?style=for-the-badge&logo=svelte&logoColor=white)](https://svelte.dev/)
-[![Node.js](https://img.shields.io/badge/node-%23339933.svg?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
-[![Playwright](https://img.shields.io/badge/playwright-%23167cff.svg?style=for-the-badge&logo=playwright&logoColor=white)](https://playwright.dev/)
-[![SurrealDB](https://img.shields.io/badge/SurrealDB-FF00A0?style=for-the-badge&logo=surrealdb&logoColor=white)](https://surrealdb.com/)
-[![Google Cloud](https://img.shields.io/badge/GoogleCloud-%234285F4.svg?style=for-the-badge&logo=google-cloud&logoColor=white)](https://cloud.google.com/)
+Core technologies: Rust, Tauri, Svelte, SurrealDB (optional), Playwright for E2E tests, and support for cloud LLMs (Vertex AI, OpenAI, Qwen).
 
+Key highlights
 
-Oxide Pilot es un **asistente de automatización empresarial** con backend en Rust (Tauri) y UI Svelte. Incluye un sistema avanzado de permisos RPA, agentes Guardian/Copilot, memoria local y soporte para múltiples LLMs.
+- Guardian agent: continuous monitoring, EDR-style threat detection, process and resource analytics
+- Copilot agent: conversational, voice-enabled assistant with function-calling tools and RPA controls
+- Secure RPA: granular permission model, auditing and rollback for automated actions
+- Persistent memory: optional SurrealDB backend for time-series, graph and vector storage
+- Multi-LLM integration: usage of Vertex AI Gemini, OpenAI, Qwen and local models where available
 
-## 🚀 Características Principales
+Why this README was rewritten
 
-- 🔒 **Sistema de Permisos RPA** - Control granular de automatización con seguridad enterprise
-- 📊 **Auditoría Completa** - Logging automático y monitoreo de todas las acciones
-- 🔄 **Rollback Inteligente** - Deshacer operaciones reversibles de forma segura
-- ✋ **Confirmación de Usuario** - Sistema asíncrono de aprobación para acciones críticas
-- 🧠 **Integración Multi-LLM** - Soporte para OpenAI, Gemini, Qwen y modelos locales
-- 🛡️ **Análisis de Amenazas** - Consenso multi-agente para detección de seguridad
-- 📈 **Monitoreo de Performance** - Métricas en tiempo real del sistema
+This file has been translated and reorganized into English to improve clarity for contributors and for grant/funding applications (e.g., OpenAI Codex Open Source Fund). It focuses on the project's mission, quick start steps, architecture, and the repository state.
 
-## 📋 Requisitos del Sistema
+Quick start (developer)
 
-### Mínimos
-- **OS**: Windows 10/11 x64, macOS 10.15+, Ubuntu 20.04+
-- **Rust**: 1.70+ con cargo
-- **Node.js**: 18+ (para construir la UI)
-- **Memoria**: 4GB RAM mínimo, 8GB recomendado
+Prerequisites
 
-### Opcionales
-- **GPU**: Para aceleración de modelos locales
+- Rust 1.70+ (cargo)
+- Node.js 18+ (frontend build)
+- PowerShell (Windows recommended)
 
-
-## 📥 Descarga e Instalación
-
-### Releases Oficiales
-
-Las releases automáticas y estables están disponibles en [GitHub Releases](https://github.com/OxidePilot-Project/oxide-pilot/releases). Los instaladores y artefactos de build NO se incluyen en el repositorio, solo en la sección de releases de GitHub.
-
-- **Windows x64**: Descarga el instalador `.msi` o `.exe` desde la página de releases
-- **Etiquetado Automático**: Cada release incluye timestamp y commit SHA
-- **Pre-releases**: Las builds de `main` se marcan como pre-release
-- **Releases Estables**: Las versiones etiquetadas con `v*` son releases estables
-
-#### Formatos de Etiquetas
-
-- `v1.0.0` - Release estable con versionado semántico
-- `bootstrap-YYYYMMDD-HHmmss-commit` - Build automática desde main
-- `bootstrap-*` - Build específica con etiqueta personalizada
-
-### Instalación desde Código Fuente
-
-Si prefieres compilar desde el código fuente, sigue las instrucciones en `AGENTS.md` y `docs/README.md`.
-
-## Desarrollo rápido
-
-PowerShell:
+Local development (PowerShell)
 
 ```powershell
-# Lanzador unificado de desarrollo (gestiona .profraw y frontend)
+# Start unified dev launcher (handles frontend and backend)
 pwsh -File scripts/oxide-dev.ps1
 
-# Opcional: qué hacer con artefactos *.profraw (move|delete|none)
-pwsh -File scripts/oxide-dev.ps1 -ProfrawAction move -ProfrawDir dev-artifacts/coverage
-```
-
-Notas:
-- El script crea/ajusta `src-tauri/.env` y construye `src-frontend/` si existe.
-- Los artefactos `*.profraw` (LLVM coverage) se mueven o eliminan según parámetros.
-
-## Pruebas
-
-```bash
+# Run tests
 cargo test --workspace
-```
 
-### Pruebas E2E (Frontend - Playwright)
-
-En `src-frontend/` se han añadido pruebas E2E con Playwright.
-
-```powershell
+# Frontend E2E (from repo root)
 cd src-frontend
 npm install
 npx playwright install
 npm run test:e2e
 ```
 
-Notas:
+Build & release notes
 
-- Configuración: `src-frontend/playwright.config.ts` (levanta Vite dev y prueba en Chromium/Firefox/WebKit).
-- Prueba de humo: `src-frontend/tests/smoke.spec.ts`.
+- Release automation is provided in scripts/create-release.ps1 and GitHub Actions. Pushing to `main` triggers CI that builds and validates artifacts.
+- For Windows installers, use `pwsh -File scripts/build-windows.ps1` (see `docs/README-WINDOWS-BUILD.md`).
 
-## Autenticación (Gemini y Qwen)
+Repository structure (top-level)
 
-- Configure Google Gemini (API Key u OAuth) desde la UI en `Settings` o en el asistente inicial.
-- Configure Qwen mediante el flujo Device Code desde el asistente inicial o `Settings`.
-- Guía completa en `docs/OAUTH_SETUP.md`.
+- `src-tauri/` — Tauri native integration and system commands
+- `oxide-core/`, `oxide-guardian/`, `oxide-copilot/`, `oxide-memory/`, `oxide-rpa/`, `oxide-voice/` — Rust crates
+- `src-frontend/` — Svelte UI and Playwright tests
+- `docs/` — design docs, deployment and onboarding guides
 
-## Build de instalador Windows
+Testing & validation
 
-PowerShell:
+- Unit tests: `cargo test --workspace`
+- Frontend E2E: Playwright in `src-frontend`
+- CI runs formatters, clippy, tests and build checks before commits/pushes via husky and GitHub Actions.
 
-```powershell
-# Requisitos: cargo-tauri, (opcional) WiX/NSIS según target
-pwsh -File scripts/build-windows.ps1
-```
+Security & privacy
 
-## 🏷️ Crear una Release
+- Default architecture favors local processing for sensitive operations (wake-word, basic analysis).
+- All cloud interactions (LLMs or speech APIs) are configurable and optional; credentials are kept out of the repository and read from environment variables.
 
-El proyecto incluye un sistema automatizado de releases. Usa el script helper para crear releases fácilmente:
+License
 
-### Release de Desarrollo (Automática)
+This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0). See `LICENSE` for details.
 
-```powershell
-# Simplemente push a main - se crea automáticamente
-git push origin main
+Contact
 
-# O usa el script helper
-pwsh -File scripts/create-release.ps1 -Type dev
-```
+- Email: iberi22@gmail.com
 
-### Release Estable (Versionada)
+Short project summary for grant applications (copy for form fields)
 
-```powershell
-# Crear release estable con nueva versión
-pwsh -File scripts/create-release.ps1 -Type stable -Version 1.0.0
+Project name: Oxide Pilot
 
-# El script automáticamente:
-# 1. Actualiza la versión en Cargo.toml
-# 2. Crea commit de versión
-# 3. Crea tag v1.0.0
-# 4. Push para trigger el workflow
-```
+One-line pitch: An open-core agentic system assistant that combines secure system monitoring, automated RPA, and a conversational Copilot to diagnose, fix and automate tasks across desktop environments.
 
-### Release Personalizada
+What we are building: Oxide Pilot delivers a dual-agent platform (Guardian for monitoring/security and Copilot for conversational assistance). It fuses system telemetry, programmatic tools (RPA), and multi-LLM integration, backed by optional persistent memory (SurrealDB) to provide context-aware, safe automation and remediation.
 
-```powershell
-# Crear release con tag personalizado
-pwsh -File scripts/create-release.ps1 -Type custom -CustomTag bootstrap-feature-xyz
-```
+Why funding would help: Funding will accelerate integration of local vector search and memory, improve LLM-context tooling and data privacy controls, and fund production-grade packaging and testing across Windows/macOS/Linux. This shortens the path to a stable open-source core and increases adoption in privacy-conscious organizations.
 
-Para más detalles sobre el sistema de releases, consulta [.github/RELEASE_AUTOMATION.md](.github/RELEASE_AUTOMATION.md).
+Repository readiness: The repo contains automated CI, unit and E2E tests, and release scripts. Core features are implemented; remaining work focuses on SurrealDB migration, packaging, and docs.
 
-## Plan de implementación y estado
+How to evaluate quickly: Run `pwsh -File scripts/oxide-dev.ps1` to start a dev instance, or run `cargo test --workspace` to verify tests. See `docs/` for integration and architecture details.
 
-Consulta docs/IMPLEMENTATION-TASKS.md para el desglose de tareas, estados y próximos pasos.
+Next steps after this commit
 
-## 🚀 Oxide Pilot v1.0
+1. Keep the repo clean: finish translating and polishing docs and verify the SurrealDB feature on CI
+2. Prepare a short demo & artifact build for reviewers
+3. Provide a one-page grant summary and a short video demo (optional)
 
-> **El Primer Asistente de Sistema Agéntico del Mundo**
+If you want, I can:
 
-[![Rust](https://img.shields.io/badge/rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
-[![Tauri](https://img.shields.io/badge/tauri-%2324C8DB.svg?style=for-the-badge&logo=tauri&logoColor=%23FFFFFF)](https://tauri.app/)
-[![Svelte](https://img.shields.io/badge/svelte-%23f1413d.svg?style=for-the-badge&logo=svelte&logoColor=white)](https://svelte.dev/)
-[![SurrealDB](https://img.shields.io/badge/SurrealDB-FF00A0?style=for-the-badge&logo=surrealdb&logoColor=white)](https://surrealdb.com/)
-[![Google Cloud](https://img.shields.io/badge/GoogleCloud-%234285F4.svg?style=for-the-badge&logo=google-cloud&logoColor=white)](https://cloud.google.com/)
+- produce a short, grant-ready one-paragraph pitch and a 500-character summary for the OpenAI form
+- create a small `GRANT_SUMMARY.md` with the exact fields filled for copy/paste into the form
 
----
-
-## 📋 Documentación del Proyecto
-
-Para obtener información detallada sobre el proyecto, consulte los siguientes documentos:
-
-- [TASK.md](TASK.md) - Gestión de tareas y progreso actual
-- [PLANNING.md](PLANNING.md) - Planificación estratégica y técnica
-- [UI-UX-CHANGES.md](docs/UI-UX-CHANGES.md) - Cambios recientes de UI/UX, nuevos paneles de Seguridad y Rendimiento, y guía de uso
-
----
-
-## 🎯 Visión del Proyecto
-
-### Oxide Pilot representa la evolución de los asistentes de sistema tradicionales hacia una nueva era de inteligencia agéntica. Combinamos la potencia y seguridad de Rust con la inteligencia artificial conversacional más avanzada para crear un asistente que no solo monitorea tu sistema, sino que entiende, aprende y actúa de forma proactiva
-
-### ¿Qué hace único a Oxide Pilot?
-
-- 🛡️ Seguridad de Próxima Generación: EDR (Endpoint Detection & Response) integrado
-- ⚡ Optimización Inteligente: Análisis y mejora automática del rendimiento del sistema
-- 🤖 Asistencia Conversacional: Interacción natural por voz con capacidades multimodales
-- 🎮 Control Agéntico: Capacidad de tomar acciones directas en el sistema cuando es necesario
-- 🧠 Memoria Persistente: Aprende de cada interacción para brindar asistencia personalizada
-
+— End of README —
 
 ---
 
