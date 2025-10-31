@@ -112,7 +112,7 @@ jobs:
       - name: Generate icons
         shell: pwsh
         run: |
-          if (Test-Path src-tauri/icon.png) {
+          if (Test-Path ../logo.png) {
             cd src-tauri
             python create_icon.py
             cd ..

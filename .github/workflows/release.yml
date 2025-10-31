@@ -34,11 +34,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-          override: true
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -67,15 +63,15 @@ jobs:
           choco install nsis -y
           choco install wixtoolset -y
 
-      - name: Generate icons (if src-tauri/icon.png exists)
+      - name: Generate icons (if logo.png exists)
         shell: pwsh
         run: |
-          if (Test-Path src-tauri/icon.png) {
+          if (Test-Path logo.png) {
             Push-Location src-tauri
             python create_icon.py
             Pop-Location
           } else {
-            Write-Host "icon.png not present; skipping icon generation"
+            Write-Host "logo.png not present; skipping icon generation"
           }
 
       - name: Build frontend

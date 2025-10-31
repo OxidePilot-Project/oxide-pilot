@@ -99,7 +99,7 @@ If you want, I can:
 - produce a short, grant-ready one-paragraph pitch and a 500-character summary for the OpenAI form
 - create a small `GRANT_SUMMARY.md` with the exact fields filled for copy/paste into the form
 
-— End of README —
+— End of README english —
 
 ---
 

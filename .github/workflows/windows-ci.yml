@@ -11,11 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Setup Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-          override: true
+        uses: dtolnay/rust-toolchain@stable
       - name: Cache cargo
         uses: actions/cache@v4
         with:
@@ -30,16 +26,16 @@ jobs:
           node-version: '20'
       - name: Install Tauri CLI
         run: cargo install tauri-cli --locked
-      - name: Generate icons (if src-tauri/icon.png exists)
+      - name: Generate icons (if logo.png exists)
         shell: pwsh
         run: |
-          if (Test-Path src-tauri/icon.png) {
+          if (Test-Path ../logo.png) {
             python --version
             cd src-tauri
             python create_icon.py
             cd ..
           } else {
-            echo "icon.png not present; skipping icon generation"
+            echo "logo.png not present; skipping icon generation"
           }
       - name: Frontend build
         run: |
