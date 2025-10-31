@@ -16,6 +16,9 @@ on:
 permissions:
   contents: write
   issues: write
+  checks: write
+  packages: write
+  actions: read
 
 jobs:
   validation:

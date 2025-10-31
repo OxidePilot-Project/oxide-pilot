@@ -9,6 +9,12 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+permissions:
+  contents: read
+  issues: write
+  checks: write
+  actions: read
+
 jobs:
   build-dev:
     name: Development Build

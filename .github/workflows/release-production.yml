@@ -23,6 +23,9 @@ env:
 permissions:
   contents: write
   packages: write
+  issues: write
+  checks: write
+  actions: read
 
 jobs:
   # Pre-release validation
