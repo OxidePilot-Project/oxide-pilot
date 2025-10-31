@@ -383,8 +383,8 @@ function switchAuthMethod(method: AuthMethod) {
             class="credential-input"
             autocomplete="off"
           />
-          <button 
-            class="visibility-toggle" 
+          <button
+            class="visibility-toggle"
             on:click="{() => {
               const input = document.getElementById('apiKey') as HTMLInputElement | null;
               if (input) {
@@ -447,8 +447,8 @@ function switchAuthMethod(method: AuthMethod) {
             class="credential-input"
             autocomplete="off"
           />
-          <button 
-            class="visibility-toggle" 
+          <button
+            class="visibility-toggle"
             on:click="{() => {
               const input = document.getElementById('clientSecret') as HTMLInputElement | null;
               if (input) {
@@ -1024,7 +1024,7 @@ function switchAuthMethod(method: AuthMethod) {
       align-self: flex-start;
     }
   }
-  
+
   .clear-btn {
     background: #ffffff;
     border: 1px solid #dadce0;

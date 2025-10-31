@@ -63,7 +63,7 @@ impl MetricsRuntime {
 
     async fn stop(&self) {
         let mut task_guard = self.task.lock().await;
-        if let Some(mut handle) = task_guard.take() {
+        if let Some(handle) = task_guard.take() {
             handle.abort();
             if let Err(err) = handle.await {
                 if !err.is_cancelled() {

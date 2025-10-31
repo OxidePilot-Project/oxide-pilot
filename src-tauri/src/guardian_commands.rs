@@ -16,7 +16,7 @@ use chrono::{DateTime, Duration, Utc};
 #[cfg(feature = "surrealdb-metrics")]
 use log::{debug, warn};
 #[cfg(feature = "surrealdb-metrics")]
-use serde_json::{from_value, Value};
+use serde_json::from_value;
 #[cfg(feature = "surrealdb-metrics")]
 use tauri::{async_runtime, State, Window};
 
@@ -180,18 +180,18 @@ pub async fn get_metrics_summary(
     let cpu_max = metrics
         .iter()
         .map(|m| m.cpu_usage)
-        .fold(0.0, |acc, value| acc.max(value));
+        .fold(0.0f64, |acc, value| acc.max(value));
     let mem_max = metrics
         .iter()
         .map(|m| m.memory_usage.percent)
-        .fold(0.0, |acc, value| acc.max(value));
+        .fold(0.0f64, |acc, value| acc.max(value));
 
     let window_start = metrics.last().map(|m| m.timestamp);
     let window_end = metrics.first().map(|m| m.timestamp).or(Some(end));
 
     Ok(MetricsSummaryResponse {
         avg_cpu: cpu_sum / sample_count as f64,
-        max_cpu,
+        max_cpu: cpu_max,
         avg_memory_percent: mem_sum / sample_count as f64,
         max_memory_percent: mem_max,
         sample_count,
