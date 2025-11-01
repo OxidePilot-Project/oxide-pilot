@@ -1,103 +1,205 @@
-<!-- English README optimized for clarity and grant applications -->
 # Oxide Pilot
 
-Oxide Pilot is an agentic system assistant for secure system automation, monitoring and conversational assistance. It combines a Rust/Tauri backend with a Svelte frontend and integrates local system telemetry, a dual-agent architecture (Guardian + Copilot), a configurable RPA engine, and multi-LLM support.
+> **AI-powered research platform for next-generation agentic system interfaces**
 
-Status: Active development — production-grade features implemented; integration and polish ongoing.
+Oxide Pilot is an experimental framework exploring how AI agents can securely interact with and manage computer systems through conversational interfaces—eliminating traditional mouse and keyboard interactions. This project serves as a research testbed for the community to study AI behavior in system administration, security monitoring, and automated task execution within virtual environments.
 
-Core technologies: Rust, Tauri, Svelte, SurrealDB (optional), Playwright for E2E tests, and support for cloud LLMs (Vertex AI, OpenAI, Qwen).
+## 🎯 Purpose
 
-Key highlights
+ **community research project** designed to:
 
-- Guardian agent: continuous monitoring, EDR-style threat detection, process and resource analytics
-- Copilot agent: conversational, voice-enabled assistant with function-calling tools and RPA controls
-- Secure RPA: granular permission model, auditing and rollback for automated actions
-- Persistent memory: optional SurrealDB backend for time-series, graph and vector storage
-- Multi-LLM integration: usage of Vertex AI Gemini, OpenAI, Qwen and local models where available
+- **Explore agentic interfaces**: Test how conversational AI can replace traditional GUIs for system management
+- **Study AI behavior**: Observe and analyze how LLMs make decisions in complex system environments
+- **Advance security research**: Develop AI-driven threat detection and automated response systems
+- **Bridge human-computer interaction**: Create intuitive voice/text interfaces for technical operations
+- **Open experimentation platform**: Provide a complete testbed for AI safety and capabilities research
 
-Why this README was rewritten
+## 🏗️ Architecture
 
-This file has been translated and reorganized into English to improve clarity for contributors and for grant/funding applications (e.g., OpenAI Codex Open Source Fund). It focuses on the project's mission, quick start steps, architecture, and the repository state.
+**Dual-Agent Design:**
 
-Quick start (developer)
+- **Guardian Agent**: Autonomous background monitoring, security analysis, and performance optimization
+- **Copilot Agent**: Conversational assistant for on-demand system queries and task execution
 
-Prerequisites
+**Technology Stack:**
 
-- Rust 1.70+ (cargo)
+- **Backend**: Rust (high-performance, memory-safe system integration)
+- **Frontend**: Tauri + Svelte (native cross-platform UI)
+- **Memory**: SurrealDB (embedded graph/vector database for context persistence)
+- **AI Integration**: Multi-provider support (Google Vertex AI, OpenAI, Qwen)
+- **RPA Engine**: Secure automation with granular permissions and audit trails
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Rust 1.70+ (`cargo`)
 - Node.js 18+ (frontend build)
-- PowerShell (Windows recommended)
+- PowerShell (Windows) or Bash (Linux/macOS)
 
-Local development (PowerShell)
+### Run Development Environment
 
 ```powershell
-# Start unified dev launcher (handles frontend and backend)
+# Start unified dev launcher
 pwsh -File scripts/oxide-dev.ps1
 
-# Run tests
+# Run test suite
 cargo test --workspace
 
-# Frontend E2E (from repo root)
-cd src-frontend
-npm install
-npx playwright install
-npm run test:e2e
+# Frontend E2E tests
+cd src-frontend && npm install && npx playwright install && npm run test:e2e
 ```
 
-Build & release notes
+### Build Releases
 
-- Release automation is provided in scripts/create-release.ps1 and GitHub Actions. Pushing to `main` triggers CI that builds and validates artifacts.
-- For Windows installers, use `pwsh -File scripts/build-windows.ps1` (see `docs/README-WINDOWS-BUILD.md`).
+```powershell
+# Windows installer
+pwsh -File scripts/build-windows.ps1
 
-Repository structure (top-level)
+# See docs/README-WINDOWS-BUILD.md for multi-platform builds
+```
 
-- `src-tauri/` — Tauri native integration and system commands
-- `oxide-core/`, `oxide-guardian/`, `oxide-copilot/`, `oxide-memory/`, `oxide-rpa/`, `oxide-voice/` — Rust crates
-- `src-frontend/` — Svelte UI and Playwright tests
-- `docs/` — design docs, deployment and onboarding guides
+## 📂 Project Structure
 
-Testing & validation
+```
+oxide-pilot/
+├── oxide-core/          # Configuration, authentication, utilities
+├── oxide-guardian/      # Security monitoring, EDR, threat detection
+├── oxide-copilot/       # Conversational AI agent, voice processing
+├── oxide-memory/        # SurrealDB backend, context persistence
+├── oxide-rpa/           # Secure automation engine with permissions
+├── oxide-voice/         # Speech-to-text, wake word detection
+├── src-tauri/           # Native system integration
+├── src-frontend/        # Svelte UI, E2E tests (Playwright)
+└── docs/                # Architecture docs, guides
+```
 
-- Unit tests: `cargo test --workspace`
-- Frontend E2E: Playwright in `src-frontend`
-- CI runs formatters, clippy, tests and build checks before commits/pushes via husky and GitHub Actions.
+## 🔬 Research Focus Areas
 
-Security & privacy
+### 1. **Agentic System Control**
 
-- Default architecture favors local processing for sensitive operations (wake-word, basic analysis).
-- All cloud interactions (LLMs or speech APIs) are configurable and optional; credentials are kept out of the repository and read from environment variables.
+How can AI safely execute privileged system operations through conversational commands?
 
-License
+**Experiment**: Ask "Why is Visual Studio freezing?" → Agent analyzes processes, identifies Git timeout, proposes Windows Defender exclusion, and executes fix (with user confirmation).
 
-This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0). See `LICENSE` for details.
+### 2. **AI-Driven Security**
 
-Contact
+Can LLMs effectively detect threats by analyzing system behavior patterns?
 
-- Email: iberi22@gmail.com
+**Approach**: Guardian agent uses YARA rules + LLM reasoning to identify zero-day malware through behavioral heuristics instead of signatures.
 
-Short project summary for grant applications (copy for form fields)
+### 3. **Multimodal Context Understanding**
 
-Project name: Oxide Pilot
+How well can AI interpret system state from screenshots + logs + telemetry?
 
-One-line pitch: An open-core agentic system assistant that combines secure system monitoring, automated RPA, and a conversational Copilot to diagnose, fix and automate tasks across desktop environments.
+**Method**: Agent captures visual errors, correlates with event logs, and provides diagnosis using image + text analysis (Gemini Pro Vision).
 
-What we are building: Oxide Pilot delivers a dual-agent platform (Guardian for monitoring/security and Copilot for conversational assistance). It fuses system telemetry, programmatic tools (RPA), and multi-LLM integration, backed by optional persistent memory (SurrealDB) to provide context-aware, safe automation and remediation.
+### 4. **Human-in-the-Loop Automation**
 
-Why funding would help: Funding will accelerate integration of local vector search and memory, improve LLM-context tooling and data privacy controls, and fund production-grade packaging and testing across Windows/macOS/Linux. This shortens the path to a stable open-source core and increases adoption in privacy-conscious organizations.
+What's the optimal balance between autonomous execution and user confirmation?
 
-Repository readiness: The repo contains automated CI, unit and E2E tests, and release scripts. Core features are implemented; remaining work focuses on SurrealDB migration, packaging, and docs.
+**Design**: RPA engine with tiered permissions (auto-execute safe operations, require approval for destructive changes, audit all actions).
 
-How to evaluate quickly: Run `pwsh -File scripts/oxide-dev.ps1` to start a dev instance, or run `cargo test --workspace` to verify tests. See `docs/` for integration and architecture details.
+### 5. **Long-Term Memory Systems**
 
-Next steps after this commit
+Can graph databases enable AI agents to learn from historical system behavior?
 
-1. Keep the repo clean: finish translating and polishing docs and verify the SurrealDB feature on CI
-2. Prepare a short demo & artifact build for reviewers
-3. Provide a one-page grant summary and a short video demo (optional)
+**Implementation**: SurrealDB stores process relationships, incident patterns, and user preferences to improve future recommendations.
 
-If you want, I can:
+## 🤝 For Researchers & Contributors
 
-- produce a short, grant-ready one-paragraph pitch and a 500-character summary for the OpenAI form
-- create a small `GRANT_SUMMARY.md` with the exact fields filled for copy/paste into the form
+This project is **community-driven and open for experimentation**:
+
+### Ways to Contribute
+
+- **Test agent capabilities**: Try complex system management tasks, report results
+- **Security research**: Attempt privilege escalation, test permission boundaries
+- **AI behavior analysis**: Study decision-making patterns, identify failure modes
+- **Performance benchmarking**: Measure resource usage, response times, accuracy
+- **Integration experiments**: Add support for new LLM providers or system APIs
+
+### Research Questions to Explore
+
+- At what complexity do LLMs fail to understand system state?
+- Can AI agents detect adversarial inputs designed to trick them?
+- How do different LLM providers compare for system diagnostics?
+- What minimum context is needed for accurate troubleshooting?
+- Can agents learn user preferences without compromising privacy?
+
+## 🔒 Security & Privacy
+
+**Design Principles:**
+
+- Local-first processing (wake words, basic analysis run on-device)
+- Cloud LLM calls are optional and configurable
+- All credentials stored in environment variables (never in code)
+- Complete audit trail for every agent action
+- User confirmation required for destructive operations
+
+**Threat Model**: This is a research platform—**not hardened for production use**. Use in isolated virtual environments only.
+
+## 📊 Current Status
+
+**Maturity**: ~92% feature-complete (see [TASK.md](TASK.md) for details)
+
+**Working Features:**
+
+- ✅ Dual-agent architecture (Guardian + Copilot)
+- ✅ Voice interaction with wake word detection
+- ✅ Multi-LLM support (Vertex AI, OpenAI, Qwen)
+- ✅ Secure RPA engine with permission system
+- ✅ SurrealDB memory backend (graph + vector + timeseries)
+- ✅ Cross-platform builds (Windows/macOS/Linux)
+- ✅ Automated CI/CD pipelines
+
+**In Progress:**
+
+- ⚠️ SurrealDB migration (from JSON fallback)
+- ⚠️ Advanced vector search for semantic memory
+- ⚠️ Production packaging and installers
+
+## 📚 Documentation
+
+- **[AGENTS.md](AGENTS.md)** - Project overview, development guide
+- **[TASK.md](TASK.md)** - Progress tracker, milestones
+- **[RULES.md](RULES.md)** - Architecture guidelines, constraints
+- **[docs/](docs/)** - Setup guides, technical specs, API references
+- **[WORKFLOW_ANALYSIS.md](WORKFLOW_ANALYSIS.md)** - CI/CD pipeline analysis
+
+## 📜 License
+
+**GNU Affero General Public License v3.0 (AGPL-3.0)**
+
+**Key Points:**
+
+- ✅ Free for personal, educational, and research use
+- ✅ Modifications must be shared under same license
+- ✅ Network use (e.g., SaaS) requires source code disclosure
+- ℹ️ Commercial support and dual licensing available on request
+
+See [LICENSE](LICENSE) for full terms.
+
+## 🌐 Community
+
+**Contact:**
+
+- Email: <iberi22@gmail.com>
+- Twitter: [@x_donberi](https://twitter.com/x_donberi)
+- GitHub Issues: [Report bugs or propose features](https://github.com/OxidePilot-Project/oxide-pilot/issues)
+
+**Join the Research:**
+
+This project thrives on community experimentation. Whether you're an AI researcher, security analyst, or curious developer—try pushing the system's limits and share your findings!
+
+---
+
+<div align="center">
+
+**"Bridging humans and machines through conversational AI"**
+
+*An open platform for studying the future of human-computer interaction*
+
+</div>
 
 — End of README english —
 
@@ -368,6 +470,7 @@ Oxide Pilot utiliza **SurrealDB** (Rust nativo) como base de datos multi-modelo 
 ### 📦 Modelo de Datos SurrealDB
 
 #### **1. Métricas del Sistema (TimeSeries + Document)**
+
 ```surql
 -- Métricas de rendimiento con metadata contextual
 DEFINE TABLE system_metrics SCHEMAFULL;
@@ -381,6 +484,7 @@ DEFINE INDEX idx_timestamp ON system_metrics FIELDS timestamp;
 ```
 
 #### **2. Grafo de Procesos (Graph Relationships)**
+
 ```surql
 -- Procesos y sus relaciones padre-hijo
 DEFINE TABLE process SCHEMAFULL;
@@ -398,6 +502,7 @@ DEFINE FIELD exit_code ON spawns TYPE option<int>;
 ```
 
 #### **3. Detecciones de Amenazas (Document + Graph)**
+
 ```surql
 DEFINE TABLE threat SCHEMAFULL;
 DEFINE FIELD severity ON threat TYPE string
@@ -413,6 +518,7 @@ DEFINE TABLE affects SCHEMAFULL TYPE RELATION IN threat OUT process;
 ```
 
 #### **4. Historial de Incidencias (Temporal Graph)**
+
 ```surql
 DEFINE TABLE incident SCHEMAFULL;
 DEFINE FIELD description ON incident TYPE string;
@@ -428,6 +534,7 @@ DEFINE FIELD time_delta ON triggers TYPE duration;
 ```
 
 #### **5. Memoria de Agentes (Vector Embeddings)**
+
 ```surql
 DEFINE TABLE agent_memory SCHEMAFULL;
 DEFINE FIELD agent_type ON agent_memory TYPE string
@@ -447,6 +554,7 @@ DEFINE INDEX idx_embedding ON agent_memory
 ```
 
 #### **6. Patrones de Comportamiento (Analytical Views)**
+
 ```surql
 -- Vista pre-computada para patrones recurrentes
 DEFINE TABLE performance_pattern AS
@@ -459,196 +567,6 @@ DEFINE TABLE performance_pattern AS
   WHERE timestamp > time::now() - 7d
   GROUP BY hour;
 ```
-
-### 🔄 Plan de Migración (Fases)
-
-#### **Fase 1: Infraestructura Base (1-2 semanas)**
-
-**Objetivo**: Implementar backend SurrealDB embebido sin romper funcionalidad actual
-
-**Tareas**:
-- [ ] **1.1** Agregar dependencia `surrealdb` al workspace
-  ```toml
-  [dependencies]
-  surrealdb = { version = "2.3", features = ["kv-rocksdb", "scripting"] }
-  surrealdb-core = { version = "2.3" }
-  ```
-- [ ] **1.2** Crear `oxide-memory/src/surreal_backend.rs`
-  - Implementar `MemoryBackend` trait para SurrealDB
-  - Modo embebido: `Surreal::new::<RocksDb>("./data/oxide.db")`
-  - Namespace: `oxide`, Database: `memory`
-- [ ] **1.3** Migración de esquema
-  - Definir tablas (system_metrics, process, threat, incident, agent_memory)
-  - Crear índices (timestamp, embeddings, graph edges)
-- [ ] **1.4** Feature flag `surrealdb` en `Cargo.toml`
-  ```toml
-  [features]
-  default = ["surrealdb"]
-  json = []
-  surrealdb = ["dep:surrealdb", "dep:surrealdb-core"]
-  ```
-- [ ] **1.5** Tests unitarios de backend
-  - CRUD básico con transacciones ACID
-  - Graph queries (procesos padre-hijo)
-  - Vector search (similitud de embeddings)
-
-**Entregables**:
-- Backend funcional en modo embebido
-- Tests passing al 100%
-- Zero regresión en funcionalidad actual
-
----
-
-#### **Fase 2: Recolección de Datos del Sistema (2-3 semanas)**
-
-**Objetivo**: Capturar telemetría del sistema y almacenarla en SurrealDB
-
-**Tareas**:
-- [ ] **2.1** Extender `oxide-guardian` para recolección avanzada
-  ```rust
-  // oxide-guardian/src/metrics_collector.rs
-  pub struct MetricsCollector {
-      surreal: Arc<SurrealBackend>,
-      interval: Duration,
-  }
-
-  impl MetricsCollector {
-      pub async fn collect_and_store(&self) -> Result<()> {
-          let metrics = self.gather_system_metrics().await?;
-          let processes = self.gather_process_tree().await?;
-
-          // Transacción ACID para consistencia
-          self.surreal.transaction(|txn| async {
-              txn.create("system_metrics", metrics).await?;
-              txn.upsert_process_graph(processes).await?;
-          }).await
-      }
-  }
-  ```
-- [ ] **2.2** Almacenar grafo de procesos
-  - Capturar árbol de procesos cada 5 segundos
-  - Crear edges `spawns` entre procesos padre-hijo
-  - Metadata: CPU%, memoria, I/O, sockets abiertos
-- [ ] **2.3** Telemetría de amenazas
-  - Integración con detecciones YARA
-  - Almacenar cadena de procesos afectados
-  - Severity scoring automático
-- [ ] **2.4** Histórico de incidencias
-  - Capturar errores de aplicaciones (event logs Windows)
-  - Stack traces de crashes
-  - Relaciones temporales entre incidentes relacionados
-- [ ] **2.5** Dashboard de monitoreo interno
-  - UI Svelte para visualizar datos recolectados
-  - Gráficos de series temporales (CPU, RAM)
-  - Vista de grafo de procesos interactivo
-
-**Entregables**:
-- Sistema recolectando 50+ tipos de métricas
-- DB creciendo ~1MB/día en uso normal
-- Queries de ejemplo funcionando
-
----
-
-#### **Fase 3: Análisis Inteligente para Agentes (2-3 semanas)**
-
-**Objetivo**: LLMs consultan SurrealDB para diagnósticos contextuales
-
-**Tareas**:
-- [ ] **3.1** Queries SurrealQL para agentes
-  ```rust
-  // Ejemplo: "¿Qué procesos consumen más CPU en las últimas 2 horas?"
-  pub async fn query_high_cpu_processes(&self, hours: u32) -> Result<Vec<ProcessInfo>> {
-      self.surreal.query(r#"
-          SELECT
-              process.*,
-              math::mean(->spawns->process.cpu_percent) AS avg_child_cpu
-          FROM process
-          WHERE start_time > time::now() - type::duration({hours}h)
-          ORDER BY cpu_percent DESC
-          LIMIT 10
-      "#).bind(("hours", hours)).await
-  }
-
-  // Ejemplo: "¿Hay amenazas relacionadas con este proceso?"
-  pub async fn query_related_threats(&self, pid: i32) -> Result<Vec<ThreatInfo>> {
-      self.surreal.query(r#"
-          SELECT threat.*,
-                 array::len(threat.process_chain) AS chain_length
-          FROM threat
-          WHERE process_chain CONTAINS (SELECT * FROM process WHERE pid = {pid})
-          ORDER BY timestamp DESC
-      "#).bind(("pid", pid)).await
-  }
-  ```
-- [ ] **3.2** Vector search para análisis semántico
-  - Generar embeddings de logs con `text-embeddings-inference` (Rust)
-  - Almacenar en tabla `agent_memory` con índice HNSW
-  - Búsqueda KNN para "incidentes similares pasados"
-  ```rust
-  pub async fn find_similar_incidents(&self, query: &str, k: usize) -> Result<Vec<Incident>> {
-      let embedding = self.generate_embedding(query).await?;
-      self.surreal.query(r#"
-          SELECT incident.*,
-                 vector::similarity::cosine(embedding, {query_vec}) AS score
-          FROM agent_memory
-          WHERE agent_type = 'guardian'
-          ORDER BY score DESC
-          LIMIT {k}
-      "#).bind(("query_vec", embedding)).bind(("k", k)).await
-  }
-  ```
-- [ ] **3.3** Integración con Copilot Agent
-  - Tool/Function: `analyze_system_performance(time_range)`
-  - Tool/Function: `find_root_cause(error_message)`
-  - Tool/Function: `predict_resource_exhaustion()`
-- [ ] **3.4** Análisis temporal de patrones
-  - Detección de anomalías: CPU spikes recurrentes
-  - Correlación de eventos: "Cuando el proceso X crashea, Y siempre falla después"
-  - Predicciones: "RAM se agotará en ~4 horas a este ritmo"
-- [ ] **3.5** Exportar contexto para LLMs
-  - Serializar subgrafo relevante a JSON compacto
-  - Incluir en prompts de Gemini/Qwen/OpenAI
-  - Ejemplo: "Últimos 10 procesos high-CPU + amenazas + incidentes relacionados"
-
-**Entregables**:
-- 15+ queries pre-definidas para agentes
-- Vector search funcional con <50ms latencia
-- Agentes respondiendo preguntas complejas con datos históricos
-
----
-
-#### **Fase 4: Optimización y Producción (1-2 semanas)**
-
-**Objetivo**: Preparar para release con performance óptima
-
-**Tareas**:
-- [ ] **4.1** Benchmarks de rendimiento
-  - Comparar latencia SurrealDB vs Cognee (HTTP)
-  - Medir throughput: inserciones/segundo
-  - Target: <5ms queries, >1000 inserts/sec
-- [ ] **4.2** Compresión y retención de datos
-  - Comprimir métricas >30 días con agregaciones horarias
-  - Purgar datos >6 meses automáticamente
-  - Backup incremental a archivos `.surreal`
-- [ ] **4.3** Modo distribuido (opcional)
-  - Configurar cluster TiKV para enterprise
-  - Multi-nodo para alta disponibilidad
-  - Sincronización cross-device
-- [ ] **4.4** Deprecar Cognee (breaking change)
-  - Migrar datos históricos JSON → SurrealDB (`cargo run -p oxide-memory --bin migrate-json-to-surreal -- --json-dir oxide_memory --surreal-db ./data/oxide.db`; ver `docs/MEMORY_MIGRATION.md`)
-  - Eliminar `oxide-cognee-bridge` del workspace
-  - Actualizar docs con ejemplos SurrealDB
-- [ ] **4.5** UI de administración
-  - Panel Svelte para explorar DB
-  - Editor de queries SurrealQL
-  - Exportar datos para debugging
-
-**Entregables**:
-- Performance 10x mejor
-- Sistema listo para escalar a 100k+ registros/día
-- Documentación completa de implementación
-
----
 
 ### 📊 Especificaciones Técnicas: SurrealDB
 
@@ -669,10 +587,9 @@ DEFINE TABLE performance_pattern AS
 
 - ✅ Búsqueda vectorial con embeddings reales e índice HNSW autoconfigurable.
 - ✅ Stream guardian://metrics para suscripciones en tiempo real (subscribe_guardian_metrics).
-- ✅ Analítica SurrealML (predict_threat_risk) y dataset 	hreat_training.
+- ✅ Analítica SurrealML (predict_threat_risk) y dataset  hreat_training.
 - ✅ Vistas computadas (iew_hourly_metrics) y función JS n::risk::resource.
 - ✅ Formulario GuardianThreatTrainer para etiquetar muestras y mejorar SurrealML.
-
 
 ### 🎯 Beneficios Clave
 
@@ -682,6 +599,7 @@ DEFINE TABLE performance_pattern AS
    - Sin latencia de red (in-process)
 
 2. **🧠 Análisis Contextual Avanzado**
+
    ```surql
    -- Ejemplo: "¿Qué procesos maliciosos infectaron otros procesos?"
    SELECT process.name,
@@ -698,6 +616,7 @@ DEFINE TABLE performance_pattern AS
    - Cloud: futuro SaaS con SurrealDB serverless
 
 4. **🔍 Búsquedas Híbridas**
+
    ```rust
    // Combinar graph + vector + full-text en una query
    "Procesos relacionados con 'ransomware' semánticamente +
@@ -720,12 +639,12 @@ DEFINE TABLE performance_pattern AS
 
 ### 📚 Recursos y Referencias
 
-- **SurrealDB Docs**: https://surrealdb.com/docs
-- **SurrealQL Tutorial**: https://surrealdb.com/learn
-- **Rust SDK**: https://docs.rs/surrealdb/latest/surrealdb/
-- **Graph Queries**: https://surrealdb.com/docs/surrealql/statements/relate
-- **Vector Search**: https://surrealdb.com/docs/surrealql/functions/vector
-- **Embedding Integration**: `text-embeddings-inference` (Rust) - https://github.com/huggingface/text-embeddings-inference
+- **SurrealDB Docs**: <https://surrealdb.com/docs>
+- **SurrealQL Tutorial**: <https://surrealdb.com/learn>
+- **Rust SDK**: <https://docs.rs/surrealdb/latest/surrealdb/>
+- **Graph Queries**: <https://surrealdb.com/docs/surrealql/statements/relate>
+- **Vector Search**: <https://surrealdb.com/docs/surrealql/functions/vector>
+- **Embedding Integration**: `text-embeddings-inference` (Rust) - <https://github.com/huggingface/text-embeddings-inference>
 
 ### 🎉 Resultado Final
 
@@ -750,13 +669,6 @@ El proyecto está prácticamente completo con todas las funcionalidades principa
 ---
 
 ## 🤝 Contribución
-
-### Nota
-
-Actualmente en desarrollo interno para proteger la innovación.
-El núcleo open source será liberado una vez completado el MVP.
-
-### Para Colaboradores Internos
 
 1. Clona el repositorio privado
 2. Configura el entorno de desarrollo Rust + Tauri
