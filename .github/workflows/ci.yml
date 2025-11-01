@@ -18,7 +18,6 @@ permissions:
 jobs:
   build-dev:
     name: Development Build
-    if: github.ref == 'refs/heads/main'
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]

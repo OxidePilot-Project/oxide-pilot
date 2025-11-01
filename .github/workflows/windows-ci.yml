@@ -29,13 +29,18 @@ jobs:
       - name: Generate icons (if logo.png exists)
         shell: pwsh
         run: |
-          if (Test-Path ../logo.png) {
-            python --version
+          if (Test-Path logo.png) {
+            Write-Host "Found logo.png, generating icons..."
             cd src-tauri
-            python create_icon.py
+            if (Test-Path create_icon.py) {
+              python --version
+              python create_icon.py
+            } else {
+              Write-Host "create_icon.py not found, skipping icon generation"
+            }
             cd ..
           } else {
-            echo "logo.png not present; skipping icon generation"
+            Write-Host "logo.png not present; skipping icon generation"
           }
       - name: Frontend build
         run: |
