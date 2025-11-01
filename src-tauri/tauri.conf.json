@@ -28,11 +28,12 @@
       "active": true,
       "identifier": "com.oxide.pilot",
       "publisher": "Oxide Systems",
-      "copyright": "© 2025 Oxide Systems",
+      "copyright": "(c) 2025 Oxide Systems",
       "icon": [
         "icons/icon.ico"
       ],
       "targets": [
+        "app",
         "nsis",
         "msi"
       ],

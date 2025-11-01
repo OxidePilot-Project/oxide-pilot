@@ -87,25 +87,28 @@ jobs:
           TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
 
       - name: Code sign installers
-        if: ${{ secrets.SIGN_PFX_BASE64 != '' }}
         shell: pwsh
         env:
           SIGN_PFX_BASE64: ${{ secrets.SIGN_PFX_BASE64 }}
           SIGN_PFX_PASSWORD: ${{ secrets.SIGN_PFX_PASSWORD }}
           SIGN_TS_URL: ${{ secrets.SIGN_TS_URL }}
         run: |
-          $pfx = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
-          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGN_PFX_BASE64))
-          $timestamp = if ($env:SIGN_TS_URL) { $env:SIGN_TS_URL } else { 'http://timestamp.digicert.com' }
-          Write-Host "Signing binaries under src-tauri/target/release/bundle"
-          Get-ChildItem -Path "src-tauri/target/release/bundle" -Include *.exe,*.msi -Recurse | ForEach-Object {
-            Write-Host "Signing $($_.FullName)"
-            signtool sign /f $pfx /p $env:SIGN_PFX_PASSWORD /tr $timestamp /td sha256 /fd sha256 $_.FullName
-            if ($LASTEXITCODE -ne 0) {
-              throw "Failed to sign $($_.FullName)"
+          if ($env:SIGN_PFX_BASE64) {
+            $pfx = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
+            [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGN_PFX_BASE64))
+            $timestamp = if ($env:SIGN_TS_URL) { $env:SIGN_TS_URL } else { 'http://timestamp.digicert.com' }
+            Write-Host "Signing binaries under src-tauri/target/release/bundle"
+            Get-ChildItem -Path "src-tauri/target/release/bundle" -Include *.exe,*.msi -Recurse | ForEach-Object {
+              Write-Host "Signing $($_.FullName)"
+              signtool sign /f $pfx /p $env:SIGN_PFX_PASSWORD /tr $timestamp /td sha256 /fd sha256 $_.FullName
+              if ($LASTEXITCODE -ne 0) {
+                throw "Failed to sign $($_.FullName)"
+              }
             }
+            Write-Host "Code signing completed"
+          } else {
+            Write-Host "Code signing skipped: SIGN_PFX_BASE64 not configured"
           }
-          Write-Host "Code signing completed"
 
       - name: Generate checksums
         shell: pwsh
@@ -199,8 +202,3 @@ jobs:
               commit_sha: context.payload.workflow_run.head_sha,
               body: `Automated prerelease **${tag}** created with installers after successful validation (run ${runId}).`
             })
-
-      - name: Notice if RELEASE_TOKEN not configured
-        if: ${{ secrets.RELEASE_TOKEN == '' }}
-        run: |
-          echo "WARNING: secrets.RELEASE_TOKEN is not configured. Workflow used GITHUB_TOKEN which may have limited scopes for some operations. For robust releases, set a PAT in secrets.RELEASE_TOKEN with repo scope."
