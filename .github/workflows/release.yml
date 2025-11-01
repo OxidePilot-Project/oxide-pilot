@@ -97,7 +97,6 @@ jobs:
           Get-ChildItem -Path $bundleDir -Recurse
 
       - name: Code sign installers
-        if: ${{ secrets.SIGN_PFX_BASE64 != '' }}
         shell: pwsh
         env:
           SIGN_PFX_BASE64: ${{ secrets.SIGN_PFX_BASE64 }}
@@ -105,18 +104,22 @@ jobs:
           SIGN_TS_URL: ${{ secrets.SIGN_TS_URL }}
           BUNDLE_DIR: ${{ steps.collect.outputs.bundle_dir }}
         run: |
-          $pfx = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
-          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGN_PFX_BASE64))
-          $timestamp = if ($env:SIGN_TS_URL) { $env:SIGN_TS_URL } else { 'http://timestamp.digicert.com' }
-          Write-Host "Signing binaries under $env:BUNDLE_DIR"
-          Get-ChildItem -Path $env:BUNDLE_DIR -Include *.exe,*.msi -Recurse | ForEach-Object {
-            Write-Host "Signing $($_.FullName)"
-            signtool sign /f $pfx /p $env:SIGN_PFX_PASSWORD /tr $timestamp /td sha256 /fd sha256 $_.FullName
-            if ($LASTEXITCODE -ne 0) {
-              throw "Failed to sign $($_.FullName)"
+          if ($env:SIGN_PFX_BASE64) {
+            $pfx = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
+            [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGN_PFX_BASE64))
+            $timestamp = if ($env:SIGN_TS_URL) { $env:SIGN_TS_URL } else { 'http://timestamp.digicert.com' }
+            Write-Host "Signing binaries under $env:BUNDLE_DIR"
+            Get-ChildItem -Path $env:BUNDLE_DIR -Include *.exe,*.msi -Recurse | ForEach-Object {
+              Write-Host "Signing $($_.FullName)"
+              signtool sign /f $pfx /p $env:SIGN_PFX_PASSWORD /tr $timestamp /td sha256 /fd sha256 $_.FullName
+              if ($LASTEXITCODE -ne 0) {
+                throw "Failed to sign $($_.FullName)"
+              }
             }
+            Write-Host "Code signing completed"
+          } else {
+            Write-Host "Code signing skipped: SIGN_PFX_BASE64 not configured"
           }
-          Write-Host "Code signing completed"
 
       - name: Generate release tag
         id: tag

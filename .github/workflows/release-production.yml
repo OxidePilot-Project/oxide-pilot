@@ -140,25 +140,29 @@ jobs:
           TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
 
       - name: Code sign installers
-        if: ${{ secrets.SIGN_PFX_BASE64 != '' }}
         shell: pwsh
         env:
           SIGN_PFX_BASE64: ${{ secrets.SIGN_PFX_BASE64 }}
           SIGN_PFX_PASSWORD: ${{ secrets.SIGN_PFX_PASSWORD }}
         run: |
-          $pfx = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
-          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGN_PFX_BASE64))
+          if ($env:SIGN_PFX_BASE64) {
+            $pfx = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
+            [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGN_PFX_BASE64))
 
-          $bundleDir = "src-tauri/target/release/bundle"
-          Get-ChildItem -Path $bundleDir -Include *.exe,*.msi -Recurse | ForEach-Object {
-            Write-Host "Signing $($_.FullName)"
-            & "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\signtool.exe" sign `
-              /f $pfx `
-              /p $env:SIGN_PFX_PASSWORD `
-              /tr http://timestamp.digicert.com `
-              /td sha256 `
-              /fd sha256 `
-              $_.FullName
+            $bundleDir = "src-tauri/target/release/bundle"
+            Get-ChildItem -Path $bundleDir -Include *.exe,*.msi -Recurse | ForEach-Object {
+              Write-Host "Signing $($_.FullName)"
+              & "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\signtool.exe" sign `
+                /f $pfx `
+                /p $env:SIGN_PFX_PASSWORD `
+                /tr http://timestamp.digicert.com `
+                /td sha256 `
+                /fd sha256 `
+                $_.FullName
+            }
+            Write-Host "Code signing completed"
+          } else {
+            Write-Host "Code signing skipped: SIGN_PFX_BASE64 not configured"
           }
 
       - name: Generate checksums
