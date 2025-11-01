@@ -26,11 +26,6 @@ jobs:
       - name: Check Rust formatting
         id: fmt
         run: cargo fmt --all -- --check
-        continue-on-error: true
-
-      - name: Save format check result
-        if: failure()
-        run: echo "format_failed=true" >> $GITHUB_ENV
 
   lint-check:
     name: Lint Check

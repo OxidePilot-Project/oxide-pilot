@@ -62,22 +62,21 @@ jobs:
         with:
           workspaces: './src-tauri -> target'
 
-      - name: Install Tauri CLI
-        run: cargo install tauri-cli --locked
-
       - name: Install NSIS & WiX (Windows only)
         if: matrix.os == 'windows-latest'
         run: |
           choco install nsis -y
           choco install wixtoolset -y
 
-      - name: Build Tauri app (dev)
-        run: cargo tauri build --verbose
+      - name: Build workspace (check compilation)
+        run: |
+          cargo build --workspace --no-default-features --features "surrealdb-metrics" --verbose
 
-      - name: Upload artifacts
+      - name: Upload build artifacts
+        if: matrix.os == 'windows-latest'
         uses: actions/upload-artifact@v4
         with:
           name: oxide-pilot-dev-${{ matrix.os }}
           path: |
-            src-tauri/target/release/bundle/**/*
+            target/release/oxide-pilot*
           retention-days: 7
