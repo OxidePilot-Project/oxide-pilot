@@ -81,7 +81,7 @@ jobs:
 
       - name: Install dependencies (macOS only)
         if: matrix.os == 'macos-latest'
-        run: brew install gtk+3 webkit2gtk
+        run: brew install gtk+3
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
