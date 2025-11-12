@@ -9,6 +9,7 @@ mod local_llm;
 mod mcp_server;
 mod oxide_system;
 mod rpa_commands;
+mod security_diagnostic;
 mod threat_consensus;
 
 #[cfg(test)]
@@ -57,6 +58,8 @@ pub struct AppState {
     guardian_state: Arc<guardian_commands::GuardianState>,
     #[cfg(feature = "surrealdb-metrics")]
     surreal_backend: Arc<SurrealBackend>,
+    // Security diagnostic state
+    security_diagnostic_state: Arc<security_diagnostic::SecurityDiagnosticState>,
 }
 
 // ==============================
@@ -567,6 +570,7 @@ async fn start_folder_scan(
         guardian_state: state.guardian_state.clone(),
         #[cfg(feature = "surrealdb-metrics")]
         surreal_backend: state.surreal_backend.clone(),
+        security_diagnostic_state: state.security_diagnostic_state.clone(),
     };
 
     // Clone scan_id for the async task
@@ -1497,6 +1501,9 @@ fn main() {
     let guardian_state =
         Arc::new(guardian_commands::GuardianState { backend: surreal_backend.clone() });
 
+    // Initialize Security Diagnostic State
+    let security_diagnostic_state = security_diagnostic::SecurityDiagnosticState::new();
+
     tauri::Builder::default()
         .manage(AppState {
             oxide_system: Arc::new(RwLock::new(None)),
@@ -1508,7 +1515,9 @@ fn main() {
             guardian_state,
             #[cfg(feature = "surrealdb-metrics")]
             surreal_backend,
+            security_diagnostic_state: Arc::new(security_diagnostic_state),
         })
+        .manage(security_diagnostic::SecurityDiagnosticState::new())
         .invoke_handler(tauri::generate_handler![
             send_notification,
             set_google_api_key,
@@ -1612,7 +1621,11 @@ fn main() {
             guardian_commands::get_guardian_status,
             guardian_commands::predict_threat_risk,
             guardian_commands::submit_threat_training_sample,
-            guardian_commands::subscribe_guardian_metrics
+            guardian_commands::subscribe_guardian_metrics,
+            // Security Diagnostic Commands
+            security_diagnostic::run_security_diagnostic,
+            security_diagnostic::get_last_security_scan,
+            security_diagnostic::get_system_health
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

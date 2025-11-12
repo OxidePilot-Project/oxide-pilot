@@ -3,6 +3,7 @@ import { onDestroy, onMount } from "svelte";
 import { writable } from "svelte/store";
 import { isTauri } from "$lib/utils/env";
 import { tauriInvoke } from "$lib/utils/tauri";
+import SecurityDiagnostic from "./SecurityDiagnostic.svelte";
 
 const loading = writable(false);
 const status = writable<string | null>(null);
@@ -400,6 +401,11 @@ onDestroy(() => {
     <div class="status error">{$error}</div>
   {/if}
 
+  <!-- Security Diagnostic Component -->
+  <div class="diagnostic-section">
+    <SecurityDiagnostic />
+  </div>
+
   <div class="grid">
     <div class="card">
       <h3>Create Security Session</h3>
@@ -581,6 +587,8 @@ onDestroy(() => {
   .status { padding: 10px 12px; border-radius: 8px; margin-bottom: 10px; font-weight: 500; }
   .status.success { background: #e7f9ed; color: #126d3b; border: 1px solid #bfe8cc; }
   .status.error { background: #fde8e8; color: #9b1c1c; border: 1px solid #fbd5d5; }
+
+  .diagnostic-section { margin-bottom: 20px; }
 
   .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
   .card { background: #f8f9fa; border: 1px solid #edf2f7; border-radius: 10px; padding: 12px; }

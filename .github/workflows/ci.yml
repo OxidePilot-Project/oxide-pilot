@@ -75,7 +75,7 @@ jobs:
 
       - name: Build workspace (check compilation)
         run: |
-          cargo build --workspace --no-default-features --features "surrealdb-metrics" --verbose
+          cargo build --workspace --features "surrealdb-metrics" --verbose
 
       - name: Upload build artifacts
         if: matrix.os == 'windows-latest'
