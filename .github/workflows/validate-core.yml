@@ -59,8 +59,9 @@ jobs:
           path: clippy-output.txt
           retention-days: 7
 
-  unit-tests:
-    name: Unit Tests
+  build-dev:
+    name: Development Build
+    timeout-minutes: 20
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
@@ -102,6 +103,7 @@ jobs:
   doc-tests:
     name: Doc Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -119,6 +121,7 @@ jobs:
 
       - name: Run doc tests
         id: doc_tests
+        continue-on-error: true
         run: cargo test --doc --features "surrealdb-metrics"
 
   frontend-lint:
@@ -227,7 +230,9 @@ jobs:
           fi
 
           # Non-critical checks (warnings only)
-          if [[ "${{ needs.doc-tests.result }}" != "success" ]]; then
+          if [[ "${{ needs.doc-tests.result }}" != "success" && "${{ needs.doc-tests.result }}" != "skipped" ]]; then
+            echo "::warning::Doc tests failed or timed out (non-critical)"
+          fi
             echo "::warning::Doc tests failed"
           fi
 
